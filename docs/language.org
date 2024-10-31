@@ -1,0 +1,182 @@
+#+TITLE: A Primer
+
+This is largely an aid to my own memory so bear with me.
+
+* The Syntax
+  I'll start by describing the syntax. Not because it's the most important nor
+  the best place to start, but because it's the first thing you see.
+
+  The syntax is, for the most part, inspired by Clojure. In particular, the
+  literal data structures: =[]=, ={}=, & =#{}= mean what you expect.
+
+  One major goal is that if an expression *looks* familiar, then it should act in
+  a familiar way. The degree to which I've met that goal is an open question,
+  but things are still in flux.
+
+  #+BEGIN_SRC clojure
+    (def f (fn [x y] (+ x y)))
+    ;; => f
+
+    (f 4 5)
+    ;; => 9
+
+    (if (< (f x y) 0) (g x) (h y))
+  #+END_SRC
+
+  and so on.
+** Pairs vs Cons Cells
+   I wanted to avoid cons cells entirely in this language, but I'm starting to
+   realise why they're important: the symmetry between calling a function as (f
+   x y z) and defining it as (fn [x y z] ...). The fact that the tail of the
+   cons cell (f x y z) is the cons cell (x y z) makes this automatic. So... if
+   I want to be able to call things with a single arg that isn't necessarily a
+   list, I need improper cons cells. Once we have that, the convention of
+   multiple args becomes automatic.
+
+   That said, there are no cons *lists*. The linked list was once a great idea,
+   but is, on modern hardware, just about the worst possible way to store
+   data.
+
+   Lisp uses cons lists in two ways: 1) as lists of data, for which we'll just
+   use vectors, and 2) as a syntax for invoking functions.
+
+   (f x y z) means eval the head (f), eval the tail (x y z), then apply the
+   latter to the former.
+
+   We will keep the (f x y z) syntax for calling functions, but instead of
+   (cons f (cons x (cons y (cons z nil)))), we store it as (pair f [x y z]).
+
+   This (f x y z) is identical to (f . [x y z]).
+
+   The =.= can be interpreted in a functional sense as =apply=, or in an actor
+   sense as =send=. It turns out they're both equivalent with the right
+   underlying abstractions.
+** No Implicit Evaluation
+   In constrast to most lisps (in fact all I've ever found save one called
+   [[https://web.cs.wpi.edu/~jshutt/kernel.html][Kernel]]), we have no implicit evaluation. That means that both arguments and
+   return values are passed by name. That sounds crazy. If not for the Kernel
+   thesis I'd never have believed such a scheme could work, but it does!
+
+   To explain, I'll need to jump ahead to μ.
+** The μ Operator
+   Why μ? Two reasons.
+
+   1) it's the next letter after λ.
+   2) It looks weird, and I want things that don't act as expected to look
+      abnormal.
+
+   μ defines pure syntax operations.
+
+   Example:
+
+   #+BEGIN_SRC clojure
+     (def f (μ [x y] (+ x y)))
+     ;; => f
+
+     (f 4 5)
+     ;; => (+ x y)
+
+     ;; which is an error because x and y aren't defined.
+   #+END_SRC
+
+   μ doesn't define a macro. A μ is first class: they can be passed and returned
+   as values, they operate at runtime (or compile time, or anytime).
+
+   But a μ has no direct access to the environment (nor the continuations). You
+   can pass a namespace to a μ (it's just a map) and take it apart so as to
+   perform any reflective feat your heart may desire, but the lexical environment
+   of an expression is immutable and the expression must be redefined to change
+   it, so there's nothing that can be done by the body of a μ with its own
+   lexical environment.
+
+   Also remember that macros evaluate their own output (or properly speaking the
+   compiler expands the macro and then calls =eval= on the result), whereas μs do
+   not.
+
+   But if nothing evaluates the output of a μ, how do they *do* anything?
+** Immediate Evaluation
+   The answer to the hanging question of the last section is that there is a
+   syntactic expression that "means" =eval=.
+
+   In reality it means "evaluate the following expression as soon as you have
+   all of the information required to do so", which will remain ambiguous until
+   we get into the details of the AST.
+
+   That syntax is the tilde =~=.
+
+   #+BEGIN_SRC clojure
+     (def f (μ [x y] (+ ~x ~y)))
+     ;; => f
+
+     (f 4 5)
+     ;; => (+ 4 5)
+
+     ;; `~x` and `~y` can be evaluated as soon as `f` is called. Since they're
+     ;; bound in the lexical environment of the body, eval reduces to lookup.
+     ;; But remember that the output is not evaluated, so `f` returns an expression.
+
+     (def g (μ [x y] ~(+ x y)))
+     ;; => g
+
+     (g 4 5)
+     ;; => 9
+
+     ;; Note that this only works because `+` is defined so as to explicitly eval
+     ;; its arguments before applying the underlying addition operation.
+   #+END_SRC
+
+   Given a function that only works on literal values (say a version of =+=
+   called =+*=), we can define an operator =wrap= which will invoke it in the
+   standard applicative manner by first evaluating its arguments:
+
+   #+BEGIN_SRC clojure
+     (def wrap
+       (μ f
+          ~(μ args
+              ~(~f . ~~args))))
+
+     (def + (wrap . +*))
+   #+END_SRC
+
+   We can even define λ (here called =fn=) as a μ which receives arguments,
+   evaluates them, passes the evaluated values to another μ and then evaluates
+   its output:
+
+   #+BEGIN_SRC clojure
+     (def fn
+       (μ [params body]
+          ~(μ args
+              ~((μ ~params ~~body) . ~~args))))
+   #+END_SRC
+
+   This is the actual definition of =fn= at the core of the language.
+
+   It may help to think of the body of a μ as quasiquoted, except that we can
+   unquote as many times as we please.
+
+   That said, there is no quote, unquote, quasiquote, eval, nor apply defined in
+   the language — you can easily write them yourself, but please don't — so the
+   analogy is a bit weak.
+** An Exception
+   One final note: I said above that there is *no* implicit evaluation. You've
+   probably noticed in my examples that everything typed into the repl *is*
+   automatically evaluated. The same holds for the code reader =loadfile=. This
+   is a convenience that once again makes code that acts as expected look
+   normal. Also there's no point entering code into a repl unless you want it to
+   be evaluated, so it seems like the right thing to do.
+
+   μs are, of course, free to evaluate their arguments when and as they see fit.
+   =def= adds an evaluation to the beginning of its body, for instance. I think
+   that's the right thing to do as well, but it adds a bit of asymmetry to the
+   definition of metaprogramming operations like =fn= and =wrap=.
+* Outline
+  Sections to be written.
+** History, Environment, and Context
+** Purity and the State
+** Transduction
+** Message Passing
+** Runtime
+** Compiler
+** FFI / Distributed Execution
+   These aren't normally the same thing, but they both boil down to talking to
+   other computers, so their solutions largely overlap.

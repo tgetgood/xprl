@@ -1,0 +1,8 @@
+name = "janus"
+uuid = "df0cf1e2-b4b0-49bb-871e-bdd08fa97433"
+authors = ["Thomas Getgood <thomas@macroexpanse.com>"]
+version = "0.1.0"
+
+[deps]
+DataStructures = "5b4e18e7-32b5-4e80-a6f6-a40e821bb4ab"
+Xprl = "78325d71-b7ee-4eb7-a944-72b98c47b048"

@@ -1,0 +1,59 @@
+#+TITLE: Janus
+
+* The Name
+  In part the name is a nod to Koestler's later work which has, for a very long
+  time, shaped the way I look at complexity.
+
+  Partly I just want to open new doors.
+
+  Plus if it takes off, maybe it can be snuck into other projects by repurposing
+  the "js" file extension...
+* Justification
+  People always ask "why write a new language? What's different about it?".
+
+  When people ask me that, I call this an art project. I work on it because I
+  can't not work on it. I refuse to reduce it to anyone's criteria. It isn't and
+  won't be justified.
+
+  I refuse to say what it *is* because, in the end, I don't know. And focusing
+  on that up front is uselessly limiting.
+
+  Instead, let's focus on a set of things that I don't think should be as hard
+  as they are in practice, and a set of assumptions that need to be questioned.
+* Usage
+  This is still very early. There's no editor support, basically no tooling. All
+  we have is a some data structures, an interpreter, and a repl. To run the repl:
+
+  #+BEGIN_SRC julia
+    # First time project setup
+    import Pkg
+    Pkg.activate("./") # Assumes you're running the repl from project root.
+    Pkg.instantiate()
+
+    # Optional, takes a while but speeds up subsequent runs
+    Pkg.precompile()
+
+    # Run a demo
+    include("src/core.jl")
+  #+END_SRC
+
+  Once the project has been instantiated, you can run the repl from a terminal
+  in the root directory with
+
+  #+BEGIN_SRC sh
+    julia --project=. src/core.jl
+  #+END_SRC
+
+  Have fun. Or try to without rlwrap...
+* Docs
+  For a primer on the language (in progress) See docs/langauge.org.
+
+  For a bit of justification, in spite of the above diatribe, see
+  docs/research-aesthetics.org. That doc is a mosaic of years of my own notes.
+  It's sprawling, sometimes repetitive, and often (though I've tried to clarify)
+  obscure. Enjoy if you can, otherwise ignore it
+* Copyright
+  © Thomas Getgood 2024
+
+  This code is unlicensed. If you want to use it, contact me and I'll try to
+  talk you out of it.
