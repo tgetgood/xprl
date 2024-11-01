@@ -5,18 +5,15 @@
   time, shaped the way I look at complexity.
 
   Partly I just want to open new doors.
-
-  Plus if it takes off, maybe it can be snuck into other projects by spoofing
-  the "js" file extension...
 * Justification
   People always ask "why write a new language? What's different about it?".
 
   When people ask me that, I call this an art project. I work on it because I
-  can't not work on it. I refuse to reduce it to anyone's criteria. It isn't and
-  won't be justified.
+  can't not work on it. I refuse to reduce it to any fixed criteria. It isn't
+  and won't be justified.
 
-  I refuse to say what it *is* because, in the end, I don't know. And focusing
-  on that up front is uselessly limiting.
+  I refuse to say what it is because, in the end, I don't know. And focusing on
+  that up front is uselessly limiting.
 
   Instead, let's focus on a set of things that I don't think should be as hard
   as they are in practice, and a set of assumptions that need to be questioned.
