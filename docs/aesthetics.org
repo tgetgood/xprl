@@ -1,0 +1,1828 @@
+#+title: A Plausible Programming Environment
+
+A new beginning on a heap of old ideas.
+
+This file describes a number of interrelated ideas around building and sharing
+ideas and the context that gives them meaning, and a system in which to converse
+and work with them.
+
+The end goal is a potential replacement for the web that puts people before
+technology.
+
+It's a big project. Be patient. Even I'm not holding my breath.
+
+* How to Read this Document
+  This was written and intended to be read with emacs and org mode.
+
+  Maybe one day I'll port it to something web friendly, but that's not my
+  priority at present.
+* Design Constraints
+  The following is a partial list of the constraints I'm imposing on myself.
+  Some of them I might drop, most I won't. New ones might come up. The
+  difficulty is unsurprisingly concentrated at the intersections.
+** Observationally Immutable                                  :immutability:
+   Transients are sort of nifty, but things like the im.rs crate are a much
+   better idea. Rox has picked this up as well.
+
+   With strict immutability you can't have cycles, which means reference
+   counting will suffice for GC, but the if the current reference count is 1,
+   functions which would retun a new collection can just mutate the one they
+   have in place since no one will ever know.
+
+   Note that this doesn't conflict with the idea of permanent partial hashes
+   since if it's in the hash trie, it's either in memory (a reference), or it's
+   been serialised and you don't have to worry about it.
+** Dynamic                                                         :dynamic:
+   Due to immutability, all values have known types. But that doesn't mean that
+   you should know exactly what kind of thing you'll get when you write code
+   that receives a value.
+
+   Writing a program is, from one perspective, about building up constraints
+   bit by bit. Impose unnecessary constraints early on and you have less freedom
+   to manoeuver down the line. That in turn forces what could be local changes
+   to propagate across the entire code base.
+** Reflective                                                   :reflection:
+   I don't need a tower of interpreters. Or maybe I do and don't know it yet.
+
+   What I do want is something like fexprs, but we don't (can't) have full
+   fexprs because of considerations with the environment that come from
+   extending the notion of immutability into our notion of namespaces, packages,
+   and linking.
+
+   We do want a homoiconic representation, and we want macros as first class
+   values. The theory is far from trivial despite what Wall said 40 years ago.
+
+   There will be a lot more to say about this one in the linear notes.
+** Fast                                                              :speed:
+   There's a lot to say here. First, I'm more concerned with the the speed of
+   overall experience than with microbenchmarks.
+
+   Runtime optimisations like hotspot are very promising.
+
+   Also the compiler should be fast. But since code, namespaces, and packages
+   are themselves immutable, nothing should ever need to be compiled more than
+   once (except, notably, to try different optimisations), so the compiler
+   should feel very fast in practice. This is one area where I find Julia
+   disappointing: it's very fast when used well, but the lengthy compilation for
+   a big project makes interactive development of low level things that segfault
+   or otherwise fail during development annoying.
+** Interop                                                         :interop:
+   Initially with C and Julia. Julia because I want access to all of the
+   numerics and scientific code. C because of Vulkan immediately, but really
+   because of everything. C ffi is still the lingua franca of all systems and
+   rust can't change that because of its closed world assumption and rigid type
+   system.
+
+   In the end C interop is all that matters because julia is embedded via a C
+   library.
+
+   This interacts with immutability in surprising ways. It turns out there's a
+   place in a persistent data structure library for a copy on write flat
+   array. It's also important to be able to take a persistent vector and quickly
+   dump it into a linear array. An (into! [] ...) method that collects values
+   via a transduction pipeline and puts them into a linear array (dynamically
+   resizing and copying as necessary) can also be useful. It certainly is for
+   julia interop.
+
+   Furthermore, we need cells to work with C, which seems to contradict the
+   immutability constraint above. But we want "effective immutability", which is
+   not the same thing. Effective immutability says that if someone has a
+   reference to a thing, then they have the thing. It could even be interpreted
+   as saying there are effectively no references, only values since no memory
+   you can access can change. But that doesn't mean that memory you *can't*
+   access can't change. And there's the trick. Memory needs to be written
+   somewhere, we just need visibility guarantees. In this case, if we allocate
+   space and pass a pointer to a C function, expecting it to write to that
+   memory, then so long as nothing can see that pointer, it effectively doesn't
+   change. After the C function has returned control, we need to either 1)
+   ensure that it has returned ownership of pointer, or 2) copy the data to
+   somewhere we control. In both cases nobody can hear the tree fall, so we can
+   safely pretend it didn't.
+
+   It also interacts with sandboxing, to no one's surprise. *if* we can do
+   something like use the paging table to mark memory read only, then we don't
+   need to copy everything we pass to a C function. You have to really trust a
+   library to assume that it won't change data (even when it takes a const
+   T*). That's not something to rely on. So we need a stronger guarantee, or
+   we need to copy data, or we need to punt and force the developer to choose
+   which calls to trust and which not. That last is the most general, but is
+   very error prone. A safe default with the ability to override might be
+   best. I don't know yet.
+** Sufficient Smartness                                              :theft:
+   We've been able to design languages that automatically make use of all
+   available hardware since the early days of computers. car and cdr are such a
+   mechanism for using 2 boards of the IBM 704 in parallel. Linked lists very
+   rarely (tempted to say never) make sense to use nowadays, but once upon a
+   time they were an ingenious optimisation.
+
+   More recently look at Erlang and its derivatives, Haskell in many
+   applications, Go, etc.. The problem of the sufficiently smart compiler
+   becomes almost trivial when you stop assuming computers are single serial
+   processors and then try to duct tape concurrency back on to them.
+
+   That said, Cilk was a very inventive bit of duct tape, and in a system of
+   immutable values passed as messages, an analog of cilk should be able to keep
+   all cores of a modern system loaded with minimal overhead. I'm willing to bet
+   the farm on that.
+** Heterogeneous Compute and Distribution                     :distribution:
+   But multicore cpus are only part of the game nowadays. At the very least we
+   also need to be able to move computation to gpus via cuda/opencl/vulkan (I'm
+   going with Vulkan because graphics are also something important to me), and
+   other dedicated chips/peripherals/your old phones/a closet full of raspberry
+   pis/&c..
+
+   I would take this much farther and say that you should never throw away a
+   computer. If you kept each computer you ever had (including phones) and were
+   able to link them into a grid, then assuming exponential growth (2ⁿ) you'd
+   have twice as much compute as from the latest machine. Lower exponents just
+   give you more power.
+
+   There will be a difference of implementation and performance between
+   multicore and multi-machine, but it shouldn't be a difference of kind. We
+   have lots of fancy algorithms for optimising streaming workflows in the fact
+   of network latency, node capacity, etc..
+
+   I don't think distributing work to a gpu is a different kind of activity than
+   distributing to a cluster of cpu machines. Choosing where to send what kind
+   of work is a fun problem, but the conversation of sending and receiving is
+   very much the same.
+** Reference by Value                                              :context:
+   The word "environment" is loaded when it comes to programming language
+   design, so I'm going to try and avoid it in what follows.
+
+   When you type a form into an editor, say, =(fact (+ x 5))= you *mean*
+   something by the symbols =fact=, =+=, and =x=. Now =x= is very likely a
+   placeholder for a value you don't know yet. There will always be quantities
+   you know that you won't know until later. Often until runtime.
+
+   But what about =fact= and =+=? These you think you know statically. That is,
+   when you write your code, you look at the source (or the docs) for the
+   functions =fact= and =+= and assume that these are the thinks you're
+   referring to.
+
+   But you're not. Not if they come from a library that is dynamically linked in
+   at runtime. Not even if you use static linking (bundling) if the dependencies
+   aren't locks by your dev machine but can be chosen by a CI server (>=1.0
+   anyone?).
+
+   So at the end of the day you've produced a syntactic form whose meaning is
+   entirely subject to the whims of machines and distro maintainers that you
+   don't have control over, or potentially even know.
+
+   That's not acceptable.
+
+   When you type a form, you do so with a context in your head. The symbols you
+   use mean something to you. If they didn't you may as well be mashing at a
+   keyboard.
+
+   I know that we all modify code we don't understand to learn, which involves
+   typing symbols we don't understand, but we don't mean nothing by the symbols
+   we type. Even if we don't understand what the symbols mean, we assume they
+   mean something and that that something is the same as what was meant by the
+   person who wrote the code we're dumbly banging at.
+
+   Context is everything. We don't want to lose context.
+
+   Symbols cannot be dynamically resolved by name. Not at runtime, not at
+   compile time, not even when you're writing the code in the first
+   place. Unison, Roc, and other very new languages try to resolve symbols
+   statically when you save a file. There's a simplicity to this that's
+   appealing. It fits into the modern fad to type theory quite nicely to think
+   of the entire codebase as a typed object that can only be modified according
+   to typesafe methods.
+
+   But that doesn't suffice. Dynamic linking has upsides. And see [[*Types][Types]] for a
+   rant I won't repeat here.
+
+   Symbols shouldn't be resolved by name at all. When you write a name, you need
+   to specify the exact value you mean by that name. Function parameters are a
+   special case. They don't have to resolve to anything, so it's unclear how
+   they fit in to this idea of context of evaluation.
+** Message Passing as the Only Side Effect                        :emission:
+   This is elaborated in [[*Function, Proceedures, Coroutines, and Transducers][Function, Proceedures, Coroutines, and Transducers]].
+
+   Side effects exist for several reasons. One is that real world programs have
+   to eventually *do* something. This aspect of side effects is easy to handle
+   in a pure way. You simply encapsulate all of the transceivers and send them
+   messages. The edges are never pure.
+
+   Aside: is transduction (in the engineering sense) necessarily impure? Think
+   of literal data that eventually drives a speaker cone. If the sound produces
+   is isomorphic to the data that drove the speaker, there's a real (but
+   useful?) sense in which the operation is perfectly pure. I keep returning to
+   this kind of speculation, but let's drop it for now.
+
+   Another major source of side effects is the fact that we often want functions
+   to do more than one thing. Log a message and then return a value. Send a
+   transaction to a database, then send an http response to someone, then send
+   some metrics to a log aggregator, and then return a datastructure to your
+   caller. This is what most programming is if you're building a product and not
+   just speculating about what programming is.
+
+   So there are two cases here. One is a chain where the result of each step
+   influences the next, and the other is just "do N things at once, and do them
+   in this order mostly because the syntax requires I specify an order even
+   though I don't really care".
+
+   The first case can always be broken up into a typical callback structure
+   where you send a message to a database and part of that message tell the
+   database where to send its response. This is tedious, so let's make the
+   compiler do it. This is a solved problem nowadays.
+
+   The second case is where I suggest a novel solution. Functions (or whatever
+   we're building programs out of) don't return a value, but always send a
+   collection of messages from tail position. One of those messages might be to
+   the caller (a return value), but the others can go to any receiver we can
+   name.
+
+   Control of names is important for sandboxing, interop, and debugging, but
+   we'll get into that somewhere else.
+
+   So instead of doing a bunch of things in some order, we end every unit of
+   execution by returning control to the event loop and giving it a bunch of
+   messages to schedule. They're then done in whatever order the execution
+   framework decides upon. And in parallel if the hardware is currently
+   underutilised.
+
+   In one sense, this is a radical departure from standard language
+   semantics. We're not returning control to the caller, we're sending control
+   to multiple places, possibly at the same time.
+
+   On the other hand, it's not so different from what we do every day peppering
+   fire and forget side effects all over our code to accomplish logging,
+   metrics, etc.. We're just being explicit and saying "these things all need to
+   happen eventually, and don't depend upon one another.".
+
+   One thing I like about this style of thinking about control flow is that it
+   makes concurrency natural. It's a similar metaphor to smalltalk, but instead
+   of "everything you can send a message to is a computer", we say "everything
+   that can do stuff is a computer, and messages tell *somebody* to do stuff."
+   who is just an optimisation.
+
+   So we don't need to fork, or otherwise tell the computer how to distribute
+   code. Rather we make dependencies explicit, and then just do as much of the
+   work that's ready to do as we can in parallel. This extends naturally to
+   distribution, gpus, etc..
+
+   But now how do we order events? So far, I only offer two guarantees, and they
+   seem to suffice: 1) Units execute only after receiving messages (and so
+   messages they send are strictly happens-after the messages that "caused"
+   them). and 2) if A sends a sequence of messages to B, then B receives each
+   message exactly once and in order.
+
+   Note that if multiple senders are sending to B and no provision has been made
+   to distinguish them, then the two sets of messages will be interleaved in
+   some arbitrary order even though the messages from each sender will be
+   received in order.
+
+   Since you can always tag messages with the sender, or a channel id, or
+   something like that, it's always possible — when you care — to distinguish
+   senders. In earlier versions of this document I had considered named channels
+   to be a first class aspect of message receivers, but I now believe that they
+   can be implemented, rather than built in, on an as needed basis. And they're
+   needed less often than I had originally thought.
+
+   Note that this requires receivers with state. See [[*Receivers][Receivers]] for more about
+   the functioning of message receivers, which are the other half of message
+   emission.
+
+   One fact about receivers that bears repeating is that a receiver imposes a
+   total order on the messages they receive. This order is subjective to the
+   receiver (and to a degree arbitrary) but that's enough for our needs. It
+   means that the internal state of any receiver is self-consistent, and even if
+   a receiver has no internal state, it means that the messages emitted by a
+   receiver will be ordered accordingly with the messages received.
+
+   That fact, combined with (2) above should suffice to build well defined
+   computation pipelines where the programmer only specifies real dependencies
+   and leaves the runtime free to map work to hardware in the most efficient way
+   it can.
+** Interpretation All the Way Down                               :receivers:
+   This is rephrasing of [[*Perspective: Interpretation all the way down][Perspective: Interpretation all the way down]]. I'm not
+   sure it's really a design constraint, but it is essential to my ideas of
+   interop, sandboxing, dynamism, and others.
+
+   This is an idea I've been trying (and failing) to express cleary for
+   years. In his book "A Problem Oriented Programming Language" Chuck Moore asks:
+   "What is a compiler-compiler that can execute the compiler it describes and
+   in turn execute the program it compiled? That is the question!". That's my
+   question too, but I'd ask it a little differently.
+
+   Think of a lambda as defining a new interpter. The new interpreter is
+   generally very restricted, but it takes inputs and does something with
+   them. Thus a form such as
+
+   #+begin_src scheme
+     ((λ x. (* x x)) 4)
+   #+end_src
+
+   can be interpreted as "compile the thing on the left, and pass 4 to the
+   result." To generalise, the applicative execution model would be: "the first
+   element of a form describes or names an interpreter, evaluate that and then
+   pass the rest of the form to the new live interpreter (compiled proceedure,
+   object, etc.) and go on recursively".
+
+   So we can view =λ= as a builtin interpreter which when passed arguments
+   constructs a *new* interpreter, which in turn expects arguments, ...
+
+   Now, what about primitives? λ itself must be a primitive in most lisps. How
+   about we define a primitive to be an interpreter in another language?
+   Generally speaking, in the langauge in which our language is implemented, but
+   potentially something else entirely if we have a far reaching ffi.
+
+   It's interpretation all the way down, and it works, of course, because at the
+   bottom, the circuitry directly interprets currents, which are controlled by
+   values (data) in registers, often with one more layer of indirection via
+   microcode.
+
+   But then what about byte codes and virtual machines?
+
+   Source code / byte code / machine code (binary) only *describe* a thing to be
+   done. The agency to *do* something ultimately must bubble up from this active
+   physical nature of the hardware. That's the key.
+
+   That's also why I'm talking about ~interpreters~ and not ~compilers~.
+   Compilers are pure functions that convert one data description of a program
+   to another (hopefully equivalent) data description of a program.
+* In Search of Origins
+  "Since intelligence is primarily defined as one's capacity to grasp the
+  truth of things, it follows that what a culture means by intelligence is
+  derived from the character of its important forms of communication."
+
+  — Neil Postman (Amusing Ourselves to Death, chapter 2)
+** Perspective: Coordination Languages
+   Cf https://dl.acm.org/doi/10.1145/129630.129635
+
+   The basic idea of a coordination language is that computers do two
+   orthogonal things: they compute, and they communicate. Thus there should be
+   two levels of design (and possibly two separate languages) in
+   programming. One to define the computations and the other to specify how
+   they communicate with one another.
+
+   The universal bubble (lambda expressible, turing computable, recursively
+   definable, &c.) is a mathematics of closed formal systems. They express the
+   notion of computation, but by being closed they proscribe communication.
+
+   In the same paper in which Turing defined his automatic machines (1936) he
+   also defined a class of machines which he called choice machines which
+   communicate with a human operator. He showed that choice machines, by being
+   able to ask an arbitrary number of yes/no questions are qualitatively more
+   powerful than automatic machines (which we today call Turing machines). The
+   gist of the argument is that the set of Turing machines is countable,
+   whereas the set of choice machines is not.
+
+   It shouldn't be controversial that Turing universal is a small subset of
+   "can be done by modern electronic devices" — it was clearly stated by Turing
+   before any such devices existed — but I've spent too much of my life going
+   over this in bars late into the night. Read the Standford encyclopedia of
+   philosophy entry on the Church-Turing thesis.
+
+   So if Turing machines are very limited, why use them? The answer is because
+   we have very powerful mathematical tools for creating, testing, proving
+   things, and thinking about them. Our knowledge of communication is very poor
+   in comparison. Except when it comes to telephony.
+
+   Hypothesis: We can build a pure functional language that has no side effects
+   — no I/O, no mutable references, &c. — except for a single primitive `emit`
+   which sends a bundle of messages and can only be called as the final step of
+   a computation. We can then reconstruct a practical language for real
+   software by using a DSL to wire together these pure units into networks
+   (hypergraphs? simplicial complexes?).
+
+   Conjecture: If such a language can be built, then it can be built from
+   primitive recursive units wired into networks. Branching and recursion can
+   be expressed as message passing topologies, so we can build general
+   recursive functions without choice. This also has practical significance
+   because primitive recursive functions are easy to prove correct (induction)
+   and always halt if correct.
+** Perspective: Special Relativity                                 :context:
+   - Note taken on [2022-09-24 Sat 18:47] \\
+     Originally dates [2020-05-12 Tue] in my notes
+   On an interstellar scale, consensus is not possible in any practical
+   fashion.
+
+   This is a trivial consequnece of special relativity. It is not only
+   possible, but necessary, that different observers will observe different
+   sequences of events. Those sequences will often contradict each other in the
+   short term, but both observers will nevertheless be correct.
+
+   So what can we do? Current solutions like paxos, raft, etc. work by builing
+   consensus via coordinated communication. They guarantee that eventually
+   everyone will agree, but they make no promises (because they can't) about
+   how long it will take for such consensus to arise.
+
+   Spanner, and other "reengineer the universe" style solutions build a frame
+   of coordinates that spans the entire planet and using atomic clocks and gps
+   impose a total order on all events happening on the earth. Again, this is a
+   form of consensus in the long run, with a blind spot trailing ever so
+   slightly into the past. If you're running a server in Singapore, and you are
+   sent messages from Sydney and London at about the same time (though
+   according to the atomic clocks, the London message was first) you'll
+   probably receive the packet from Sydney first, and so there will be an
+   interval of time in which you are inconsistent with the total ordering of
+   the system simply because messages travel at finite speed.
+
+   On the earth this isn't much of a problem, since that trailing blind spot is
+   from about a second ago to now. That's not much time. But what happens if we
+   expand the network to include the moon? Mars? The moon is over a second away
+   at the speed of light. Mars can be more than twenty minutes away. That means
+   that the trailing blind spot will be at least 45 minutes for a network
+   spanning the earth and mars if it only takes one round trip to agree to
+   things. If you have a spanner like system, you can broadcast and get best
+   effort consistency in 20 or so minutes, but you won't know they know until
+   at least one round trip.
+
+   Let's make it harder. Imagine we send a ship to another star. If that star
+   is 60 light years away, then as the ship travels, round trip time will
+   increase until it reaches 120 years. If you won't get acknowledgement of
+   delivery for over 100 years, then you may as well never get it. Concensus
+   becomes completely impossible, all that can be done is informing.
+
+   So instead of tcp, we'll simply need to send a continuous stream of data and
+   listen to one coming back.
+
+   Now imagine this ship comes back. It's own web will have diverged
+   significantly from ours, but because of the streaming updates back and forth
+   there will be cross links. Once the two webs are brought physically close
+   together it should be as if they were never apart. The network needs to be
+   amorphous in this sense that pieces can break off, evolve in isolation, and
+   then reconnect.
+
+   If the network is robust — at the highest level of content, not just at the
+   wiring level — to continuous changes in topology, then being connected all
+   the time will become a less pressing concern. Going through a tunnel
+   shouldn't break anything, being cut off from the outside world by censors
+   should be equivalent to a lag in updates, instead of the current situation
+   of only having access to anything when you find a hole in the firewall.
+
+** Perspective: A Generalisation of Homoiconicity
+   Or how to organise your information so that it won't be forgotten.
+
+   Is Linear A information? Rather is a text in Linear A information?  No. Not
+   according to information theory, in any case.
+
+   Information revolves around two parties sending messages across a
+   channel. Information is an emergent property of this setup whereby one party
+   informs the other. This informing crucially depends on shared context, an
+   establised message format. A shared view of the world.
+
+   Information cannot exist unless two parties share a context and messages.
+
+   If you are given a binary file, what can you do with it? look at the first few
+   bytes, see if it looks like ASCII, unicode, some sort of format header, look for
+   repeating delimiters that might indicate a sequence, or regular sized chunks
+   that might indicate records. If you're sufficiently familiar with conventions
+   and lucky you can probably reverse engineer the code.
+
+   If you're given a chunk of machine code for an old mainframe that you've
+   never heard of and of which none exist anymore, then you're shit out of
+   luck.
+
+   This task is essentially the same as that of an archaeologist tasked with
+   deciphering a piece of ancient writing in Linear A. If the surrounding
+   context were known, that is if one knew linear B, and cypro-minoan, egyptian,
+   etc. — not just in the sense that we "know" some of these today, but in the
+   sense that one knows English, French, or Russian — then deciphering a text in
+   Linear A might not prove incredibly difficult. Context is everything.
+
+   So what is on a tablet inscribed in linear A if it's not information? A
+   *text* is inscribed on the tablet, but if no one knows how to read it,
+   then the meaning is lost. There is no *message*. No *information* can
+   pass between the author and the reader across the intervening millenia.
+
+   When we program we send messages to machines. These messages take the form of
+   source code, but what is source code? Does it contain information? If so,
+   who, or what, is informed?
+
+   Let us call something that can receive messages and act on them an
+   interpreter. If you send a message to an interpreter, and it does what you
+   expected it to in response, then in some limited sense it understood you or
+   "got the message". You successfully informed the interpreter. Let us say that
+   with respect to this interpreter, this message is *code*.
+
+   Not every *text* is a *message* to every (or any) interpreter. Most
+   interpreters are only able to perceive a small subset of possible texts
+   (inputs) as messages.
+
+   A piece of writing, or a blob of binary, or a group of dark spots on an
+   optical disk, are texts. Those texts can only be called messages in reference
+   to specific interpreters or classes of interpreters. There need not exist an
+   interpreter. A text file full of random noise cannot be interpreted
+   meaningfully. There is by definition (of martin-lof randomness) no
+   information to be had in the file.
+
+   At the same time, a given message might be different code to different
+   interpreters; see whitespace and polyglot code.
+
+   It's important to stress that a text file by itself is not code in this
+   sense. We can recognise a clojure source file by the .clj extension and so we
+   know to which interpreter to feed it, but that knowledge is communal and
+   contextual and can be lost. Without the interpreter the text is just a text
+   and can go the way of linear A.
+
+   In fact even without the .clj extension, if the file has been misnamed, we
+   can still recognise it as a clojure source file because we're familiar with
+   the language. But in this case even if we feed it to clojure it won't work
+   because the compiler won't recognise it. So here we have a source file which
+   we recognise as code, but which the interpreter with respect to which we call
+   it code cannot, in fact, interpret it.
+
+   Of course we can ourselves execute the code (on paper, in principle) using
+   the semantics of the language which we know. So the interpreter is an
+   abstract "clojure" that exists only in our collective cultural context, and
+   not the =clojure= program itself.
+
+   And this brings us to the point where we can ask the real question: if a
+   written text is a message, and that message can be interpreted as code (with
+   respect to an interpreter), what then is data?
+
+   We talk about data all the time. Code is data. Data driven design. Data is
+   better than functions are better than macros. Homoiconicity gives lisp the
+   power of arbitrary syntactic extension preciesely because macros operate on
+   the source code as a data structure. These definitions contradict each
+   other.
+
+   Or do they?
+
+   Let's take a closer look at homoiconicty. Homoiconicity at its simplest is
+   the statement that the text in source files is isomorphic to the AST of the
+   language in memory. This isomorphism is the lisp reader. Its inverse is the
+   printer.
+
+   The power of macros is that they operate on the AST, but they look and act as
+   if they were acting directly on the textual source code itself. This
+   transparency empowers programmers — who can only really "feel" their code in
+   the textual form that our editors manipulate — to extend our intuitions into
+   the compiler of the program, giving us further intuitive reach than is
+   possible in a language without homiconic syntactic macros.
+
+   So if macros let us extend our intuitions about (static) source code into the
+   runtime, why do we eschew them as a community? Why are functions better than
+   macros?
+
+   To answer this, let's extend our notion of homoiconity. Remember that
+   homoiconicty is an isomorphism across the reader. Another way of saying this
+   is to say that (print (read x)) is x for any valid sexp.
+
+   But we don't just read source code. The LISP reader by itself is not very
+   useful. After we read source files, we evalutate the ensuing sexp data
+   structure. To phrase it a little differently the output of the repl is
+   (print (*eval* (read x))).
+
+   To rephase again: the reader interprets a message (the source text) and the
+   result is the sexp data structure which itself is a message. This second
+   message is in turn interpreted by eval which is what we generally think of as
+   "the language.
+
+   Note that messages are no longer homoiconic across this chain of two
+   interpreters. The text "(+ 2 2)" comes back as the text "4". Syntax quoting
+   exists to disable evaluation so that we can work with homoiconicy across
+   eval.
+
+   There is, however one class of text which is still homoiconic in a broader
+   sense. What are those messages in text for which (print (eval (read x))) is
+   identical to x?
+
+   These are precisely the structures we call "literal data" in clojure. Quoted
+   forms are notably *not* literal data because the quoting is lost and a second
+   pass through the cycle will evaluate the form.
+
+   This generalised notion of homoiconicity gives us a hint as to the nature of
+   data. Or at least a definition that reconciles the apparent contradiction
+   above.
+
+   Code whose interpretation is isomorphic to its underlying message is data.
+
+   This tells us that code is data *with respect to the reader*, but not with
+   respect to the language as a whole.
+
+   data is better than functions are better than macros because data (with
+   respect to the repl) lets us extend our intuitions about textual source into
+   the runtime in the same way that macros allow us to extend it into compile
+   time, and functions work on data with respect to the repl, but are
+   themselves not data with respect to the repl (though they are data with
+   respect to the reader which allows macros to act on functions as functions
+   act on literal data).
+
+   This feels like semantic nitpicking until we rephrase the fundamental problem
+   of programming (to paraphrase Dijkstra) as "knowing what is going to happen
+   at runtime — given that the actual code executing is written not by a human
+   but by another program (a compiler) — in terms of the textual code that we
+   actually write".
+
+   Being able to manipulate (and understand) the physical execution via a true
+   isopmorphism with the text we write gives us an unparalleled avenue of attack
+   on this problem. Data driven design is a qualitative improvement in a way
+   that transcends all the petty bickering about so called programming paradigms
+   (which are at best ideologies and all too often dogmata).
+
+   So code can be data, functions can be code, and data can be better than
+   functions. You just have to realise that the meaning of the terms code and
+   data is not well defined without reference to an interpreter.
+
+   To confuse matters even more, a message can be code with respect to two
+   interpreters but only be data with respect to one of them.
+
+   Even more confusing, the interpretation of a message need have nothing to do
+   with the intentions of the author (cf. Roland Barthes 1967).
+
+   Something decidedly less black and white than Barthes seems necessary to
+   really understand this.
+
+   Barthes holds that to give full creative autonomy of interpretation to the
+   reader, one must let the author die, but of course it's more subtle than
+   that.
+
+   The author creates a text and (presumably) intends it to have a meaning. The
+   text is transmitted, the meaning is not. The reader gets the text and infers
+   a meaning by reading it.
+
+   Traditional literary theory holds that one should look to the life, opinions,
+   actions, etc. of the author when reading a text so as to try and infer the
+   author's intended meaning.
+
+   Post modern reading involves reading the text in and of itself — an act which
+   is of course impossible because you cannot read except from the context of
+   your own life and consciousness — and let the meaning come as it will.
+
+   I think that we have to be schitzophrenic about it. We need to maintain
+   simultaneous opinions about what we think the author meant from the context
+   of their life, and what the author meant (or to further confuse matters what
+   the text itself "means") from the text alone. These opinions will, in
+   general, contradict each other. In a sense both will be true, in another
+   sense neither will be true.
+
+   All we can hope to do is contrast the different readings and make a call in a
+   given context.
+
+   — Aside on self description and indefinite archiving —
+
+   Self description in this framework is ill defined. Description implies
+   communication which is only possible through shared context. So you would
+   need either a universal context, which is impossible, or a message combined
+   with an interpreter that is capable of building a context in which to
+   communicate from scratch. A feat which may or may not be possible. Maybe
+   scratch isn't necessary, maybe lincos was onto something.
+
+   Maintaining contextual consistency through the ages allows archaeologists to
+   bring dead cultures back in a somewhat hollow form. To really understand a
+   message, you need to keep a body of native speakers — or contextual natives —
+   around. I don't know how long that can be possible.
+** Perspective: Linguistic Archaeology
+*** Example of losing context
+    Sets, lists, maps (set theoretic functions) are very basic and seem like
+    they will never go away. If that's not a universal basis on which to build a
+    future proof semantics, what is?
+
+    100 years ago log tables were the primary means of computation. They were
+    considered indispensible to the point that sci fi into the 60s still assumed
+    space ships would have log tables that you would use to program the ship's
+    computer (cf Spaceman Jones).
+
+    Log tables have ceased to exist. Computers are so fast that we directly
+    compute quantities from power series. Often without using logarithms at
+    all. This would have been inconceivable not so long ago.
+
+    Besides, ZFC is an ugly, unsatisfying theory. Assuming that it's too
+    fundamental to be replaced is a failure of imagination.
+
+    That said, barring cataclysmic loss, future archaeologists will know that we
+    used sets and maps and the rest and there will be books on the subject for
+    historians of technology.
+
+    It's the trail of context that needs to be maintained. Universality is a
+    myth. Gödel proved that in 1931, but it still hasn't sunk in.
+** Perspective: Interpretation all the way down
+   “To be is to do” —Socrates
+   “To do is to be” —Jean-Paul Sartre
+   “Do be do be do” —Frank Sinatra
+
+*** Notes adapted from [2020-01-06 Mon] on paper
+    - Note taken on [2024-07-01 Mon 11:54] \\
+      This largely repeats thoughts in the generalised homoiconity section. They
+      should be merged.
+    Data is not a well defined term and I'm going to try and avoid using it for
+    the moment. Is this possible?
+
+    What is an inscription on a tablet? Let's call it a message for lack of a
+    better word. How do we know it's a message and not a natural phenomenon? or
+    an unlikely outcome of random noise? We don't. Intention comes right from
+    the start: a message is something intended to be read. Intended to convey
+    meaning. The author of a message meant something by it.
+
+    So we need another concept for an artifact — an inscription, a shape, a
+    sound, &c. — that *might* be a message, or might not. For now, let's call
+    this a text. Not a good word, but I've got nothing else; signal, sign,
+    etc. are loaded terms nowadays.
+
+    Can anything be a message? If so, do we even need a word for something that
+    might be one?
+
+    A message only exists if a producer and a receiver share enough context to
+    make communication possible.
+
+    So before we can have messages, we need agents with the intent to
+    communicate.
+
+    Two sentient agents can communicate. This is an observation, not a
+    definition.
+
+    But what does it mean to communicate with a machine?
+
+    If you send a message (from your point of view) to a machine and it behaves
+    in an expected manner, then you can say that the machine interpreted your
+    message correctly. Or maybe that with respect to that interpreter (machine),
+    your message is code.
+
+    A message that means something to someone is different from one which does
+    not.
+
+    We should likely relax this condition to say that if you send a message to a
+    machine and it does *something*, then it interpreted your message (somehow).
+
+    Correctness is not a notion applicable to communication in general.
+
+    Is correctness essential to the notion of code? The rationalist tradition
+    would say yes, after all the word 'code' orginally referred to a collection
+    of laws in old French (though prior to that, codex just means 'book' in
+    Latin).
+
+    Most computer code is not incorrect so much as not even wrong. So I think
+    it's a mistake to equate computer code with formal systems of any kind when
+    thinking of practice.
+
+    What do we call a message that you can interpret meaningfully? Meaningful
+    (to you)?
+
+    It's important to consider that the meaning intended by the producer of a
+    message, and the meaning interpreted by the receiver need not have anything
+    to do with one another. In fact one end, or the other (or both?) might not
+    assign any meaning at all.
+
+    So Barthes put it too strong: the author isn't dead, they're just another
+    reader (of their own message).
+*** Theory
+    Data is the medium in which computation can occur.
+
+    A message which causes an interpreter to do something is code. That
+    something might be a side effect, or it might be a computation.
+
+    It's important to see that from this point of view, computation is just
+    another kind of effect we can have on the world. It is a form of doing. It
+    just has much nicer mathematical structure than most other kinds of effect.
+
+    That which is done by an interpreter, given a message, *is*, in some sense,
+    the meaning assigned to that message by that interpreter. Meaning is use.
+
+    Literal data are precisely those messages which pass through an interpreter
+    without causing it to do anything beyond propagating the message. Semantic
+    roughage. Sort of. Think of the machine that draws letters in the sand.
+    There is a clear isomorphism between input and output and so there is a
+    sense in which unicode chars are literal data, but equally a sense in which
+    they are code. This is a point for further consideration elsewhere.
+
+    For now, let's just consider literal data as a subset of (digital) data.
+
+    Notably, since literal data passes through an interpreter without causing it
+    to do anything in particular, literal data is not code, and so the
+    interpreter assigns no meaning to it.
+
+    (Literal) Data is purely syntactic. Semantics are external to it.
+
+    The fact of the existence of literal data says something about a shared
+    structure between the data and the interpreter which emits it unchanged.
+
+    Note that the meaning that the producer of code assigns to it does not
+    necessarily have anything to do with the meaning assigned to it by a given
+    interpreter (though it may be important to others).
+
+    A symbol, say `identity`, is a message that refers to a form, that is, to
+    another message `(fn [x] x)`.
+
+    A form which is intended to invoke a function referred to by a symbol, say
+    `(identity 1)`, indicates by the grammatical position of `identity` —
+    invocation position — that `identity` is in turn to be treated as an
+    interpreter.
+
+    (eval (identity 1)) <=> (apply (eval identity) (map eval [1]))
+
+    The repl is an interpreter that interprets some parts of messages as
+    interpreters and other parts as messages to those interpreters.
+
+    But this process must bottom out. At some level, messages must *be*
+    interpreters.
+
+    Put differently, messages, being data, are inert. S-expressions, being
+    *literal data* to the lisp reader are, furthermore, devoid of
+    meaning. Meaning is assigned to the sexps by `eval`, which is the most
+    important interpreter in a lisp.
+
+    Code by itself — be it a string, or a forest of sexps — does nothing, means
+    nothing. It is inert. It must be interpreted.
+
+    `eval` in lisp serves two distinct purposes. It provides the grammar of
+    lisp, which is to say that it decides which forms are the be considered
+    interpreters, and which messages, and it transforms inert code into an
+    active interpreter.
+
+    This initial spark is magical. It is the difference between computers and
+    all media that came before.
+
+    This vivification of inert code into a reactive mechanism is not akin to
+    compilation. A compiler is, in principle, a pure function that transforms
+    one representation of computer code (text, sexps, etc.) into another (byte
+    code, machine code, et al.).
+
+    Compilation is often part of the action which transforms text into a living
+    process, but it's not the magic.
+
+    I keep saying magic, but really it's rather banal. At some point, you reach
+    circuits which interpret messages directly into physical activity. You don't
+    need interpreters all the way down. It just looks that way to people raised
+    in modern platforms like the web.
+
+    Does `eval` have to be singular? Is there any reason to restrict the set of
+    meta-interpreters, the set of language defining interpreters, to a single
+    thing?
+
+    Why can't a single runtime platform accept messages in any format, so long
+    as those messages are tagged in some way such that the runtime can deduce
+    how to interpret them?
+
+    That's basically how linux deals with requests to execute a file, after
+    all.
+*** Practice
+    What I'm calling an interpreter might better be called an executor, but
+    interpretation has a meaning beyond Steele and Sussman's art.
+
+    The difference between compilers and interpreters, for our purposes, is that
+    compilers are pure functions, that is they are computations that operate in
+    and on data, whereas interpreters take action based on their input. Real
+    action in the (possibly digital) world.
+
+    In particular, a compiler itself needs to be interpreted, it's just a
+    program.
+
+    This is obfuscated because compilers are generally executables, which just
+    means that the hardware interprets them somewhat more directly.
+** Perspective: Entropy (Cybernetics)
+   A message is a thing given or received. Being a message is orthogonal to the
+   idea of information.
+
+   Remember that information is a probabilistic notion. The information in a
+   message is the negative of its entropy, the unliklihood of its occurance.
+
+   But probability is not an ontological notion. Probability is an
+   epistemological proposition (Cf Jaynes 2003).
+
+   So whether there is information to be had in a message or not, is a matter of
+   context, a question of who receives the message.
+
+   The entire field of cryptography can only exist because of this contextuality
+   of information.
+
+   What is the distribution from which messages are drawn? what does it mean for
+   one message to be more likely than another? to have greater entropy? It means
+   that given a prior, that is a given state of knowledge about the world, there
+   are more configurations of the world leading to one message than another.
+
+   That prior is exactly what I mean by context.
+
+   Thermodynamics tells us that within a closed system, entropy always increases
+   in the long run. That is to say that for any prior distribution (context),
+   the posterior under observation of the system will approach the uniform in
+   measure (this could use a lot more rigour) over the long haul.
+
+   A Turing machine (going back to Turing (1936)) is a closed system. This point
+   is often glossed over in CS classes and textbooks, but is incredibly
+   important. See Wegner (1997) and Hewitt (2007).
+
+   We take the perspective that a Turing machine is an information processing
+   device — in the language of Weiner or Shannon which are close enough for our
+   purposes to each other — and being a closed system, is a leaky information
+   processing system.
+
+   A Turing machine receives messages (input placed on the tape before running
+   the machine) and emit messages (the state of the tape on completion). If the
+   action of the Turing machine is invertible, that is the Turing machine
+   defines an isomorphism from its input set to its output set, then the signal
+   of output messages have the same entropy as the input. In all other cases,
+   the entropy of the output must be strictly greater than that of the input. In
+   other words, information is lost in interpretation by a Turing machine.
+
+   This loss of information is independent of context. More precisely,
+   information is lost no matter the context from which you define it. But the
+   degree of loss may vary.
+
+   But the Earth is not a closed system, and neither is anything on it except in
+   certain, very artificial, situations.
+
+   When you look up a word in a dictionary, you are reducing entropy. If that
+   dictionary is on a website then the system of you, plus computer program,
+   plus intervening network experiences an increase in information. But
+   communication requires energy, which disipates as heat, so there is no
+   violation of thermodynamics.
+
+   This leads us to the inescapable conclusion that communication creates open
+   systems and so a system of communicating components is something strictly
+   more than a Turing machine.
+
+   This observation isn't new, but it's widely dismissed as irrelevant. I hope
+   to convince you otherwise.
+** Holons and Holarchy
+   On the surface this system looks a lot like smalltalk, and that's not
+   accidental.
+
+   A program is a collection of programs (or computers) which communicate by
+   sending messages to each other. That has a fractal beauty, but we must
+   remember that all fractals have cutoffs and there is no way to realise
+   "everything is an X" in a real program.
+
+   Where I take issue with this approach is the freedom of communication. Any
+   unit A can send a message to any other unit B, so long as the programmer who
+   wrote A knew a name which resolves to B at runtime. Names take the place of
+   symbols in linked object code; locations which introduce a disconnect
+   between what the programmer thinks they're saying and what the machine
+   thinks the programmer said.
+
+   There's also a defiance of physical reality. Communication by knowing a name
+   creates the illusion that all communication is equivalent, that any
+   component can equally well communicate with any other component. But that
+   isn't the case. Separate units running on CPUs and GPUs can't communicate
+   with complete freedom. Barriers need to be put in place which slows down the
+   computation, plus the cross talk latency is relatively high. The problem
+   gets worse as we start to distribute programs over networks.
+
+   Smalltalk was inspired by a biological metaphor, but in real life cells
+   communicate by chemical signals which are 1) non-specific: everybody nearby
+   hears every message (though not every cell exposed to a signal molecule
+   reacts) and 2) local: chemical gradients get weaker by the inverse cube of
+   the distance between cells. There are, of course, methods to extend this
+   (hormones in the circulatory system, impulses in nerve fibres) but
+   communication and coordination between distant cells is the exception,
+   rather than the rule.
+
+   So instead, I'm basing the design of this on what Koestler called holarchic
+   organisation.
+
+   Each flub (The word "object" used to be devoid of ideological baggage — and
+   I suspect that's why it was used — but that's no longer the case) receives
+   input on channels and emits output to channels. The flub has names for these
+   channels since they must be referred to, but no knowledge of what's on the
+   other side.
+
+   This gives a flub autonomy from within. Given a set of inputs, the flub will
+   do its thing, and that thing cannot be overridden or perverted from the
+   outside. But since the flub has no notion of where inputs come from or where
+   outputs go, when viewed from above it is fully subordinate to those "higher"
+   flubs which decide how to network the channels of "lower" flubs together.
+
+   Notably this removes the need for a global name registry, or "phone book" by
+   which to route messages through the system. Flubs have references (by value)
+   to other flubs, and connect them together, so names are only for the
+   programmer's benefit. They resolve statically from the source itself (in
+   context).
+
+   Applying this idea recursively down to the language primitives themselves
+   creates a nightmare not unlike dependency injection. I'm still looking for
+   an elegant escape hatch.
+* Research Aesthetics
+  The unconsciousness of a falling stone is something quite different from the
+  unconsciousness of a growing cabbage — Bergson, H.L.
+** Dynamic Linking                                                 :context:
+   I got this idea originally from the [[https://www.unisonweb.org/][Unison]] language, but this is my
+   interpretation and any faults herein are my own.
+
+   A codebase is shared mutable state between developers. Uncoordinated
+   changes by different developers, or by individuals at different points in
+   time are the cause of a large class of bugs (git catches some of these as
+   merge conflicts, but not all).
+
+   I want to be able to modify code without fear of breaking anything I don't
+   touch. If no existing code can change, then no existing functionality can
+   break.
+
+   In particular, this means that dynamic linking is unacceptable. The promise
+   of dynamic linking is that bug fixes, security updates, and performance
+   boosts will automagically trickle into your code as your dependencies
+   release minor updates. The problem, of course, is that along with these
+   come new bugs and breaking changes. We have a parallel with iatrogenics
+   that puts us at the mercy of the gung-ho.
+
+   Let's not forget that the real impetus that drove dynamic linking to become
+   the standard was the fact that old machines didn't have enough drum or core
+   space to hold much, so pieces had to be continually swapped in and
+   out. That just isn't the case anymore.
+
+   There's a synthesis of static and dynamic linking that I think gives us the
+   best of both worlds. Given a reference by value scheme we can link code just
+   as we do now, allowing shared libraries and small updates, but the links
+   aren't symbols to be dumbly matched at runtime, they're unique references to
+   specific bits of code that change if the code changes (think infinitely long
+   hashes).
+
+   But we still have to address the issue of updates. Security updates aren't
+   going to go away anytime soon, so there needs to be a way to update large
+   codebases wholesale.
+
+   But given these references are explicit, a tool can scan and index
+   them. Thus given a new version of some function, say SSL_do_handshake from
+   openssl, the tooling can scan the entire codebase and say "These 7,453
+   lines of code will be modified by this update, do you want to continue?".
+
+   That sounds horrible, but is it worse than changing those 7000 loc and not
+   even knowing it?
+** UUIDs                                                           :context:
+   There is no such thing as a UUID. Every developer who has used them in the
+   wild knows that, and yet they're one of those pervasive myths we can't seem
+   to do without.
+
+   Collisions are inevitable. A bound we assume will never be broken (64k ram, 2
+   digit year, 32 bit counter, sha1) is a bug waiting to happen. Crockford wrote
+   that somewhere a long time ago. Probably "Javascript the Good Parts". The
+   numbers are bigger now, but the thinking hasn't improved.
+
+   IPFS uses sha256 to create a universally and for all time unique address of a
+   page. They have made no provision to upgrade that hash function when there
+   are collisions. But there will be collisions.
+
+   The idiot's argument is that sha256 has more combinations than there are
+   atoms in the univers (~10^80) and so we need never worry about collisions. I
+   call this the idiot's argument because it assumes implicitly that the best
+   way to store information is to take all of the atoms you can get and line
+   them up into an intergalactic ticker tape.
+
+   Or maybe they're thinking that we can't have more things to hash than there
+   are atoms? But why can't we?
+
+   How much information can one atom store? Well forget quantum states and
+   whatnot and assume we have a single hydrogen ion and no way to measure it's
+   subatomic structure. Now assume that it is the only atom within a 1m^3 box
+   and we have an apparatus that can measure its location to within 1nm reliably
+   in any dimension. This pushes up against uncertainty, but just hold on for a
+   little longer.
+
+   So our one atom can be in any of 10^21 discrete positions. That's a lot of
+   bits. More than any single chip we can manufacture.
+
+   If we take a more theoretical angle, the Berkenstein bound on maximum entropy
+   of a system (number of states it can be in) is a hard limit on information
+   density. The bound is 2πkRE/(ℏc) where R is the radius of a sphere enclosing
+   the system and E the mass energy. If we ignore kinetic energy, and go by
+   static mass, it becomes 2πkRMc/ℏ.
+
+   So if we built a storage system the mass of the sun filling a sphere of
+   radius 1 light year, the maximum entropy would be about 1.55x10^58 or
+   1.23x2^193 bits. And that's a tiny piece of the universe.
+
+   Now it's easy to show via the birthday paradox that once you have 2^n things
+   to hash you're virtually guaranteed collisions on a hash of 2^2n bits. So
+   with 2^193 possibilities sha256 is useless and even sha512 can't be relied
+   upon without some amount of willful ignorance.
+
+   So what do we do? Do we take a hash so big that the probability of a
+   collision is sufficiently small based on the maximum entropy of the
+   observable universe (>2^433 bits)? That would have to be at least a 2048 bit
+   hash. But how do we decide the probability is low enough that the system is
+   safe? What is safe? Both of which depend on what we plan to do with the
+   information. Not to mention, are we certain the bound is valid?
+
+   These are a lot of assumptions to make up front when building a system
+   intended to be used forever. Chances of failure converge to one.
+
+   The fact is that nothing with a fixed hash length can be considered to take
+   the long view. This follows from the same reasoning that tells us a 16 bit
+   date field will eventually be problematic, just extended over a longer period
+   of time.
+
+   Not to mention, requiring 256 bytes for every reference will be an enourmous
+   bloat.
+
+   So we have two constraints that actually fit rather nicely together once you
+   think about it.
+
+   1. References within a small unit of context should be small.
+      If you're only referring to a couple of hundred things, you don't need 64
+      bit pointers.
+   2. All references within any unit of context must be unambiguous.
+
+   There is no universal point of reference, no God's eye point of view, from
+   which to number and order all things. Special relativity, quantum mechanics,
+   and Gödel's proofs of uncertainty and incompleteness all assert this in
+   different ways.
+
+   By extension there is no meaning without context. And context is bounded,
+   finite. Context can grow, contexts can merge, but by knowing the history we
+   should still be able to uniquely identify any reference within these expanded
+   contexts.
+
+   I'm thinking of contexts as forming something like a σ-field. But that's not
+   quite the right structure.
+*** A Potential Implementation :context:idealhashtree:
+    This is largely derived from Phil Bagwell's 2001 paper "Ideal Hash Trees".
+
+    In that paper Bagwell begins with an ideal hash which is effectively an
+    infinite lazy sequence of bits with the property that for any two values
+    which are not equal, the hash sequences will eventually differ. Modern hash
+    algorithms like Blake2 can be used as ideal (effectively ideal? I don't know
+    about proofs) hashes. With this approach there can never be collisions, but
+    the depth of the tree (and length of hash required) can grow without bound.
+
+    After defining the HAMT according to an ideal hash, Bagwell "gets real" and
+    shows how to make the structure work in practice with fixed (32 or 64 bit)
+    hashes and collision handling. That's all well and good for performance, but
+    it's the ideal hamts that could solve our problem.
+
+    Given a fixed ideal hash function — which need never be upgraded since it's
+    ideal, FIXME: that's too good to be true — we can define a context to be an
+    ideal hash tree which only stores the keys (an ideal hash set?) and the
+    keys are the values to which we wish to refer later.
+
+    If a context evolves over time by new entries being added, then we can
+    uniquely identify any value by the hash prefix at which it was initially
+    stored so long as we modify the hamt such that when a collision is detected
+    requiring another level of the tree to be created, we add a field to that
+    node containing the leaf that used to be at that location. So every internal
+    node is increased in size by one entry, but the short preficies of early
+    additions are valid for all time.
+
+    Thus a totally ordered collection of thing-to-reference events will lead to
+    a hamt which automatically assigns to each of those things the shortest name
+    it can under the circumstances. Small contexts lead to short references and
+    large collections to long references, exactly as desired.
+
+    But now we need a total order on new things to which to refer. This comes
+    back to the discussion on relativity and the idea that receivers must
+    receive messages in *some* definite order.
+
+    This ideal hash tree based context is thus well defined and well suited to
+    use as the context data structure for receivers. When you receive a message,
+    you must know from whom you received it (or what's the same, the message
+    must keep a link to the context in which it was defined) and so you know the
+    context in which to interpret the message.
+
+    But how do we merge contexts? Well if every reference carries a reference to
+    the context *in* which it refers then we simply need to keep the original
+    leaf value from each parent context in the internal nodes of the merged
+    context.
+
+    If c = (merge a b), then a message m contains a reference r in context (a,
+    b, or c). References are just like symbols. They're things that mean things
+    because we mean things by them. Thus they must be interpreted in
+    context. Thus if m contains r and r is a short hash from a, then we can look
+    in c (which might be all we have on hand) and find what r meant in a.
+
+    These trees will obviously bloat. It also seems obvious (need evidence) that
+    some orders of adding values to a hamt will be vastly more efficient than
+    others. Think about Huffman encodings vs random population of the tree.
+
+    So we need to be able to remodel context, repopulate the hamt from scratch,
+    but maintain a translation table to be used with old references so that they
+    aren't invalidated.
+
+    The temptation to speculate about implementation is very strong right now,
+    but would be useless without more experience. I deem it best to leave off,
+    implement the basic structure, and see where it starts to fail. Gather some
+    data and come back to this.
+
+    Open question: Can we change hash functions? We'd better be able to, but
+    it's not obvious that it could be done in practice.
+** Types
+   There are two ways in which the word "type" is used in programming.
+
+   The first are the types in C, llvm, etc. which are just tags on chunks of
+   bits. Given two machine words, how do you know that one is to be interpreted
+   an an interger and the other as a sequence of unicode characters? You
+   don't. To the hardware they're just words.
+
+   The semantics (A is a long, B is a double) are separate from the syntax (the
+   bitseqs themselves) by design. That was the entire goal of the Hilbertian
+   formalist program, after all.
+
+   But the idea that these types (semantics) need to be static is incidental
+   baggage we're still carrying from the days when machine code had to be
+   stored on and read off of punch cards, or a drum; there simply wasn't space
+   to store words about words.
+
+   It's not especially hard to write a program that looks at pairs of words and
+   has a hard coded semantics — definitions must end somewhere — that uses the
+   first word to know what to do with the second dynamically at runtime. It
+   would double the size of the program in memory, but for many applications
+   that's a non-issue.
+
+   JIT compiling makes the proposition even simpler. As long as the runtime can
+   figure out what words mean before passing code to the JIT, then the actual
+   machine code being executed can be incredibly fast (this, and heavy caching,
+   is the secret to Julia's impressive performance).
+
+   The other use of "types" is to refer to type systems of the Hindley-Milner
+   variety, and their descendents.
+
+   These, frankly, don't interest me. Gödel showed that no such system can ever
+   be expressive enough to encompass arithmetic, let alone the things I want to
+   work with.
+
+   The retort to Gödel currently in vogue is that any Gödelian proposition can
+   be added to the system so that we can create a tower via iteration
+   expressing whatever we want to express (this argument is ignorant of
+   transfinite set theory, but let's leave that aside for now), thus solving
+   incompleteness.
+
+   Furthermore, consistency can be achieved via a tower of meta languages,
+   where each one proves the one below it to be consistent (assuming it itself
+   is consistent). This is an induction argument that can never have a base
+   case, so it's fallacious, but in practice it actually works out pretty
+   well. The meta languages get simpler and simpler until we're convinced they
+   have to be consistent (or sometimes we can prove them consistent by other
+   means).
+
+   This is a lot of work. It's so much work that most people don't bother to do
+   it properly. And if you're writing software whose greatest danger is
+   someone's web browser crashing, it's simply not worth the effort.
+
+   Don't get me wrong, if you're writing air traffic control software, or an
+   autopilot for a car, you'd damn well better prove your software correct.
+
+   But that's a small fraction of software, for most programs, proofs of
+   correctness amount to Adams' 42.
+
+   I'm also not convinced that logic is the most effective way to prove
+   programs correct. In no other endeavour is logic used to construct proofs.
+   Logic is a method of rigourously verifying proofs which already exist. And
+   "rigour" is a target that has been moving through the entire history of
+   mathematics.
+
+   Software needs more Polya and less Plato, but we're a long ways off from
+   that as yet.
+** The Stack
+    Return stacks, parameter stacks, env stacks, etc. have their origin in the
+    poorly recorded prehistory of our field (cf ALGOL-60, Forth,
+    Interlisp-D,...). But the modern callstack and the prevalence of stack
+    machines when defining languages stem directly from Dijkstra's Notes on
+    Structured Programming (1970).
+
+    Dijkstra's goal was to achieve a one to one correspondance between the text
+    of the program and the instructions being executed in the hardware. He
+    managed to do this with extreme elegance using just a stack and a couple of
+    counters. It signaled certain death for the goto statement. Knuth not
+    withstanding.
+
+    And the stack works brilliantly for sequential, synchronous code. It works
+    so well that stacks ops are part of the instruction set of modern chips, and
+    students leave university thinking that stacks are an inherent part of
+    programming languages.
+
+    The problem, though, is that they suck at concurrency, especially in the
+    face of asynchronicity.
+
+    The problem is obvious if you ever worked in javascript pre ES6. It's
+    also apparent in Rust's red/blue function kerfuffle when you realise the
+    difference between red and blue is that one uses the stack and the other
+    uses a scheduler / event loop.
+
+    The program always needs to know where to go next, in particular functions
+    need to know where to return to, but do we need to store this information on
+    the stack?
+
+    React is playing with the idea of virtualising the stack because when you
+    have hundreds of ui tasks going on asyncronously and you want to interrupt,
+    reorder, and resume them, when you need to modify or cancel them on the fly,
+    then you need a different data structure.
+
+    The early versions of Akka had a great hack to use the stack where is was
+    beneficial and then blow it away: an actor would proceed like a normal
+    function calling functions, until it hits a send call. Send would just build
+    the current continuation, and throw an exception containing that
+    continuation, the message, and the receiver. The scheduler catches that
+    exception, queues the message and loops back. I always admired the
+    cleverness of this approach.
+
+    But concretely. I hypothesise that if we rethink the stack abstraction we
+    can have asyncronous code that looks synchronous. Async/await without the
+    keywords and dual nature.
+
+    It should also help optimisers that want to reorder larger chunks of a
+    program, or automatic parallelisation.
+
+    Cf. Interlisp's "spaghetti stack" (actually a tree), which was manipulable
+    as a first class data structure at runtime, allowing coroutining,
+    continuations, backtracking, and other control flow operations to be
+    implemented as library features. Try adding [[https://wiki.openjdk.org/display/loom/Main][coroutines to Java]]...
+
+    Cf. core.async
+** Functions, Proceedures, Coroutines, and Transducers  :emission:receivers:
+   Are functions a good fundamental unit for programming?
+
+   Can you guess what I think?
+
+   Example: is (get m k) a pure function (clojure semantics, not a trick
+   question)?
+
+   The answer depends on whether you consider `nil` a first class thing.
+
+   Hoare's null pointer blunder is due, at the end of the day, to the fact that
+   (get m k) often has nothing meaningful to return. If k is not in m then
+   there is no answer. But by the semantics of function calls, something must
+   be returned. And so we reify nothing into null, nil, None,
+   NotFoundException, etc..
+
+   Type theory gives you a way of reifying nothing without the danger of null
+   references, but it's still just a kludge to fix an older kludge.
+
+   Why can't (get m k) just not return anything if it has nothing to return?
+
+   Because functions always return a value. In set theory a function has a
+   value for valid input, type theory lets you enforce this, but what is a
+   reasonable k in (get m k)? Any value is a valid key, so should be part of
+   the domain, but m is a finite map, so almost all inputs yield no valid
+   output.
+
+   So get is really a partial function whose domain depends on its first
+   argument.
+
+   Now what about `when`?
+
+   Can we build a language that just short circuits instead of returning a
+   reified nothing? Do nothing, don't say "nothing". `when` sends a message
+   somewhere if its predicate comes back true, and if it comes back false, the
+   current fibre of execution just dies and unwinds.
+
+   If we add a mechanism to catch this unwinding, then we can build `if` from
+   `when` and (get m k default) from (get m k). But by default it just unwinds
+   all the way to the runtime and something else gets scheduled.
+
+   So under the hood, these "functions" are proceedures that might jump to the
+   return pointer when they finish, or might just `GOTO HALT`. Weird, but still
+   structured in its own way.
+
+   We now have "functions" that return zero or one value to the caller. Why
+   stop there? A transducer is just such a "function" that passes on zero or
+   more values for every input. It doesn't quite return to the caller, but
+   we'll come back to that.
+
+   Orthogonal issues: to whom to we "return" these values? and when?
+
+   Conjecture: if we get the whom right, then when ceases to matter. This will
+   take some justification in a separate point (see [[*The Myth of Synchoronicity][The Myth of Synchoronicity]]).
+
+   A coroutine is a proceedure (aka routine) which decides for itself where
+   control goes next. Instead of a call stack which decides what "return" means
+   for you, (symmetric) coroutines end in a (yield X value) statement which
+   says "send this value to X and give it control".
+
+   I'm still trying to work out what a persistent (ie stateless) coroutine
+   would look like at the assembly level. I'm pretty sure I want the solution
+   to this problem, but it's not trivial and until I hit the point where I 100%
+   need it, it only gets background thought privileges.
+
+   Now take a toy program like
+   =(fn [k] (let [v (get m k)] (when (even? v) (* v v))))=
+   This says given a `k`, look it up and get back a (presumably) number, if
+   it's even square it.
+
+   What does (let [v (get m k)]) actually do? Is m local? does get park and
+   wait for a remote server?
+
+   It shouldn't matter. If we have control over where functions return, then
+   `let` tells `get` send a value back to "here" (label?, call_cc()?), `get`
+   then gets control and goes about its business. If it parks, `let` will be
+   none the wiser, so long as `get` passes on the correct place to yield the
+   eventual value.
+
+   So if `get` finds a value to return, that value finds its way back to the
+   let statement which binds it to the name `v`, and control moves on to the
+   body of `let`. Similarly if `when` decides to pass on control to its body
+   then eventually `*` is passed `v` twice, does whatever it does and sends
+   it's value to ???
+
+   That's a good question. `*` should inherit its return pointer from `when`
+   which inherits it from `let`, which in this case gets it off the return
+   stack since we're invoking the `let` as the body of a function.
+
+   Thus we get standard stack based funcall semantics even if get (and `even?`)
+   actually have to park and wait for data. We have async handling without
+   red/blue dichotomy or confusing keywords.
+
+   But notice that we also get short circuiting. If `(get m k)` returns
+   nothing, then we don't need to test `(even? nil)` because the computation
+   just ends at `get`. We get a cheaper version of nil punning with no risk of
+   using a null pointer because there is no null pointer. "nil" isn't a
+   thing. We don't return "nothing", we don't return anything.
+
+   But what if `m` is a multimap and `(get m k)` returns multiple values?
+
+   N.B.: what follows is still actively in churn and I might consider it
+   idiotic next week.
+
+   One option is to require the programmer to have known that `m` was a
+   multimap to begin with and plan for a collection at all points downstream.
+
+   But blaming the user is too easy.
+
+   A better option might be to fork the computation. Remember that coroutines
+   are persistent and stateless, so each value `get` returns flows through the
+   rest of computation (possibly in parallel) resulting in multiple return
+   values getting passed back to the outermost caller. Note that this doesn't
+   return a collection, if returns multiple values.
+
+   If not everything returned from `get` is even, then the `when` statement
+   acts like a `filter` transducer.
+
+   This whole way of thinking about multiple return is inspired by transducers,
+   but with immutability enforced at the lowest levels, these are all trivially
+   parallelisable transductions.
+
+   So multiple returns cause the computation to fork, nodes in the
+   computational topology get replaced by lists of nodes (we should preserve
+   order of messages even as things fork).
+
+   This swelling of fibres of execution needs to be balanced by some form of
+   joining. Aggregations like reduce are natural join points in the topology,
+   but there won't always be a foldy step at the end, How to deal with this
+   forking phenomenon in general needs more thought.
+
+   Let's push a little further: is it reasonable to allow a "function" as
+   defined above to only return to a single place? What if it has multiple
+   messages (return values) that are fundamentally different and should go
+   different places?
+
+   As a practical example, how do you implement eval without mutability? Eval
+   needs to keep a context of evaluation around (to store `def`ed things), but
+   it also needs to return values to its caller. In a repl, eval must both send
+   a message back to itself (recursively), and send a separate message to
+   print. It can emit a pair, but then something downstream needs to split that
+   pair and do two different things with it.
+
+   Current idea: replace `yieldto` with `emit` but have a special form `fork`
+   which takes zero or more emit statements. This is a low level construct that
+   I don't see a way to avoid, but if it creeps its way into quotidian
+   development, the language might be a failure. I'm not really sure yet.
+** The Myth of Synchoronicity
+   - Note taken on [2024-05-04 Sat 13:53] \\
+     I'm not especially interested in real time requirements and not entirely
+     sure why I brought it up below.
+   What is the meaning of `async` in contemporary programming languages?
+   It's a negation, and so only makes sense in relation to that which it's
+   negating. Is there such a thing as `sync` to give it meaning? I happen to
+   think it's a relic of legacy and habit.
+
+   What's a fully synchronous operation? Adding two fixnums? Well are the
+   numbers in registers or being loaded from ram? Are they in cache? Is the
+   needed memory address paged out to disk? Has GC paused the world?
+
+   And don't forget pipelining, speculation, and out of order execution.
+
+   Synchronicity is an illusion we create so that we can visualise our programs
+   as a linear sequence of instructions that happen one at a time and in
+   order.
+
+   All sync really means in this context is "while I'm waiting, nobody else can
+   use the cpu". And in that sense, sync must die.
+
+   So does this mean we can't meet hard real time requirements? Not at all. A
+   program that assumes the cache will always hit is going to miss hard
+   deadlines. A properly written real time program knows that even if the cache
+   misses and everything possible goes wrong, the worst case bound is still
+   acceptable.
+
+   The goal is to bound the worst case, and the more we can do while waiting
+   the better.
+
+   Admittedly reasoning about async programs is harder because it's harder to
+   pretend we know things we don't, and the scheduler brings in its own
+   dynamics. But in the end, the more we admit the limits of our knowledge and
+   work within them, the more reliable systems will be.
+** Start counting at 1
+   The idea that real programmers start counting at zero comes from two
+   related conflations. A conflation of cardinal and ordinal numbers, and a
+   conflation of lists with allocated memory.
+
+   When we learn to count in school we learn to start at 1. This is the first
+   wug, this is the second wug, and so on... There is no zeroeth wug, but
+   there can be zero wugs. That's the distinction between cardinality (the
+   number of things in a set) and ordinality (the rank of something in a
+   queue).
+
+   Are array indicies cardinal numbers or ordinal numbers? That, like so much
+   else in life, depends on the context. If you know that an array is a pair
+   and you want to access the second element, then the index is ordinal. We
+   want the second element, not the first element as there is no zeroeth
+   element.
+
+   But arrays aren't just lists. In modern computer architectures, memory is
+   abstracted away as an enormous array. Everything you store has an address
+   in this array, and we have to perform computations to find those addresses
+   (which are really indicies).
+
+   Say you have a pointer p to a struct {int32, int32, Char*} where we know
+   that the second int is the length of the String. The length of the string,
+   say n, is *(p+4) and the String itself is n bytes starting at the address
+   pointed to by *(p+8).
+
+   Now we're doing arithmetic with array indicies. So in this case we're
+   treating array indicies as cardinal numbers (you can define arithmetic on
+   ordinals, but only set theorists ever do that).
+
+   So why do real programmers start counting at zero? That's because if you're
+   treating indicies as cardinal numbers, then you want the first thing (no
+   offset) to be *(p+0).
+
+   Take Dijkstra's famous argument regarding for (i=0; i<N; i++) {...}. This
+   basically avoids having to fiddle with end conditions when concatenating
+   arrays. Again this is about computing indicies and offsets.
+
+   In the language being designed, there are only names and values. There are
+   no explicit places. You can't say "find where x is stored and then give
+   bytes ...", you can only refer to values that you know, or things whose
+   names you know.
+
+   Pointer arithmetic is out, so the need to facilitate it is gone.
+
+   As for Dijkstra's example, modern languages don't use indicies to walk
+   arrays anymore. All significant languages now provide a facility based on
+   R.S. Bird's constructive programming theory. That is they use fold,
+   reduce, iterators, transducers, whatever you want to call it. This modern
+   approach is not only higher level and easier to reason about, it's faster
+   because the simplicity makes new optimisations possible. You should never be
+   walking over a list with for (i=0; i<N; i++), so Dijkstra's argument is
+   moot.
+
+   Essentially, if you have a list of things, then they have an order, and
+   that order is ordinal. You want the first, second, third, ... elements.
+
+   If you need to compute an index nowadays then what you're really doing is
+   constructing an indirect reference. The order of the things referenced is
+   arbitrary and extrinsic. That means you aren't really talking about lists
+   at all, you're talking about maps. Using arrays is an implementation concern
+   based on current architectures.
+
+   Confounding what we want to do with what we (incidentally) have to do
+   creates inertia which prevents improvement of both our languages and our
+   hardware. Linear RAM isn't the only way to build computers, but we have a
+   feedback loop between low level programming languages which get performance
+   by assuming things about the hardware which binds the hardware designers to
+   meet the languages' expectations so that they stay fast which binds the
+   language designers to make assumptions about hardware ... ad nauseum.
+
+   Only put data in lists if it has an order which is important in some
+   way. If order is arbitrary or otherwise unimportant, use a set or a map.
+*** references
+    Why Numbering Should Start at Zero —  Dijkstra
+    Lectures on Constructive Functional Programming — R. S. Bird (1989)
+** SI is Irrelevant When Programming
+   It's less than useful when reading hiking maps for that matter.
+
+   The appeal of SI is the ocd grail of objectivity and consistency. But it's a
+   lie. At the end of the day this great achievement of the Enlightenment was to
+   replace one arbitrary quantity, roughly the length of a human step, with two
+   arbitrary quantities, the distance from the north pole to the equator and
+   ten million, the quotient of which is... roughly the length of a human step.
+
+   Now in engineering and low energy physics, SI is very useful because of the
+   consistency that lets you convert between units using simple formulae. This
+   doesn't work with the old units because quantities like torque, angular
+   momentum, charge, field strength, pressure, et al. are new in human knowledge
+   and we haven't had time to come up with useful units organically.
+
+   But when it comes to length, mass, and other units that have been in use for
+   thousands of years, we shouldn't just throw them out because they don't
+   measure up to a false idol.
+
+   Given a hiking map scaled one inch to the mile, you know that the width of
+   your thumb on the map equals roughly one thousand paces on the ground.
+   Curiously, while the width of thumbs and the length of legs vary considerably
+   from one person to another, the ratio varies far less, so this exercise tends
+   to work for most people. Of course the "roughly" is critical, this isn't for
+   building airplanes.
+
+   Now, given a map scaled 1cm:1km, you know that one one hudread millionth of
+   the distance from the north pole to the equator on the map is equal
+   (exactly!) to one ten thousandth of the distance from the north pole to the
+   equator on the ground. Good luck with that. Of course you could approximate
+   with the width of your pinky and a thousand steps, but what have you gained
+   from that?
+
+   Note that I'm not saying SI units are bad, I'm saying systems which purport
+   to be universal are bad. That's because the universe isn't closed and any
+   attempt to pretend it is quickly becomes scholastic. Using different units
+   for different purposes is completely natural.
+
+   A pound is roughly the weight of a lead cylinder that fits snuggly in your
+   fist. Try and explain how to make a standard kilogram to someone who doesn't
+   have an undergraduate degree in the sciences.
+
+   Embrace units that work for the task at hand even if they won't work for
+   some other task that isn't at hand. Unless you *know* it soon will be.
+
+   And now to programming. Computers do not operate on base ten. They're
+   surprisingly bad at it. You do know you need special types to deal with money
+   in software, right? Floats are a hack grandfathered into everything, but
+   let's not get into that now.
+
+   So why have we decided that KB, MB, GB, etc. all operate as powers of ten?
+   This wasn't the case 20 years ago. Do you rememeber the first harddives over
+   1GB? Do you remember how harddrive manufacturers cheated and said 1KB =
+   1024B, 1MB = 1024KB, and yet 1GB = 1000MB because they were struggling to
+   push it past the boundary and saw a way to save 7% with an asterisk?
+
+   One could be cynical and say it's all about hardware manufacturers trying to
+   save a little bit of money. And there is certainly pressure from that
+   direction. But there's also pressure from the "kilo *means* 1000, *not* 1024"
+   pickers of nits. Fun fact: the prefecies kilo, mega, milli, etc. were
+   invented along with the metric system at the end of the eighteenth
+   century. The fetish for round numbers notwithstanding, it makes perfect sense
+   to think of them as orders of magnitude, rather than exact multipliers, which
+   is how they are used by most people in any case (microscope, nanobots,
+   megalith,...).
+
+   I don't think either argument is useful for programming. Words mean what we
+   use them to mean. Let the manufacturers say what they want, you can't stop
+   them, but the sector size on my disk is not 4.096 KB.
+* Applications to Think About
+  The test of any language is the kinds of ~systems~ it facilitates creation of.
+  Alogorithms are easy.
+** Interactive Graphics
+   Something "simple", like the mandlebrot example from lowbrow. Don't forget to
+   do things like resizing that require invalidating a large swath of objects by
+   recursively amputating the entire invalid branch of the computation and
+   regrowing it from scratch with the new info.
+** Editor
+   Emacs is terrible. How is it that there's nothing better? VS code isn't
+   better, it's just cooler. Aside from looking better, it's mostly inferior,
+   but a few bits are pretty decent. LSP is not a good substitue for
+   slime/cider/rope, or any other deeply interactive editing experience.
+** Orchestration without Containerisation
+   Why can't you write your own k8s?
+
+   We need containers to ensure applications run correctly and safely because
+   we're dealing with a leaning tower of shit from which we recoil and want to
+   isolate ourselves. If we can get cleanly down to bedrock, why can't the
+   services running in a cluster be as light as unix processes?
+
+   Of course we can't do anything clean if we're depending on other people's
+   code. And we need to be able to run third party code in a contained fashion.
+   So maybe what I really mean is containers that can be compiled away to
+   nothing under the right circumstances.
+** Browser
+   The modern web browser is a monumental ball of crap that works shockingly
+   well, considering. What's actually important? What can we forget about?
+** OS
+   What's the difference between an OS and an orchestration system? Is one a
+   subset of the other?
+
+   What if the OS spans multiple devices? Think of your phone and laptop and
+   personal cloudlet as not just being syncronised, but as different physical
+   aspects of the same thing, running each other's programs as appropriate.
+
+   Multi user computing is essentially dead. I'm sure somebody still does it,
+   but there are far more computers than people in the world now and that isn't
+   likely to reverse.
+* The Language as it Stands
+  If you're going to try, go all the way, otherwise don't even start it. — Bukowski
+
+  This is a constantly changing description of the form which the thing I'm
+  describing takes. The code is a much better description, but that changes too
+  fast.
+** Receivers                                                     :receivers:
+   A receiver is (surprise!) a thing that receives messages. You might think of
+   it as a lambda, but it would be better to think of it as a first class macro,
+   but even that isn't quire right. See :reflection: and :metaprogramming: for
+   more about that.
+
+   I'm going to use the symbol ν to represent the built in receiver which
+   when sent a description of a receiver, produces a new receiver.
+
+   A receiver is a single observer from the point of view of special
+   relativity. The only information it gets from the universe are the messages
+   sent to it and it gets them in some total order.
+
+   Note that this means that two receivers that receive the same messages from
+   the same senders (has to be plural) might receive them in different
+   orders. This is a reflection of the physical universe in which they
+   operate. There's nothing to be done for it.
+
+   A receiver (logically) processes each message it receives, serially, in the
+   order in which they are received. Thus a receiver is effectively a serial
+   computation. A linear view of some subset of the universe.
+
+   Of course this may not actually be what happens in the face of optimisations,
+   but nothing in the system can be allowed to observe it not happening. For
+   example a receiver that receives a message, squares it, and sends the square
+   somewhere, can (and should!) be run in parallel on a long stream of input
+   messages, but the outputs must be buffered and sent in the correct order so
+   that an outside observer can't see an inconsistent ordering of events.
+
+   Some receivers maintain internal state. This makes it hard to parallelise
+   their activity. Sometimes it makes it impossible. But stateful units often
+   have a periodic character which allows the work graph to be partitioned
+   somehow. Whether or not I can actually make use of that remains to be seen.
+
+   Notably, receivers are not functions, proceedures, subroutines, etc.. They're
+   routines in an old sense of the word. Every receiver terminates in an =emit=
+   instruction which basically jumps back to the event loop after setting some
+   registers. The use of return stacks is a potential optimisation, but not part
+   of the language's control flow.
+** Namespaces and Dependencies
+   All code exists within a namespace. A namespace must be defined before code
+   is written because the namespace is the context in which the symbols in a
+   unit of code are to be interpreted.
+
+   There are two basic types of reference to other code:
+
+   1. References to code in external libraries.
+   2. References to code within the current project.
+
+   Every reference, or either type, has to be unambiguous and immutable. The
+   code to which a symbol refers cannot be changed without changing the context
+   of evaluation (namespace).
+
+   An external dependency can be uniquely defined by coordinates (source,
+   package, version, symbol), where we think of a source as a location plus a
+   signatory (public key), and all artifacts are signed. You could also think of
+   a source as a git remote and a version as a signed commit, or tag.
+
+   It is critical that versions are calculated by value, most likely a secure
+   hash. They're not just numbers that devs make up (semver).
+
+   Packages aren't a natural thing. They're an abstraction to help us
+   organise. Ultimately it's the things symbols point to that have
+   versions. I'll refer to a think referred to by a symbol as a code unit, for
+   lack of a better term. It could be a function, it could be literal data. I
+   don't think there's much else it could be. Of course even a function is sent
+   as literal data + context of evaluation (also literal data) + possible
+   analysis and compile cache + possible cache of ready to execute binary for a
+   given arch.
+
+   The immutability of code units makes caching the outputs of compilers and
+   optimisers trivial. All code is jit compiled on the fly, but anything to be
+   used in production should ship with a hot cache. The root entry of a shipped
+   program is just another immutable code unit, so it should be possible to do
+   something like whole program analysis and optimisation on it and still act
+   like we're jit compiling (so that everything still works if the user starts
+   to edit the code, for instance). This is getting off topic.
+
+   A package is just a (presumably curated) collection of code units from a
+   single publisher. A publisher can be an individual or an organisation. But
+   orgs don't write code, so a package published by an org is just a collection
+   of code units published (internally to the org) by individuals.
+
+   So the real coordinates of an external code unit are (source, symbol,
+   version). Packages aren't going away, it's useful to have something organised
+   for you by the people who know it best, but they're not primary
+   artefacts. They're just directories. Source code listicles? Well there's no
+   shortage of junky packages out there in any ecosystem.
+
+   In theory everything published by a given publisher could be available on an
+   à la carte basis. But that'll quickly become a soup of symbols. Documentation
+   will be hard to organise. Imports will become insanely verbose. Can't say I
+   like that.
+
+   But we're forgetting that extenal dependencies, even if you only depend on
+   one symbol, are written within namespaces, just like your code. So under our
+   assumptions, the namespace is the natural unit or level of granularity at
+   which to group dependencies.
+
+   So we import namespaces from sources, and every symbol in our codebase can be
+   uniquely referred to by something like source://namespace.symbol#version.
+   Namespaces can be nested arbitrarily, but the source is always required since
+   there's no way to police publishers and enforce unique namespace names. Nor
+   would I want to. Sources do need to be unique in some way. A domain and a
+   public key should suffice for that. But we'll probably need more
+   flexibility. Plus a key upgrade scheme.
+
+   In order not to have to refer to sources repeatedly, we can add an
+   indirection at the interface of external and internal code units. Essentially
+   we would import source://namespace#version as xyz and require that the name
+   xyz be unique within our project. We can, of course, ensure that.
+
+   That sounds nice, but I don't know that it's necessary.
+
+** Message Passing and Metaprogramming                          :reflection:
+   These things actually play very closely together.
+
+   We're going to adopt the planner convention that the form (f x y z) means
+   send [x y z] to the receiver to which f evaluates. If f does not evaluate to
+   a receiver execution fails.
+
+   Note that we send [x y z] directly, in contrast to the typical metacircular
+   applicative pattern of (apply (eval f) (map eval [x y z])).
+
+   A receiver can choose to evaluate the message it receives, but does not have
+   to. Thus we can define λ based on ν. A very rough sketch would be:
+
+   #+BEGIN_SRC clojure
+     (def λ (ν [params body]
+               (ν args
+                  (eval (with-env (bind params (map eval args)) body)))))
+   #+END_SRC
+
+   Receivers do evaluate their body when they receive a message. They're not
+   fexprs. Without that, everything would stall unless the top level of the
+   program would have to be a carefully coordinated tree of =eval= calls.
+
+   Details glossed over above: =body= is only defined in an environment, which
+   we extend with new parameters. How do we access it? Is it a first class
+   thing, or internal state of the runtime which isn't accessible?
+
+* Copyright
+  © 2024 Thomas Getgood
