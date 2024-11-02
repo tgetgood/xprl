@@ -59,6 +59,7 @@ function keyword(name::String)
 end
 
 keyword(s::Core.Symbol) = keyword(string(s))
+keyword(k::Keyword) = k
 
 function name(x::Keyword)
   x.names[end]

@@ -94,7 +94,7 @@ function splitsymbolic(x::String)
 end
 
 function readkeyword(x, _)
-  ds.keyword(x)
+  ds.keyword(x[2:end])
 end
 
 function readsymbol(x, opts)
@@ -271,7 +271,7 @@ function readmap(stream, opts)
 
   res = ds.emptymap
   for i in 1:div(length(elements), 2)
-    res = assoc(res, popfirst!(elements), popfirst!(elements))
+    res = ds.assoc(res, popfirst!(elements), popfirst!(elements))
   end
   return res
 end

@@ -166,7 +166,7 @@ function hashmap(args...)
 end
 
 function string(x::MapEntry)
-  string(x.key) * ": " * string(x.value)
+  string(x.key) * " " * string(x.value)
 end
 
 function showrecur(io::IO, depth, e::MapEntry)
