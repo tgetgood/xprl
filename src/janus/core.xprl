@@ -1,0 +1,73 @@
+#_(ns janus.core
+  (:require [primitives#abc123 as base]))
+
+(def wrap
+  "Wraps a μ or primitive that takes only literal values in a function that
+  evals its arguments."
+  (μ f
+     ~(μ args
+         ~(~f . ~~args))))
+
+(def fn
+  (μ [params body]
+     ~(μ args
+         ~((μ ~params ~~body) . ~~args))))
+
+(def nth (wrap . nth*))
+
+(def + (wrap . +*))
+(def - (wrap . -*))
+(def * (wrap . **))
+(def / (wrap . /*))
+
+(def > (wrap . >*))
+(def < (wrap . <*))
+(def = (wrap . =*))
+
+;; Below, `select` is non-branching like the ?: or ifelse ternary operators,
+;; except that it doesn't evaluate any of its arguments and the first must be a
+;; literal boolean. The name is taken from the llvm instruction.
+
+(def if
+  (μ [pred t f]
+     ~~(select ~~pred ~t ~f)))
+
+(def when
+  (μ [pred then]
+     ~(if ~pred ~then (emit))))
+
+(def inc (fn [x] (+ x 1)))
+
+(def map (fn [f] (fn [x] (f x))))
+
+(def filter (fn [p] (fn [x] (when (p x) x))))
+
+(def Y
+  (fn [f]
+     ((fn [x] (f (x x))) (fn [x] (f (x x))))))
+
+(def aY
+  (fn [f]
+    ((fn [x] (f (fn [y] ((x x) y)))) (fn [x] (f (fn [y] ((x x) y)))))))
+
+(def fact1
+  (fn [recur]
+    (fn [n]
+      (if (= n 0)
+        1
+        (* n (recur (- n 1)))))))
+
+;; (def fact (Y fact1))
+
+;; (def f2 (aY fact1))
+
+#_(def iterator
+  (fn [recur]
+    (fn [xs]
+      ;; Something like this, but we have no recursion yet...
+      ;; FIXME: This is trying to send messages (emit) during intial reduction
+      ;; before the above fns have been passed values.
+      (withcc {:recur recur}
+              (emit :return (first xs) :recur (rest xs))))))
+
+;; (def iterate (Y iterator))
