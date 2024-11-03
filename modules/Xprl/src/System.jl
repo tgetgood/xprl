@@ -25,6 +25,7 @@ function trysend(c, k, v)
   if ds.containsp(c, k)
     debugruntask(() -> ds.get(c, k)(v))
   else
+    @info string(c)
     throw("Cannot emit message on unbound channel: " * string(k))
   end
 end
@@ -40,7 +41,7 @@ succeed(c, v) = emit(c, :return, v)
 
 function withcc(m::ds.Map, k, c, kvs...)
   ds.into(
-    ds.assoc(m, ds.keyword(string(k)), c),
+    ds.assoc(m, ds.keyword(k), c),
     ds.partition(2) ∘ ds.map(e -> [ds.keyword(string(e[1])), e[2]]),
     kvs
   )

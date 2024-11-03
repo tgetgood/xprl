@@ -54,7 +54,8 @@ bindings(x) = []
 bindings(x::ds.Symbol) = [x]
 bindings(x::ds.Vector) = ds.into!([], map(bindings) ∘ ds.cat(), x)
 
-# FIXME: Maps!
+# TODO: bind tail of list [x . more]
+# TODO: Maps
 function destructuringbind(x, y)
   # @warn "incompatible sexps in destructuring."
   :bindfailure
@@ -72,13 +73,19 @@ end
 
 ##### μs are more special than I like.
 
+const mark = :unbound
+
+function markname(env, name)
+  ds.assoc(env, name, mark)
+end
+
 function createμ(c, env, args)
   args = args
   params = args[1]
   body = args[2]
   function next(left)
     if structuredbindp(left)
-      innerenv = ds.reduce(ds.dissoc, env, bindings(left))
+      innerenv = ds.reduce(markname, env, bindings(left))
 
       next = cbody -> sys.succeed(c, ast.Mu(env, body, left, cbody))
       reduce(sys.withcc(c, :return, next), innerenv, body)
@@ -102,6 +109,9 @@ end
 function eval(c, env, s::ds.Symbol)
   v = get(env, s, :notfound)
   if v === :notfound
+    @info string(ds.keys(env))
+    @error "unbound symbol: " * string(s)
+  elseif v === mark
     sys.succeed(c, ast.Immediate(s))
   else
     reduce(c, env, v)
