@@ -7,8 +7,8 @@ import DataStructures as ds
 
 env = Ref{Any}(x.DefaultEnv.default)
 
-# core = r.readall(open("./core.xprl"))
-# test = r.readall(open("./test.xprl"))
+core = r.readall(open("./janus/core.xprl"))
+tests = r.read(open("./janus/test.xprl"))
 
 function eset(e)
   env[] = e
@@ -71,6 +71,6 @@ function repl(envvar)
   end
 end
 
-loadfile(env, dirname(@__FILE__) * "/lang/core.xprl")
+loadfile(env, dirname(@__FILE__) * "/janus/core.xprl")
 
-repl(env)
+# repl(env)

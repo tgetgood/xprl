@@ -73,6 +73,17 @@ function emit(c, env, args)
   # what we're doing.
 end
 
+function withcc(c, env, args)
+  m = args[1]
+  body = args[2]
+
+  kvs = ds.into!([], map(x -> (ds.key(x), ds.val(x))) ∘ ds.cat(), m)
+
+  # FIXME: need to evaluate to vals of the entries
+
+  interp.eval(sys.withcc(c, kvs...), env, body)
+end
+
 second(x) = x[2]
 
 # TODO: There ought to be top level channels for many things
@@ -88,6 +99,8 @@ default = ds.hashmap(
   # julia repl which is running in an emacs term-mode window which leads to some
   # degradation in usability.
   ds.symbol("mu"), ast.PrimitiveMacro(interp.createμ),
+
+  ds.symbol("withcc"), ast.PrimitiveMacro(withcc),
   ds.symbol("emit"), ast.PrimitiveMacro(emit),
 
   # In 3-lisp `select` was called `ef` for "extensionally defined if".
