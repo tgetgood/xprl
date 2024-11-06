@@ -1,0 +1,13 @@
+* Todo list
+  the big outstanding items
+** Test runner
+   Manually checking regressions is killing me
+** statefuls
+   Along with the whole transduction setup
+** bit blobs
+   for interop and bootstrapping
+** executors
+   schedulers and work stealing
+** Namespaces
+** Error handling
+   This is a bucket category. Errors are pretty rough right now.
