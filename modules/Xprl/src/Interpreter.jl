@@ -29,7 +29,11 @@ function show(io::IO, mime::MIME"text/plain", s::ContextSwitch)
   print(io, string(s))
 end
 
-inspect(x::ContextSwitch) = inspect(x.body)
+function inspect(x::ContextSwitch, level=0)
+  ast.space(level)
+  println("C")
+  inspect(x.body, level)
+end
 
 function extendin(outer, inner, bindings)
   ds.into(
@@ -64,11 +68,14 @@ end
 destructuringbind(x::ds.Symbol, y::Any) = ds.hashmap(x, y)
 
 function destructuringbind(xs::ds.Vector, ys::ds.Vector)
-  @assert ds.count(xs) == ds.count(ys) "Invalid destructure."
-  ds.reduce(
-    ds.merge,
-    ds.map(destructuringbind, xs, ys)
-  )
+  if ds.count(xs) != ds.count(ys)
+    :bindfailure
+  else
+    ds.reduce(
+      ds.merge,
+      ds.map(destructuringbind, xs, ys)
+    )
+  end
 end
 
 ##### μs are more special than I like.
