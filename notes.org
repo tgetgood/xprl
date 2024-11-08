@@ -1,11 +1,28 @@
 * Todo list
-  the big outstanding items
-** Test runner
-   Manually checking regressions is killing me
+  The big outstanding items. Most of it is tooling.
+** traceable execution
+   Debugging is currently a few small steps above black magic. That's not
+   sustainable. I need an evaluator that I can run step by step.
+
+   I already have a pretty well worked out algebra on ASTs, but I only use it on
+   paper. Let's try implementing an interpreter that uses that. It's going to be
+   slow, but I'm sick of manually wading through bits of the ast.
+** Bootstrapped repl
+   Julia's repl is pretty slick in the terminal, but the emacs integration is
+   primitive, slow, and not very fun to use (term-mode sucks up all key presses
+   which makes it basically impossible to bind new shortcuts).
+
+   So we need something else. nrepl/cidre is the standard by which I judge
+   interactivity.
+
+   So why not just use nrepl? Well I still need to run julia code a lot, so I'm
+   not sure if that will work, but it's worth looking into.
 ** statefuls
    Along with the whole transduction setup
 ** bit blobs
    for interop and bootstrapping
+** Test runner
+   Manually checking regressions is killing me
 ** executors
    schedulers and work stealing
 ** Namespaces
