@@ -5,10 +5,12 @@ import Xprl.Reader as r
 
 import DataStructures as ds
 
+const srcpath = dirname(@__FILE__) * "/../../../src/"
+
 env = Ref{Any}(x.DefaultEnv.default)
 
-core = r.readall(open("./janus/core.xprl"))
-tests = r.read(open("./janus/test.xprl"))
+core = r.readall(open(srcpath * "core.xprl"))
+tests = r.read(open(srcpath * "test.xprl"))
 
 function eset(e)
   env[] = e
@@ -71,6 +73,6 @@ function repl(envvar)
   end
 end
 
-loadfile(env, dirname(@__FILE__) * "/janus/core.xprl")
+loadfile(env, srcpath * "core.xprl")
 
 # repl(env)
