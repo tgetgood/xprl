@@ -50,7 +50,9 @@
   sprawling, sometimes repetitive, and often (though I've tried to clarify)
   obscure. Enjoy it if you can, otherwise ignore it.
 * Copyright
-  © Thomas Getgood 2024
+  Copyright © Thomas Getgood 2024.
+
+  All rights reserved.
 
   This code is unlicensed. If you want to use it, contact me and I'll try to
   talk you out of it.
