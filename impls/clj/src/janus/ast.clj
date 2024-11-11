@@ -5,11 +5,13 @@
 (deftype True [])
 (deftype False [])
 
-(defonce T (True.))
-(defonce F (False.))
+(defonce t (True.))
+(defonce f (False.))
 
 (defrecord Keyword [names])
 (defrecord Symbol [names])
+
+(def dot (->Symbol ["."]))
 
 ;;;;; Reader AST
 

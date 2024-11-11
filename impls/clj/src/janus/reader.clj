@@ -1,5 +1,6 @@
 (ns janus.reader
-  (:refer-clojure :exclude [read])
+  "This reader uses the weirdest monadish data pattern, but it seems to work."
+  (:refer-clojure :exclude [read meta])
   (:require [clojure.string :as str]
             [janus.ast :as ast])
   (:import [java.io PushbackReader StringReader File FileReader EOFException]))
@@ -20,11 +21,38 @@
    :line   1
    :col    1})
 
+(defn meta [r]
+  (select-keys r [:string :file :line :col]))
+
 (declare read)
 
 (defn readimmediate [r]
   (update (read r) :result ast/->Immediate))
 
+(defn read-all [r]
+  (let [next (read r)]
+    (if (= :close (:result next))
+      (assoc next :result (:result r))
+      (recur (assoc next :result (conj (:result r) (:result next)))))))
+
+(defn read-until [c r]
+  (read-all (assoc r :until c :result [])))
+
+(defn readpair [r]
+  (let [forms (read-until \) r)
+        res   (:result forms)
+        n     (count res)]
+    (assoc forms :result
+           (cond
+             (= 1 n) (ast/->Pair (first res) [])
+
+             (= ast/dot (nth res (- n 2)))
+             (if (= n 3)
+               (ast/->Pair (first res) (last res))
+               (ast/->Pair (first res)
+                           (into [] (concat (subvec res 1 (- n 2)) (last res)))))
+
+             :else (ast/->Pair (first res) (into [] (rest res)))))))
 
 (defn read1 [s]
   (let [next (.read (:reader s))]
@@ -34,9 +62,10 @@
           (assoc :result (char next))
           (update :col inc)))))
 
-(defn unread1 [s c]
+(defn unread1
+  [s c]
   (.unread (:reader s) (int c))
-  s)
+  (update s :col dec))
 
 (def delimiters
   #{\( \[ \{ \;})
@@ -45,11 +74,16 @@
   (contains? delimiters s))
 
 (defn buildtoken [old]
-  (let [new (read1 old)
+  (let [new (try (read1 old) (catch EOFException e nil))
         c   (:result new)]
-    (if (or (contains? delimiters c) (Character/isWhitespace c))
-      (unread1 old c)
-      (recur (assoc new :token (str (:token old) c))))))
+    (cond
+      (nil? new) old
+
+      (or (contains? delimiters c) (Character/isWhitespace c)) (unread1 new c)
+
+      (= c (:until old)) (unread1 new c)
+
+      :else (recur (assoc new :token (str (:token old) c))))))
 
 (defn setcursor [s]
   (let [token (:token s)
@@ -66,7 +100,7 @@
         c    (:result next)]
     (if (Character/isWhitespace c)
       (recur (assoc next :token (str (:token current) c)))
-      (setcursor (unread1 current c)))))
+      (setcursor (unread1 next c)))))
 
 (defn readtoken [s]
   (-> s
@@ -75,19 +109,14 @@
       (assoc :token "")
       buildtoken))
 
-;;;;; The following number reading logic copied more or less directly from the
-;;;;; clojure source (LispReader.java).
-
 (def int-pattern
+  ;; This is copied from the clojure source (LispReader.java).
   #"([-+]?)(?:(0)|([1-9][0-9]*)|0[xX]([0-9A-Fa-f]+)|0([0-7]+)|([1-9][0-9]?)[rR]([0-9A-Za-z]+)|0[0-9]+)(N)?")
-
-(def float-pattern
-  #"([-+]?[0-9]+(\\.[0-9]*)?([eE][-+]?[0-9]+)?)(M)?")
 
 (defn parse-bool [s]
   (cond
-    (= s "true")  ast/T
-    (= s "false") ast/F
+    (= s "true")  ast/t
+    (= s "false") ast/f
     :else         nil))
 
 (defn split-symbolic [s]
@@ -98,6 +127,7 @@
 (defn interpret [r]
   (let [s (:token r)]
     ;; FIXME: This is kind of hideous...
+    ;; TODO: Read hex, binary, and I suppose octal. I never use octal...
     (if-let [i (parse-long s)]
       i
       (if-let [n (parse-double s)]
@@ -106,12 +136,13 @@
           b
           (if (str/starts-with? s ":")
             (ast/->Keyword (split-symbolic (apply str (drop 1 s))))
-            (ast/->Symbol (split-symbolic s))))))
-))
+            (if (= s ".")
+              ast/dot
+              (ast/->Symbol (split-symbolic s)))))))))
 
 (def dispatch
   {
-   ;; \( readpair
+   \( readpair
    ;; \[ readvector
    ;; \{ readmap
    ;; \" readstring
@@ -120,14 +151,20 @@
    ;; \^ readmeta
    \~ readimmediate})
 
-(defn read [r]
+(defn readinner [r]
   (let [next (read1 r)
         c    (:result next)]
     (cond
       (= c (:until next))    (assoc next :result :close)
       (contains? dispatch c) ((get dispatch c) next)
-      :else                  (let [next (readtoken (unread1 r c))
+      :else                  (let [next  (readtoken (unread1 next c))
                                    token (interpret next)]
-                               (assoc next :result token)))
-   )
-  )
+                               (assoc next :result token)))))
+
+(defn read [r]
+  (let [w (consumewhitespace (assoc r :token ""))
+        m (meta w)
+        o (readinner r)]
+    (if (instance? clojure.lang.IObj (:result o))
+      (update o :result with-meta m)
+      o)))
