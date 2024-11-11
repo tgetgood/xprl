@@ -1,4 +1,6 @@
-(ns janus.ast)
+(ns janus.ast
+  (:refer-clojure :exclude [reduced? symbol keyword])
+  (:require [clojure.string :as str]))
 
 ;;;;; Base types
 
@@ -11,7 +13,22 @@
 (defrecord Keyword [names])
 (defrecord Symbol [names])
 
-(def dot (->Symbol ["."]))
+(defonce dot (->Symbol ["."]))
+
+(defn split-symbolic [s]
+  (if (str/includes? s ".")
+    (str/split s #"\.")
+    [s]))
+
+(defn symbol [s]
+  (cond
+    ;; TODO: Intern symbols
+    (= s ".")          dot
+    (re-find #"\.+" s) (->Symbol [s])
+    :else              (->Symbol (split-symbolic s))))
+
+(defn keyword [s]
+  (->Keyword (split-symbolic s)))
 
 ;;;;; Reader AST
 

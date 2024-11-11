@@ -5,38 +5,130 @@
             [janus.ast :as ast])
   (:import [java.io PushbackReader StringReader File FileReader EOFException]))
 
-;; FIXME: Move this out of here once we've tested.
-(def srcpath "../../src/")
-(def corexprl (str srcpath "core.xprl"))
-
 (defn string-reader [s]
   {:reader (PushbackReader. (StringReader. s))
    :string s
+   :until  '()
    :line   1
    :col    1})
 
 (defn file-reader [fname]
   {:reader (-> fname File. FileReader. PushbackReader.)
    :file   fname
+   :until  '()
    :line   1
    :col    1})
 
 (defn meta [r]
   (select-keys r [:string :file :line :col]))
 
+(defn read1 [s]
+  (let [next (.read (:reader s))]
+    (if (< next 0)
+      nil
+      (-> s
+          (assoc :result (char next))
+          (update :col inc)))))
+
+(defn unread1
+  [s c]
+  (.unread (:reader s) (int c))
+  (update s :col dec))
+
 (declare read)
+
+(def delimiters
+  #{\( \[ \{ \;})
+
+(defn delimiter? [s]
+  (contains? delimiters s))
+
+(defn buildtoken [old]
+  (let [new (read1 old)
+        c   (:result new)]
+    (cond
+      (nil? new) (assoc old :result :eof)
+
+      (or (contains? delimiters c) (Character/isWhitespace c)) (unread1 new c)
+
+      (= c (first (:until new))) (unread1 new c)
+
+      :else (recur (assoc new :token (str (:token old) c))))))
+
+(defn setcursor [s]
+  (let [token (:token s)
+        lines (count (filter #(= \newline %) token))
+        cols  (count (take-while #(not= \newline %) (reverse token)))]
+    (if (= lines 0)
+      s ; col has been kept up by read1
+      (-> s
+          (update :line + lines)
+          (assoc :col (inc cols))))))
+
+(defn consumewhitespace [current]
+  (let [next (read1 current)
+        c    (:result next)]
+    (cond
+      (nil? next) (assoc current :result :eof)
+
+      (Character/isWhitespace c)
+      (recur (assoc next :token (str (:token current) c)))
+
+      :else (setcursor (unread1 next c)))))
+
+(defn readtoken [s]
+  (-> s
+      (assoc :token "")
+      consumewhitespace
+      (assoc :token "")
+      buildtoken))
+
+(defn parse-number [s]
+  (if (= \0 (first s))
+    (try
+      (case (second s)
+        \x (Long/parseLong (subs s 2) 16)
+        \b (Long/parseLong (subs s 2) 2)
+        (Long/parseLong (subs s 1) 8))
+      (catch NumberFormatException _ nil))
+    (parse-long s)))
+
+(defn parse-keyword [s]
+  (when (str/starts-with? s ":")
+    (ast/keyword (apply str (drop 1 s)))))
+
+(defn parse-bool [s]
+  (cond
+    (= s "true")  ast/t
+    (= s "false") ast/f
+    :else         nil))
+
+(defn first-to-pass [s & fs]
+  (loop [[f & fs] fs]
+    (when f
+      (if-let [v (f s)]
+        v
+        (recur fs)))))
+
+(defn interpret [r]
+  (let [s (:token r)
+        v (first-to-pass s parse-number parse-double parse-bool parse-keyword)]
+    (if v
+      v
+      ;; If noting else, it's a symbol.
+      (ast/symbol s))))
 
 (defn readimmediate [r]
   (update (read r) :result ast/->Immediate))
 
 (defn read-all [r]
   (let [next (read r)]
-    (if (= :close (:result next))
+    (if (or (= :close (:result next)) (= :eof (:result next)))
       (assoc next :result (:result r))
       (recur (assoc next :result (conj (:result r) (:result next)))))))
 
 (defn read-until [c r]
-  (read-all (assoc r :until c :result [])))
+  (read-all (-> r (update :until conj c) (assoc :result []))))
 
 (defn readpair [r]
   (let [forms (read-until \) r)
@@ -54,108 +146,91 @@
 
              :else (ast/->Pair (first res) (into [] (rest res)))))))
 
-(defn read1 [s]
-  (let [next (.read (:reader s))]
-    (if (< next 0)
-      (throw (EOFException.))
-      (-> s
-          (assoc :result (char next))
-          (update :col inc)))))
+(defn readvector [r]
+  (read-until \] r))
 
-(defn unread1
-  [s c]
-  (.unread (:reader s) (int c))
-  (update s :col dec))
+(defn readset [r]
+  (let [forms (read-until \} r)]
+    (update forms :result set)))
 
-(def delimiters
-  #{\( \[ \{ \;})
+(defn readmap [r]
+  (let [next (read-until \} r)
+        m (into {} (partition-all 2) (:result next))]
+    (assoc next :result m)))
 
-(defn delimiter? [s]
-  (contains? delimiters s))
+(defn readdiscard [r]
+  (dissoc (read r) :result))
 
-(defn buildtoken [old]
-  (let [new (try (read1 old) (catch EOFException e nil))
-        c   (:result new)]
+(defn readlinecomment [r]
+  (let [next (read1 r)]
     (cond
-      (nil? new) old
+      (nil? next) (assoc r :result :eof)
 
-      (or (contains? delimiters c) (Character/isWhitespace c)) (unread1 new c)
+      (contains? #{\return \newline} (:result next))
+      (-> next (dissoc :result) (update :line inc) (assoc :col 1))
 
-      (= c (:until old)) (unread1 new c)
+      :else       (recur next))))
 
-      :else (recur (assoc new :token (str (:token old) c))))))
+(defn read-unicode [r]
+  ;; FIXME:
+  r)
 
-(defn setcursor [s]
-  (let [token (:token s)
-        lines (count (filter #(= \newline %) token))
-        cols  (count (take-while #(not= \newline %) (reverse token)))]
-    (if (= lines 0)
-      s ; col has been kept up by read1
-      (-> s
-          (update :line + lines)
-          (assoc :col (inc cols))))))
+(defn read-special [r]
+  (let [next (read1 r)]
+    (case (:result next)
+      \t (assoc next :result \tab)
+      \r (assoc next :result \return)
+      \n (assoc next :result \newline)
+      \\ next
+      \b (assoc next :result \backspace)
+      \f (assoc next :result \formfeed)
+      \u (read-unicode next)
+      (throw (RuntimeException. (str "Invalid char escape: \\" (:result next)))))))
 
-(defn consumewhitespace [current]
-  (let [next (read1 current)
-        c    (:result next)]
-    (if (Character/isWhitespace c)
-      (recur (assoc next :token (str (:token current) c)))
-      (setcursor (unread1 next c)))))
+(defn readstring [r]
+  (loop [sb     (StringBuilder.)
+         reader r]
+    (let [next (read1 reader)
+          c    (:result next)]
+      (cond
+        (nil? c) (throw (RuntimeException. "EOF while reading string."))
+        (= c \") (assoc next :result (.toString sb))
+        (= c \\) (let [next (read-special next)]
+                   (recur (.append sb (:result next)) next))
+        :else    (recur (.append sb c) next)))))
 
-(defn readtoken [s]
-  (-> s
-      (assoc :token "")
-      consumewhitespace
-      (assoc :token "")
-      buildtoken))
+(def subdispatch
+  {\{ readset
+   \_ readdiscard})
 
-(def int-pattern
-  ;; This is copied from the clojure source (LispReader.java).
-  #"([-+]?)(?:(0)|([1-9][0-9]*)|0[xX]([0-9A-Fa-f]+)|0([0-7]+)|([1-9][0-9]?)[rR]([0-9A-Za-z]+)|0[0-9]+)(N)?")
-
-(defn parse-bool [s]
-  (cond
-    (= s "true")  ast/t
-    (= s "false") ast/f
-    :else         nil))
-
-(defn split-symbolic [s]
-  (if (str/includes? s ".")
-    (str/split s #"\.")
-    [s]))
-
-(defn interpret [r]
-  (let [s (:token r)]
-    ;; FIXME: This is kind of hideous...
-    ;; TODO: Read hex, binary, and I suppose octal. I never use octal...
-    (if-let [i (parse-long s)]
-      i
-      (if-let [n (parse-double s)]
-        n
-        (if-let [b (parse-bool s)]
-          b
-          (if (str/starts-with? s ":")
-            (ast/->Keyword (split-symbolic (apply str (drop 1 s))))
-            (if (= s ".")
-              ast/dot
-              (ast/->Symbol (split-symbolic s)))))))))
+(defn readdispatch [r]
+  (let [next (read1 r)
+        c (:result next)]
+    ((get subdispatch c #(throw (Exception. (str "invalid reader macro #" c))))
+     next)))
 
 (def dispatch
-  {
-   \( readpair
-   ;; \[ readvector
-   ;; \{ readmap
-   ;; \" readstring
-   ;; \# readdispatch
-   ;; \; readcomment
+  {\( readpair
+   \[ readvector
+   \{ readmap
+   \" readstring
+   \# readdispatch
+   \; readlinecomment
    ;; \^ readmeta
+   ;; REVIEW: Will I be pinning metadata to objects like clj? I think I'll need
+   ;; to store metadata out of band somehow. But I do want to use ^T for type
+   ;; annotations, whether that translates to metadata or not.
    \~ readimmediate})
 
 (defn readinner [r]
   (let [next (read1 r)
         c    (:result next)]
     (cond
-      (= c (:until next))    (assoc next :result :close)
+      (nil? next) (assoc r :result :eof)
+
+      (= c (first (:until next)))
+      (-> next (assoc :result :close) (update :until rest))
+
       (contains? dispatch c) ((get dispatch c) next)
       :else                  (let [next  (readtoken (unread1 next c))
                                    token (interpret next)]
@@ -164,7 +239,8 @@
 (defn read [r]
   (let [w (consumewhitespace (assoc r :token ""))
         m (meta w)
-        o (readinner r)]
-    (if (instance? clojure.lang.IObj (:result o))
-      (update o :result with-meta m)
-      o)))
+        o (readinner w)]
+    (cond
+      (not (contains? o :result))               (recur o)
+      (instance? clojure.lang.IObj (:result o)) (update o :result with-meta m)
+      :else                                     o)))
