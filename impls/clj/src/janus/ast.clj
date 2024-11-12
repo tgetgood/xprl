@@ -11,6 +11,7 @@
 (defonce f (False.))
 
 (defrecord Keyword [names])
+
 (defrecord Symbol [names])
 
 (defonce dot (->Symbol ["."]))

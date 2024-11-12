@@ -95,7 +95,7 @@
 
 (defn parse-keyword [s]
   (when (str/starts-with? s ":")
-    (ast/keyword (apply str (drop 1 s)))))
+    (ast/keyword (subs s 1))))
 
 (defn parse-bool [s]
   (cond
@@ -173,7 +173,11 @@
 
 (defn read-unicode [r]
   ;; FIXME:
-  r)
+  (throw (Exception. "Not implemented")))
+
+(defn read-unicode-octal [r]
+  ;; FIXME:
+  (throw (Exception. "Not implemented")))
 
 (defn read-special [r]
   (let [next (read1 r)]
@@ -185,7 +189,10 @@
       \b (assoc next :result \backspace)
       \f (assoc next :result \formfeed)
       \u (read-unicode next)
-      (throw (RuntimeException. (str "Invalid char escape: \\" (:result next)))))))
+      (if (.isDigit Character (:result next))
+        (read-unicode-octal next)
+        (throw (RuntimeException.
+                (str "Invalid char escape: \\" (:result next))))))))
 
 (defn readstring [r]
   (loop [sb     (StringBuilder.)
@@ -244,3 +251,12 @@
       (not (contains? o :result))               (recur o)
       (instance? clojure.lang.IObj (:result o)) (update o :result with-meta m)
       :else                                     o)))
+
+(defn read-file [fname]
+  (loop [results []
+         reader  (file-reader fname)]
+    (let [next (read reader)
+          result  (:result next)]
+      (if (= :eof result)
+        results
+        (recur (conj results result) next)))))
