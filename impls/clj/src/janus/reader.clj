@@ -20,7 +20,7 @@
    :col    1})
 
 (defn meta [r]
-  (select-keys r [:string :file :line :col]))
+  (dissoc r :token :until :result :reader))
 
 (defn read1 [s]
   (let [next (.read (:reader s))]
