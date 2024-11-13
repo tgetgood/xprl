@@ -1,7 +1,7 @@
 (ns janus.ast
   (:refer-clojure :exclude [reduced? symbol keyword])
   (:require [clojure.string :as str]
-            [clojure.pprint :as pp :refer [simple-dispatch code-dispatch]])
+            [clojure.pprint :as pp])
   (:import [java.io Writer]))
 
 ;; Boilerplate reducer.
@@ -11,6 +11,7 @@
 
 ;; TODO: pp/simple-dispatch overrides how code is displayed in the repl.
 ;; TODO: and what does pp/code-dispatch do? Not 100% clear
+
 ;;;;; Base types
 
 (deftype True [])
@@ -24,7 +25,7 @@
   (toString [_]
     (transduce (interpose ".") str ":" names)))
 
-(defmethod simple-dispatch Keyword [o]
+(defmethod pp/simple-dispatch Keyword [o]
   (pp/write-out (clojure.core/keyword (subs (str o) 1))))
 
 (ps Keyword)
@@ -34,7 +35,7 @@
   (toString [_]
     (transduce (interpose ".") str "" names)))
 
-(defmethod simple-dispatch Symbol [o]
+(defmethod pp/simple-dispatch Symbol [o]
   (pp/write-out (clojure.core/symbol (str o))))
 
 (ps Symbol)
@@ -75,6 +76,56 @@
 
 (ps Pair)
 
+(defmulti format-pair (fn [head tail] head) :default :default)
+
+(defmethod format-pair :default
+  [_ tail]
+  (when (seq tail)
+    (pp/print-length-loop [tail (seq tail)]
+                          (.write ^Writer *out* " ")
+                          (pp/write-out (first tail))
+                          (when (next tail)
+                            (recur (next tail))))))
+
+;; TODO: Add a param for the number of args to keep on line 1
+;; TODO: read cider's format meta code and don't reinvent the wheel.
+(defn pprint-block [tail]
+  (.write ^Writer *out* " ")
+  (pp/write-out (first tail))
+  (pp/pprint-indent :block 1)
+  (.write ^Writer *out* " ")
+  (pp/pprint-newline :linear)
+  (pp/write-out (second tail))
+  (when (< 2 (count tail))
+    (assert (< (count tail) 4))
+    (.write ^Writer *out* " ")
+    (pp/pprint-newline :linear)
+    (pp/write-out (nth tail 2))))
+
+(defmethod format-pair (symbol "def")
+  [_ tail]
+  (pprint-block tail))
+
+(defmethod format-pair (symbol "fn")
+  [_ tail]
+  (pprint-block tail))
+
+(defmethod format-pair (symbol "μ")
+  [_ tail]
+  (pprint-block tail))
+
+(defmethod pp/simple-dispatch Pair [{:keys [head tail]}]
+  ;; (pp/pprint-meta p)
+  (pp/pprint-logical-block
+   :prefix "(" :suffix ")"
+   ;; TODO: Dispatch on head of pair to format
+   (pp/write-out head)
+   (if (vector? tail)
+     (format-pair head tail)
+     (do
+       (.write ^Writer *out* " . ")
+       (pp/write-out tail)))))
+
 (defrecord Immediate [form]
   Object
   (toString [_]
@@ -83,6 +134,11 @@
   (reduced? [_] false))
 
 (ps Immediate)
+
+(defmethod pp/simple-dispatch Immediate [i]
+  ;; REVIEW: Is this advisable?
+  (.write ^Writer *out* "~")
+  (pp/write-out (:form i)))
 
 (defrecord Application [head tail]
   INode
