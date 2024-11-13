@@ -84,14 +84,13 @@
       buildtoken))
 
 (defn parse-number [s]
-  (if (= \0 (first s))
-    (try
-      (case (second s)
-        \x (Long/parseLong (subs s 2) 16)
-        \b (Long/parseLong (subs s 2) 2)
-        (Long/parseLong (subs s 1) 8))
-      (catch NumberFormatException _ nil))
-    (parse-long s)))
+  (cond
+    (= s "0")        0
+    (= \0 (first s)) (case (second s)
+                       \x (Long/parseLong (subs s 2) 16)
+                       \b (Long/parseLong (subs s 2) 2)
+                       (Long/parseLong (subs s 1) 8))
+    :else            (parse-long s)))
 
 (defn parse-keyword [s]
   (when (str/starts-with? s ":")
