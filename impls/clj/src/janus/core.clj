@@ -1,6 +1,7 @@
 (ns janus.core
   (:require [clojure.pprint :as pp]
             [janus.ast :as ast]
+            [janus.default-env :refer [env]]
             [janus.reader :as r]))
 
 (def srcpath "../../src/")
