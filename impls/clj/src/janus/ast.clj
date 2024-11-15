@@ -62,10 +62,6 @@
 
 ;;;;; Reader AST
 
-(defprotocol INode
-  (reduced? [this]
-    "Has this form been fully reduced?"))
-
 (defrecord Pair [head tail]
   Object
   (toString [_]
@@ -73,11 +69,19 @@
          (if (vector? tail)
            (transduce (comp (map str) (interpose " ")) str "" tail)
            (str ". " (str tail)))
-         ")"))
-  INode
-  (reduced? [x] (and (reduced? (:head x)) (reduced? (:tail x)))))
+         ")")))
 
-(ps Pair)
+(defmethod print-method Pair [o ^Writer w]
+  (.write w "(")
+  (print-method (:head o) w)
+  (if (vector? (:tail o))
+    (doseq [x (:tail o)]
+      (.write w " ")
+      (print-method x w))
+    (do
+      (.write w " . ")
+      (print-method (:tail o) w)))
+  (.write w ")"))
 
 (defmulti format-pair (fn [head tail] head) :default :default)
 
@@ -132,9 +136,7 @@
 (defrecord Immediate [form]
   Object
   (toString [_]
-    (str "~" form))
-  INode
-  (reduced? [_] false))
+    (str "~" form)))
 
 (ps Immediate)
 
@@ -143,50 +145,12 @@
   (.write ^Writer *out* "~")
   (pp/write-out (:form i)))
 
-(defrecord Application [head tail]
-  INode
-   (reduced? [_] false))
+(defrecord Application [head tail])
 
-(defrecord PartialMu [params body]
-  INode
-  (reduced? [_] false))
+(defrecord PartialMu [params body])
 
-(defrecord Mu [env source params body]
-  INode
-  (reduced? [x] (reduced? (:body x))))
+(defrecord Mu [env source params body])
 
 (defrecord PrimitiveFunction [f])
 
 (defrecord PrimitiveMacro [f])
-
-(extend-protocol INode
-  Object
-  (reduced? [_] true)
-
-  clojure.lang.ASeq
-  (reduced? [x] (transduce (map reduced?) #(and %1 %2) true x))
-
-  clojure.lang.AMapEntry
-  (reduced? [x] (and (reduced? (key x)) (reduced? (val x))))
-
-  clojure.lang.APersistentMap
-  (reduced? [x] (reduced? (seq x)))
-
-  clojure.lang.APersistentSet
-  (reduced? [x] (reduced? (seq x)))
-
-  clojure.lang.APersistentVector
-  (reduced? [x] (reduced? (seq x))))
-
-
-(defmethod print-method Pair [o ^Writer w]
-  (.write w "(")
-  (print-method (:head o) w)
-  (if (vector? (:tail o))
-    (doseq [x (:tail o)]
-      (.write w " ")
-      (print-method x w))
-    (do
-      (.write w " . ")
-      (print-method (:tail o) w)))
-  (.write w ")"))

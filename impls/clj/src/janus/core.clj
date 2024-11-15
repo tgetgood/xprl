@@ -2,7 +2,9 @@
   (:require [clojure.pprint :as pp]
             [janus.ast :as ast]
             [janus.default-env :refer [env]]
-            [janus.reader :as r]))
+            [janus.interpreter :as i]
+            [janus.reader :as r]
+            [janus.runtime :as rt]))
 
 (def srcpath "../../src/")
 (def corexprl (str srcpath "core.xprl"))
