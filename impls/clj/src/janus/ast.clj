@@ -1,5 +1,5 @@
 (ns janus.ast
-  (:refer-clojure :exclude [reduced? symbol keyword])
+  (:refer-clojure :exclude [reduced? symbol keyword keyword?])
   (:require [clojure.string :as str]
             [clojure.pprint :as pp])
   (:import [java.io Writer]))
@@ -24,6 +24,9 @@
   Object
   (toString [_]
     (transduce (interpose ".") str ":" names)))
+
+(defn keyword? [k]
+  (instance? Keyword k))
 
 (defmethod pp/simple-dispatch Keyword [o]
   (pp/write-out (clojure.core/keyword (subs (str o) 1))))
@@ -51,7 +54,7 @@
   (cond
     ;; TODO: Intern symbols
     (= s ".")          dot
-    (re-find #"\.+" s) (->Symbol [s])
+    (re-find #"^\.+$" s) (->Symbol [s])
     :else              (->Symbol (split-symbolic s))))
 
 (defn keyword [s]
