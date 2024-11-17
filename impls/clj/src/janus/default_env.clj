@@ -1,8 +1,12 @@
 (ns janus.default-env
   (:require [janus.ast :as ast]
-            [janus.interpreter :as i]))
+            [janus.interpreter :as i]
+            [janus.runtime :as rt]))
 
-(defn xprl-def [])
+(defn xprl-def [form env c]
+  (rt/emit c ;(ast/keyword "return") (last form)
+           (ast/keyword "env") (assoc (:env (meta (first form)))
+                                      (first form) (last form))))
 
 (def macros
   {"def" xprl-def

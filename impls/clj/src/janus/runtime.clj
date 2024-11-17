@@ -21,12 +21,14 @@
 (defn steal! [system exec]
   ;; REVIEW: What to log here? Executors ought to have names.
   (t/event! ::work-steal {:level :trace})
-  (throw (RuntimeException. "not implemented.")))
+  ;; TODO: steal work!
+  (t/log! :info "Work queue empty. Nothing to do")
+  (throw (RuntimeException. "stealing not implemented.")))
 
 (defn push! [^ConcurrentLinkedDeque exec tasks]
   (t/event! ::push-tasks {:data  {:count (count tasks)
-                                 :tasks tasks}
-                         :level :trace})
+                                  :tasks tasks}
+                          :level :trace})
   ;; FIXME: When there's only one task, this amounts to
   ;; 1) push task onto stack
   ;; 2) run around the pond
@@ -39,7 +41,7 @@
   ;; However, under the current implementation of recursion that will lead to
   ;; unbounded stack growth on the jvm, which will then blow up.
   ;;
-  ;; So I'm not entirely sure what to do about that. My current solution is to
+  ;; I'm not entirely sure what to do about that. My current solution is to
   ;; ignore it until it becomes a problem and hopefully we can bootstrap the
   ;; language to assembly before it does... but we'll see.
   (.addAll exec (reverse tasks))
