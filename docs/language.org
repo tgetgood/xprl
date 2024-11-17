@@ -172,11 +172,149 @@ This is largely an aid to my own memory so bear with me.
 * Outline
   Sections to be written.
 ** History, Environment, and Context
-** Purity and the State
+** Purity and the State (statefuls)
 ** Transduction
 ** Message Passing
-** Runtime
+** JIT and runtime optimisation
+   The AST itself is optimisable, large parts can be evaluated immediately, and
+   it's fairly fast to interpret at runtime.
+
+   I also want a native compiler. The up side of strict immutability, reentrant
+   code, and static reference is that we never have to compile a form more than
+   once. The compiled code will always be the same if we compile it the same
+   way.
+
+   But that said, we do want to try and compile things in different ways
+   depending on profiling during real usage and compare performance (say compile
+   both to cpu and gpu and instrument to figure out how much data makes the
+   switch worthwhile). But that's just a cache of code plus compiler options.
+
+   My intuition tells me that if we get the static reference right and most code
+   never changes (only change code if there's a security vulnerability, or a
+   massive and much needed performance improvement) then over time more and more
+   code will be compiled in more and more ways so that very little will be
+   interpreted and most of the runtime's work will be in applying heuristics to
+   choose which compiled code to run on which occasion.
+
+   Hardly a trivial problem, but there's real opportunity here.
+** Work stealing
+** Offloading work to GPU
+   Most consumer machines have gpus nowadays and a lot of streaming tasks map
+   natuarally to them — though many others don't.
+
+   Figuring out which can only be done in general at runtime.
 ** Compiler
 ** FFI / Distributed Execution
    These aren't normally the same thing, but they both boil down to talking to
    other computers, so their solutions largely overlap.
+* Comparisons
+** FP
+   Immutability? Check. Big check.
+
+   Functions? Not really. Mathematical functions can be implemented easily, but
+   they're a special case of a more general construct.
+** FBP
+   I had never heard of FBP until quite recently. Reading Morrison's book (2010)
+   makes it clear that a lot of my ideas are not new and have been in use —
+   albeit obscurely — for decades.
+
+   Particularly the delivery guarantees of which I was pretty proud. But at
+   least I know now that what seemed obviously sufficient has been battle tested
+   and does seem to suffice.
+
+   These aren't bad things. I'm not terribly interested in priority. I'm
+   interested in making this work and the validation is appreciated.
+
+   That said, there are some important differences between my goals and
+   Morrison's description. A lot of those differences come from ideas that are
+   relatively new. The idea that immutability can work at scale is not widely
+   accepted even today. I doubt it was even conceivable thirty years ago.
+
+   But let's list them out:
+*** memory management
+    In FBP they take an ownership approach where datagrams must be manually
+    allocated and freed. This stems from the fact that each node in the network
+    bangs on the memory passed to it.
+
+    I take a different approach in that all messages are immutable. They don't
+    need manual management since reference counting suffices. They also don't
+    need to be owned, so one unit can send the same message to a dozen others.
+    There are other advantages as well.
+
+    The cost of immutability amortises away with isolated mutability.
+*** Graphicality
+    I'm a big fan of graphical programming, but I don't think it should be
+    primary. The primary needs to be machine readable. Machine readability is
+    the only way to get widespread interoperability. Short of Lanier's "use ai
+    to click buttons as an API" which is very intriguing, but I'm still dubious.
+
+    I contend that being more machine friendly at a low level allows you to be
+    more human friendly at a high level. This is mostly because the majority of
+    programming language bullshit is about making it easier to for the
+    developers of the compiler/editor/whatever, and if their job is already
+    easy, they have fewer excuses.
+
+    So instead I'm focusing on a traditional language with a (mostly)
+    traditional AST, interpreter, and compiler. From that AST we can define
+    isomorphisms with both the textual source code (or even multiple textual
+    source codes) and a graphical representation.
+
+    So draw your program at a high level and then go in later and tweak the
+    code. Or vice versa. Or just stick to whichever you prefer.
+
+    Graphical languages always have a layer of warts between the rubber and the
+    road and I don't want that.
+*** Fractal Structure
+    FBP has an explicitly fractal structure, so if you see a graph of
+    components, you can zoom in on any piece and see a nested graph of
+    components. This can go on for an indefinite period of time before finally
+    bottoming out on something atomic.
+
+    I think there's something fundamentally right about that structure.
+
+    I'm not sure how to encourage it in the current iteration of this language.
+
+    Any set of functions corresponds to fbp would call the input ports of a
+    network. The rest of the network is implicit in the call graph, but that's
+    easy enough to follow along and layout on demand.
+
+    So a network could be represented by a map of named functions.
+
+    One major problem is that channels (ports) are not static. They can be
+    dynamically generated. It can be, in general, impossible to determine the
+    set of possible outputs of such a network statically since it may generate
+    functions at runtime and plug them into the network. Technically those
+    dynamic plugins would be subnetworks, but I don't know that that makes a
+    difference.
+
+    That dynamism isn't something I'm considering stripping from the language.
+    That said, most of the time emissions go to named channels and the names are
+    easily inferred from the code. There's also the secondary check that
+    messages can only be sent on channels in the current context or newly
+    generated ones, which gives us some foreknowledge. Likely not enough.
+*** Holarchy
+    The idea that a network is a whole unto itself in the sense that given
+    inputs it does its thing and can't be intereferred with, but simultaneously
+    subordinate in the sense that it doesn't control — and doesn't know —
+    whither comes its input or whence goes its output, so that its place in the
+    larger program is ordained from above, is implicit in what I've read of FBP,
+    but never stated as such. Just taken for granted.
+
+    I think — but don't know — that making this explicit by encouraging every
+    subnetwork to believe itself to be the entire system will greatly
+    fascilitate the composition of systems.
+
+    Somewhat hyperbolically, I want a language whose todomvc is kubernetes.
+** Structured Programming
+   Here's a fun one: is this a structured language?
+
+   Well, the fundamental unit of control is longjmp, so that might be a no.
+
+   Arbitrary gotos aren't possible; there's still quite a bit of structure. It's
+   more like an actor system or coroutines where you can send control to any
+   agent you know how to reach.
+
+   Loops and branches are accomplished by selecting the continuation of the
+   current computation.
+
+   This is a silly digression.
