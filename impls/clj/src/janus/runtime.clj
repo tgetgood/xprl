@@ -97,7 +97,7 @@
   ;; REVIEW: how ugly would it be to switch on whether `n` is an int or a
   ;; collection?
   (let [unset (gensym)
-        fill  (take n (repeat unset))]
+        fill  (into [] (take n) (repeat unset))]
     (atom {:unset    unset
            :n        n
            :elements fill

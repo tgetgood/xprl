@@ -154,7 +154,7 @@
 
   janus.ast.PrimitiveFunction
   (apply [head tail env c]
-    (letfn [(next [tail]
+    (letfn [(next [& tail]
               (succeed c (if (reduced? tail)
                            (clojure.core/apply (:f head) tail)
                            (ast/->Application head tail))))]
