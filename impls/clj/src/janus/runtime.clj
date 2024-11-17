@@ -1,6 +1,7 @@
 (ns janus.runtime
   ;; FIXME: Minimise runtime requirements
-  (:require [janus.ast :as ast])
+  (:require [janus.ast :as ast]
+            [taoensso.telemere :as t])
   (:import [java.util.concurrent ConcurrentLinkedDeque]))
 
 (declare ^:dynamic *coordinator* ^:dynamic *executor*)
@@ -18,16 +19,38 @@
   (throw JumpException))
 
 (defn steal! [system exec]
+  ;; REVIEW: What to log here? Executors ought to have names.
+  (t/event! ::work-steal {:level :trace})
   (throw (RuntimeException. "not implemented.")))
 
 (defn push! [^ConcurrentLinkedDeque exec tasks]
+  (t/event! ::push-tasks {:data  {:count (count tasks)
+                                 :tasks tasks}
+                         :level :trace})
+  ;; FIXME: When there's only one task, this amounts to
+  ;; 1) push task onto stack
+  ;; 2) run around the pond
+  ;; 3) pop task off stack
+  ;; 4) execute task
+  ;;
+  ;; Steps 1-3 are unnecessary in the one task case. In fact, we should always
+  ;; push all but one and directly step into the last one.
+  ;;
+  ;; However, under the current implementation of recursion that will lead to
+  ;; unbounded stack growth on the jvm, which will then blow up.
+  ;;
+  ;; So I'm not entirely sure what to do about that. My current solution is to
+  ;; ignore it until it becomes a problem and hopefully we can bootstrap the
+  ;; language to assembly before it does... but we'll see.
   (.addAll exec (reverse tasks))
   (throw JumpException))
 
 (defn go! [^ConcurrentLinkedDeque exec]
   (try
     (if-let [task (.pollLast exec)]
-      (apply (first task) (second task))
+      (do
+        (t/event! ::pop-task {:data task :level :trace})
+        (apply (first task) (second task)))
       (steal! *coordinator* exec))
     (catch RuntimeException e
       (when-not (identical? e JumpException)

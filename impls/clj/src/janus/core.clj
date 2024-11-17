@@ -4,7 +4,8 @@
             [janus.default-env :refer [env]]
             [janus.interpreter :as i]
             [janus.reader :as r]
-            [janus.runtime :as rt]))
+            [janus.runtime :as rt]
+            [taoensso.telemere :as t]))
 
 (def srcpath "../../src/")
 (def corexprl (str srcpath "core.xprl"))

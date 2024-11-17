@@ -1,13 +1,12 @@
 (ns janus.default-env
-  (:require [janus.ast :as ast]))
+  (:require [janus.ast :as ast]
+            [janus.interpreter :as i]))
 
 (defn xprl-def [])
 
-(defn createμ [])
-
 (def macros
   {"def" xprl-def
-   "μ"   createμ
+   "μ"   i/createμ
    ;; "withcc" withcc
    ;; "emit"   emit
    ;; "select" select
