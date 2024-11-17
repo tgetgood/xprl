@@ -154,3 +154,5 @@
 (defrecord PrimitiveFunction [f])
 
 (defrecord PrimitiveMacro [f])
+
+(defrecord ContextSwitch [env])

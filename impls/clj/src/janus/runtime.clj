@@ -83,7 +83,7 @@
   ([c m]
    (merge c (sanitise-keys m)))
   ([c k v & kvs]
-   (withcc (apply hash-map k v kvs))))
+   (withcc c (apply hash-map k v kvs))))
 
 ;;;;; Collectors
 
@@ -115,3 +115,11 @@
   (when (= 0 (:n @c))
     (let [{:keys [next elements unset]} @c]
       (emit next :return elements))))
+
+;;;;; dev entry
+
+(defn pushngo! [f & args]
+  (try
+    (push! *executor* [[f args]])
+    (catch Exception _
+      (go! *executor*))))

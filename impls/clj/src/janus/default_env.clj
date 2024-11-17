@@ -1,9 +1,6 @@
 (ns janus.default-env
   (:require [janus.ast :as ast]))
 
-(defn pfun [f]
-  (ast/->PrimitiveMacro f))
-
 (defn xprl-def [])
 
 (defn createμ [])

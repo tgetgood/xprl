@@ -1,11 +1,16 @@
 (ns janus.interpreter
   (:refer-clojure :exclude [eval apply reduce reduced?])
+  (:import [janus.ast Immediate])
   (:require [janus.ast :as ast]
             [janus.runtime :as rt]))
 
 (defn ni [] (throw (RuntimeException. "not implemented")))
+(def return (ast/keyword "return"))
 
-(def unboundmarker (gensym))
+(def unboundmarker
+  "Value used by μs to indicate an env var is to be bound. Needed to shadow
+  lexical env with params."
+  (gensym))
 
 (defn succeed [c & v]
   (rt/emit c (ast/keyword "return") v))
@@ -35,18 +40,24 @@
                    (reduce
                     x
                     env
-                    (rt/withcc c {:return (fn [v] (rt/receive collector i v))})))]
+                    (rt/withcc c {return (fn [v] (rt/receive collector i v))})))]
       (clojure.core/apply rt/emit c (interleave (repeat runner)
                                              (map-indexed vector this)))))
 
   clojure.lang.AMapEntry
   (reduced? [x] (and (reduced? (key x)) (reduced? (val x))))
+  (reduce [this env c]
+    (ni))
 
   clojure.lang.APersistentMap
   (reduced? [x] (every? reduced? x))
+  (reduce [this env c]
+    (ni))
 
   clojure.lang.APersistentSet
   (reduced? [x] (every? reduced? x))
+  (reduce [this env c]
+    (ni))
 
   janus.ast.Immediate
   (reduced? [_] false)
@@ -56,7 +67,7 @@
   janus.ast.Application
   (reduced? [_] false)
   (reduce [x env c]
-    (reduce (:head x) env (rt/withcc c {:return #(apply % (:tail x) env c)})))
+    (reduce (:head x) env (rt/withcc c {return #(apply % (:tail x) env c)})))
 
   janus.ast.PartialMu
   (reduced? [_] false)
@@ -75,7 +86,8 @@
 
 (extend-protocol Evaluable
   Object
-  (eval [o env c] (succeed c o))
+  (eval [o env c]
+    (succeed c o))
 
   clojure.lang.APersistentVector
   (eval [this env c]
@@ -83,14 +95,36 @@
 
   janus.ast.Symbol
   (eval [this env c]
+    (println this)
     (if-let [v (get env this)]
       (if (= v unboundmarker)
         (ast/->Immediate this)
-        (succeed c v))
+        (reduce v env c))
       ;; What carries its meaning on its back?
       (if-let [v (-> this meta :env (get this))]
         (reduce v env c)
-        (println ("ERROR: unbound symbol: " this)))))
+        (println (str "ERROR: unbound symbol: " this)))))
+
+  janus.ast.Pair
+  (eval [{:keys [head tail]} env c]
+    (reduce (ast/->Application (ast/->Immediate head) tail) env c))
+
+  janus.ast.Immediate
+  (eval [{:keys [form]} env c]
+    (letfn [(next [form]
+              (if (instance? janus.ast.Immediate form)
+                (succeed c (ast/->Immediate form))
+                (eval form env c)))]
+      (reduce form env (rt/withcc c return next))))
+
+  janus.ast.Application
+  (eval [form env c]
+    (letfn [(next [form]
+              (if (instance? janus.ast.Application form)
+                (succeed c (ast/->Immediate form))
+                (eval form env c)))]
+      (reduce form env (rt/withcc c return next))))
+
 
   )
 
@@ -106,10 +140,13 @@
               (if (instance? janus.ast.Application head)
                 (succeed c (ast/->Application head tail))
                 (apply head tail env c)))]
-      (reduce head env (rt/withcc c {:return next}))))
+      (reduce head env (rt/withcc c {return next}))))
 
   janus.ast.Mu
-  (apply [head tail env c])
+  (apply [head tail env c] (ni))
+
+  janus.ast.PartialMu
+  (apply [head tail env c] (ni))
 
   janus.ast.PrimitiveMacro
   (apply [head tail env c]
@@ -117,6 +154,8 @@
 
   janus.ast.PrimitiveFunction
   (apply [head tail env c]
-    (succeed c (if (reduced? tail)
-                 (apply (:f head) tail)
-                 (ast/->Application head tail)))))
+    (letfn [(next [tail]
+              (succeed c (if (reduced? tail)
+                           (clojure.core/apply (:f head) tail)
+                           (ast/->Application head tail))))]
+      (reduce tail env (rt/withcc c return next)))))
