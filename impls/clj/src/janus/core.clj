@@ -25,19 +25,28 @@
 (def o (atom nil))
 
 (defn loadfile [env fname]
-  (let [reader (r/file-reader fname)
-        conts  {(ast/keyword "env")    #(do (println %) (reset! env %))
-                (ast/keyword "return") #(throw (Exception. %1))}]
-    (letfn [(looper []
-              (let [form (:result (r/read (assoc reader :env @env)))]
-                (t/log! :debug (assoc (select-keys (meta form) [:file :line :col])
-                                      :form form))
-                (if (= :eof form)
+  (let [conts {(ast/keyword "env")    #(reset! env %)
+               (ast/keyword "return") #(throw (Exception. %1))}]
+    ;; HACK: This repl will not work if we enable multiple executors and work
+    ;; stealing. This is because it depends on the order in which the outputs of
+    ;; `xprl-def` are executed.
+    ;;
+    ;; TODO: Rewrite this as soon as statefuls are implemented.
+    (letfn [(looper [reader]
+              (let [reader (r/read (assoc reader :env @env))
+                    result (:result reader)]
+                (t/log! {:level :debug
+                         :data  (assoc (select-keys (meta result)
+                                                    [:file :line :col])
+                                       :form result)}
+                        "eval form")
+                (if (= :eof result)
                   @env
-                  (rt/pushngo! i/eval form {}
-                               (rt/withcc conts :return
-                                          (fn [& res] (println res) (looper)))))))]
-      (looper))))
+                  (rt/pushngo!
+                   i/eval result {}
+                   (rt/withcc conts :return
+                              (fn [res] (println res) (looper reader)))))))]
+      (looper (r/file-reader fname)))))
 
 (defn r [form]
   (rt/pushngo! i/eval form {} {i/return #(reset! o %)}))

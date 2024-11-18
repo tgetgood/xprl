@@ -14,8 +14,7 @@
 (defn top
   "Top level callback which just dumps its args into the void."
   [& args]
-  ;; TODO: Real logging.
-  (println ("Warning: value passed up to executor level.\nDropping: " args))
+  (t/log! :warn ["value passed up to executor level. Dropping:" args])
   (throw JumpException))
 
 (defn steal! [system exec]
@@ -52,7 +51,7 @@
     (if-let [task (.pollLast exec)]
       (do
         (t/event! ::pop-task {:data task :level :trace})
-        (apply (first task) (second task)))
+        ((first task) (second task)))
       (steal! *coordinator* exec))
     (catch RuntimeException e
       (when-not (identical? e JumpException)
@@ -85,11 +84,11 @@
 
 (defn unbound-channel [c]
   (fn [_ _ _]
-    ;; TODO: Again, real logging.
-    (println (str "WARNING: sending message on unbound channel: " c))))
+    (t/log! :warn ["message sent on unbound channel:" c])))
 
 (defn parse-emission [c [k v]]
   (let [k (if (keyword? k) (ast/keyword (name k)) k)]
+    (t/log! :debug ["Emission:" k (get c k) v])
     (cond
       (ast/keyword? k) [(get c k unbound-channel) v]
       ;; TODO: What kind of function?
@@ -102,11 +101,15 @@
   `c` if `k` is a keyword. If `k` is a function it is assumed to *be* the
   continuation."
   [c & kvs]
-  (push! *executor* (map (partial parse-emission c) (partition 2 kvs))))
+  (t/log! :trace ["emit raw" kvs])
+  (let [tasks (t/trace! {:level :trace}
+                        (map (partial parse-emission c) (partition 2 kvs)))]
+    (push! *executor* tasks)))
 
 (defn withcc
   ([c m]
-   (merge c (sanitise-keys m)))
+   (t/trace! {:level :debug}
+             (merge c (sanitise-keys m))))
   ([c k v & kvs]
    (withcc c (apply hash-map k v kvs))))
 
@@ -145,6 +148,6 @@
 
 (defn pushngo! [f & args]
   (try
-    (push! *executor* [[f args]])
+    (push! *executor* [[(fn [x] (apply f x)) args]])
     (catch Exception _
       (go! *executor*))))

@@ -4,16 +4,15 @@
             [janus.runtime :as rt]))
 
 (defn xprl-def [form env c]
-  (rt/emit c ;(ast/keyword "return") (last form)
-           (ast/keyword "env") (assoc (:env (meta (first form)))
-                                      (first form) (last form))))
+  (rt/emit c (ast/keyword "env") (assoc (:env (meta (first form)))
+                                        (first form) (last form))
+             (ast/keyword "return") (last form)))
 
 (def macros
   {"def" xprl-def
    "μ"   i/createμ
    ;; "withcc" withcc
    ;; "emit"   emit
-   ;; "select" select
    })
 
 (def fns
