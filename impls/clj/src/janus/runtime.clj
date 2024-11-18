@@ -100,6 +100,7 @@
   "For each `kv`, sends `v` to continuation named by `k` in the continuation map
   `c` if `k` is a keyword. If `k` is a function it is assumed to *be* the
   continuation."
+  {:style/indent 1}
   [c & kvs]
   (t/log! :trace ["emit raw" kvs])
   (let [tasks (t/trace! {:level :trace}

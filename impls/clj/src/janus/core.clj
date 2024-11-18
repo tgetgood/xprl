@@ -6,6 +6,7 @@
    [janus.interpreter :as i]
    [janus.reader :as r]
    [janus.runtime :as rt]
+   [janus.util :as util]
    [taoensso.telemere :as t]))
 
 (def srcpath "../../src/")
@@ -36,11 +37,7 @@
     (letfn [(looper [reader]
               (let [reader (r/read (assoc reader :env @env))
                     result (:result reader)]
-                (t/log! {:level :debug
-                         :data  (assoc (select-keys (meta result)
-                                                    [:file :line :col])
-                                       :form result)}
-                        "eval form")
+                (util/form-log! :debug result "eval form")
                 (if (= :eof result)
                   @env
                   (rt/pushngo!

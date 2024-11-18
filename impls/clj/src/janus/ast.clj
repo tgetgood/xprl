@@ -156,3 +156,5 @@
 (defrecord PrimitiveMacro [f])
 
 (defrecord ContextSwitch [env])
+
+(defrecord TopLevel [name form meta])

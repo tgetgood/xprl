@@ -2,21 +2,30 @@
   (:require [janus.ast :as ast]
             [janus.interpreter :as i]
             [janus.runtime :as rt]
-            [janus.util :refer [form-error!]]))
+            [janus.util :refer [fatal-error!]]
+            [taoensso.telemere :as t]))
 
 (defn validate-def [form]
   (when-not (<= 2 (count form) 3)
-    (form-error! form "invalid args passed to def."))
+    (fatal-error! form "invalid args to def"))
+  (when (and (= 3 (count form)) (not (string? (second form))))
+    (fatal-error! form "Invalid docstring to def"))
 
-  )
+  (let [name (first form)
+        doc  (if (= 3 (count form)) (second form) "")
+        body (last form)]
+    [name body (assoc (meta form) :doc doc :source body)]))
 
 (defn xprl-def [form env c]
-  (let [name (first form)
-        doc  (if (and (= 3 (count form)) (string? (second form))) (second form) "")
-        body (last form)])
-  (rt/emit c (ast/keyword "env") (assoc (:env (meta (first form)))
-                                        (first form) (last form))
-             (ast/keyword "return") (last form)))
+  (let [[name body meta] (validate-def form)]
+    (letfn [(next [cform]
+              (let [def  (ast/->TopLevel name cform meta)
+                    env' (assoc (:env (meta form)) name def)]
+                (rt/emit c
+                  (ast/keyword "env") env'
+                  (ast/keyword "return") def)))]
+      (t/event! :def/evalbody {:level :trace :data body})
+      (i/eval body env (rt/withcc c :return next)))))
 
 (def macros
   {"def" xprl-def

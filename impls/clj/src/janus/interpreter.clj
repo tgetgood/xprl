@@ -3,7 +3,7 @@
   (:import [janus.ast Immediate])
   (:require [janus.ast :as ast]
             [janus.runtime :as rt]
-            [janus.util :refer [form-error!]]
+            [janus.util :refer [fatal-error!]]
             [taoensso.telemere :as t]))
 
 (defn ni [] (throw (RuntimeException. "not implemented")))
@@ -18,7 +18,7 @@
   (rt/emit c (ast/keyword "return") v))
 
 (defn createμ [args env c]
-  (println args))
+)
 
 (defprotocol Reductive
   (reduced? [this])
@@ -98,6 +98,7 @@
 (extend-protocol Evaluable
   Object
   (eval [o env c]
+    (println (type o))
     (t/event! :eval/fallthrough {:data o :level :trace})
     (succeed c o))
 
@@ -118,7 +119,7 @@
       ;; What carries its meaning on its back?
       (if-let [v (-> this meta :env (get this))]
         (reduce v env c)
-        (meta-form this "unbound symbol"))))
+        (fatal-error! this "unbound symbol"))))
 
   janus.ast.Pair
   (eval [{:keys [head tail] :as this} env c]
