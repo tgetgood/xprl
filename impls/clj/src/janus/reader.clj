@@ -133,17 +133,22 @@
   (let [forms (read-until \) r)
         res   (:result forms)
         n     (count res)]
+    (println (second res))
     (assoc forms :result
            (cond
-             (= 1 n) (ast/->Pair (first res) [])
+             (= 1 n) (ast/->Pair (first res) (with-meta [] (meta r)))
 
              (= ast/dot (nth res (- n 2)))
              (if (= n 3)
                (ast/->Pair (first res) (last res))
                (ast/->Pair (first res)
-                           (into [] (concat (subvec res 1 (- n 2)) (last res)))))
+                           (with-meta
+                             (into [] (concat (subvec res 1 (- n 2)) (last res)))
+                             (clojure.core/meta (second res)))))
 
-             :else (ast/->Pair (first res) (into [] (rest res)))))))
+             :else (ast/->Pair (first res) (with-meta
+                                             (into [] (rest res))
+                                             (clojure.core/meta (second res))))))))
 
 (defn readvector [r]
   (read-until \] r))
