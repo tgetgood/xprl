@@ -3,6 +3,7 @@
   (:import [janus.ast Immediate])
   (:require [janus.ast :as ast]
             [janus.runtime :as rt]
+            [janus.util :refer [form-error!]]
             [taoensso.telemere :as t]))
 
 (defn ni [] (throw (RuntimeException. "not implemented")))
@@ -117,10 +118,7 @@
       ;; What carries its meaning on its back?
       (if-let [v (-> this meta :env (get this))]
         (reduce v env c)
-        (t/log! {:level :error
-                 :data  (assoc (select-keys (meta this) [:string :file :line :col])
-                              :symbol this)}
-                "unbound symbol"))))
+        (meta-form this "unbound symbol"))))
 
   janus.ast.Pair
   (eval [{:keys [head tail] :as this} env c]

@@ -1,16 +1,17 @@
 (ns janus.core
-  (:require [clojure.pprint :as pp]
-            [janus.ast :as ast]
-            [janus.default-env :as default]
-            [janus.interpreter :as i]
-            [janus.reader :as r]
-            [janus.runtime :as rt]
-            [taoensso.telemere :as t]))
+  (:require
+   [clojure.pprint :as pp]
+   [janus.ast :as ast]
+   [janus.builtins :refer [base-env]]
+   [janus.interpreter :as i]
+   [janus.reader :as r]
+   [janus.runtime :as rt]
+   [taoensso.telemere :as t]))
 
 (def srcpath "../../src/")
 (def corexprl (str srcpath "core.xprl"))
 
-(def env (atom default/env))
+(def env (atom base-env))
 
 (def cx (r/file-reader corexprl))
 
