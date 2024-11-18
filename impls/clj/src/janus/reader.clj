@@ -133,7 +133,6 @@
   (let [forms (read-until \) r)
         res   (:result forms)
         n     (count res)]
-    (println (second res))
     (assoc forms :result
            (cond
              (= 1 n) (ast/->Pair (first res) (with-meta [] (meta r)))
@@ -208,7 +207,7 @@
         (= c \") (assoc next :result (.toString sb))
         (= c \\) (let [next (read-special next)]
                    (recur (.append sb (:result next)) next))
-        :else    (recur (.append sb c) next)))))
+        :else    (recur (.append sb c) (setcursor (assoc next :token (str c))))))))
 
 (def subdispatch
   {\{ readset
