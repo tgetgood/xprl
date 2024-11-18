@@ -103,14 +103,12 @@
   {:style/indent 1}
   [c & kvs]
   (t/log! :trace ["emit raw" kvs])
-  (let [tasks (t/trace! {:level :trace}
-                        (map (partial parse-emission c) (partition 2 kvs)))]
+  (let [tasks (map (partial parse-emission c) (partition 2 kvs))]
     (push! *executor* tasks)))
 
 (defn withcc
   ([c m]
-   (t/trace! {:level :debug}
-             (merge c (sanitise-keys m))))
+   (merge c (sanitise-keys m)))
   ([c k v & kvs]
    (withcc c (apply hash-map k v kvs))))
 
@@ -135,6 +133,7 @@
 (defn receive
   "Send the value `v` to the `i`th slot of collector c."
   [c i v]
+  (t/event! :collector/receive {:level :trace :data [i v]})
   (swap! c
    (fn [{:keys [n unset elements] :as c}]
      (assert (and (> n 0) (= (get elements i) unset)) "Inconsistent collector.")
@@ -143,6 +142,7 @@
          (update :elements assoc i v))))
   (when (= 0 (:n @c))
     (let [{:keys [next elements unset]} @c]
+      (t/event! :collector/join {:level :trace :data elements})
       (emit next :return elements))))
 
 ;;;;; dev entry
