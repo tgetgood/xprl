@@ -152,9 +152,9 @@
     (event! :eval/Immediate {:data this :dyn env})
     (letfn [(next [form]
               (if (instance? janus.ast.Immediate form)
-                (succeed c (ast/->Immediate form))
+                (succeed c (ast/->Immediate this))
                 (eval form env c)))]
-      (reduce form env (rt/withcc c return next))))
+      (eval form env (rt/withcc c return next))))
 
   janus.ast.Application
   (eval [form env c]
