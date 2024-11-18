@@ -1,8 +1,10 @@
 (ns janus.ast
-  (:refer-clojure :exclude [reduced? symbol keyword keyword?])
-  (:require [clojure.string :as str]
-            [clojure.pprint :as pp])
-  (:import [java.io Writer]))
+  (:refer-clojure :exclude [reduced? symbol keyword keyword? destructure])
+  (:require
+   [clojure.pprint :as pp]
+   [clojure.string :as str])
+  (:import
+   (java.io Writer)))
 
 ;; Boilerplate reducer.
 (defmacro ps [type]
@@ -145,16 +147,83 @@
   (.write ^Writer *out* "~")
   (pp/write-out (:form i)))
 
-(defrecord Application [head tail])
+(defrecord Application [head tail]
+  Object
+  (toString [_]
+    (str "#" (.toString (->Pair head tail)))))
 
-(defrecord PartialMu [params body])
+(ps Application)
 
-(defrecord Mu [env source params body])
+(defmethod pp/simple-dispatch Application [{:keys [head tail]}]
+  ;; REVIEW: Is this advisable?
+  (.write ^Writer *out* "#")
+  (pp/simple-dispatch (->Pair head tail)))
 
-(defrecord PrimitiveFunction [f])
+(defn mustr [s params body]
+  (str "(#" s " " params " " body))
 
-(defrecord PrimitiveMacro [f])
+(defrecord PartialMu [params body]
+  Object
+  (toString [_]
+    (mustr "Pμ")))
+
+(ps PartialMu)
+
+(defrecord Mu [env source params body]
+  Object
+  (toString [_]
+    (mustr "μ")))
+
+(ps Mu)
+
+(defrecord PrimitiveFunction [f]
+  Object
+  (toString [_]
+    (str "#pFn[" f "]")))
+
+(defmethod print-method PrimitiveFunction [{:keys [f]} ^Writer w]
+  (.write w "#pFn[")
+  (print-method f w)
+  (.write w "]"))
+
+(defrecord PrimitiveMacro [f]
+  Object
+  (toString [_]
+    (str "#pMac[" f "]")))
+
+(defmethod print-method PrimitiveMacro [{:keys [f]} ^Writer w]
+  (.write w "#pMac[")
+  (print-method f w)
+  (.write w "]"))
 
 (defrecord ContextSwitch [env])
 
 (defrecord TopLevel [name form meta])
+
+;;;;; Destructuring
+
+(defprotocol Destructurable
+  (binding? [this] "Is this form an admissible lhs to bind?")
+  (bindings [this] "Returns a seq of symbols to be bound.")
+  ;; TODO: Use clojure's `destructure`. I just don't fully understand it and
+  ;; don't need its full power as yet. That might change.
+  (destructure [this args]))
+
+(extend-protocol Destructurable
+  Symbol
+  (binding? [_] true)
+  (bindings [x] [x])
+  (destructure [x y] {x y})
+
+  clojure.lang.PersistentVector
+  (binding? [x] (every? binding? x))
+  (bindings [x] (into [] (comp (map bindings) cat) x))
+  (destructure [x y]
+    (if (or (not (seq? y)) (not= (count x) (count y)))
+      nil
+      (reduce merge (map destructure x y))))
+
+  Object
+  (binding? [_] false)
+  (bindings [_] [])
+  (destructure [xs ys] nil))

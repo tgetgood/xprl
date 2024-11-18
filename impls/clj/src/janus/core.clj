@@ -1,6 +1,5 @@
 (ns janus.core
   (:require
-   [clojure.pprint :as pp]
    [janus.ast :as ast]
    [janus.builtins :refer [base-env]]
    [janus.interpreter :as i]
@@ -28,7 +27,7 @@
 
 (defn loadfile [env fname]
   (let [conts {(ast/keyword "env")    #(reset! env %)
-               (ast/keyword "return") #(throw (Exception. %1))}]
+               (ast/keyword "return") #(throw (RuntimeException. "boom!"))}]
     ;; HACK: This repl will not work if we enable multiple executors and work
     ;; stealing. This is because it depends on the order in which the outputs of
     ;; `xprl-def` are executed.
@@ -48,3 +47,6 @@
 
 (defn r [form]
   (rt/pushngo! i/eval form {} {i/return #(reset! o %)}))
+
+(t/set-min-level! :trace)
+(t/set-ns-filter! "janus.interpreter")
