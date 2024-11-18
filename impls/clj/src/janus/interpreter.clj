@@ -18,6 +18,8 @@
   (rt/emit c (ast/keyword "return") v))
 
 (defn createμ [args env c]
+
+  (succeed c 42)
 )
 
 (defprotocol Reductive
@@ -93,7 +95,12 @@
   (reduced? [x] (and (reduced? (:head x)) (reduced? (:tail x))))
   (reduce [x env c]
     (t/event! :reduce/Pair {:data x :level :trace})
-    (succeed c x)))
+    (succeed c x))
+
+  janus.ast.TopLevel
+  (reduced? [x] (reduced? (:form x)))
+  (reduce [{:keys [form]} env c]
+    (succeed c form)))
 
 (extend-protocol Evaluable
   Object
@@ -172,7 +179,7 @@
 
   janus.ast.PrimitiveMacro
   (apply [head tail env c]
-    (t/event! :apply/Macro {:data [head tail] :level :trace})
+    (t/event! :apply/Macro {:data [head tail (meta tail)] :level :trace})
     ((:f head) tail env c))
 
   janus.ast.PrimitiveFunction

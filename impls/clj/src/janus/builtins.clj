@@ -17,13 +17,14 @@
     [name body (assoc (meta form) :doc doc :source body)]))
 
 (defn xprl-def [form env c]
-  (let [[name body meta] (validate-def form)]
+  (let [[name body defmeta] (validate-def form)]
     (letfn [(next [cform]
-              (let [def  (ast/->TopLevel name cform meta)
+              (let [def  (ast/->TopLevel name cform defmeta)
                     env' (assoc (:env (meta form)) name def)]
+                (t/event! :def/top {:level :trace :data [name cform]})
                 (rt/emit c
-                  (ast/keyword "env") env'
-                  (ast/keyword "return") def)))]
+                  (ast/keyword "env")    env'
+                  (ast/keyword "return") name)))]
       (t/event! :def/evalbody {:level :trace :data body})
       (i/eval body env (rt/withcc c :return next)))))
 
