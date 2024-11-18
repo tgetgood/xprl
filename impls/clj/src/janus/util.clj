@@ -11,6 +11,6 @@
 (defn form-error! [form msg]
   (form-log! :error form msg))
 
-(defn fatal-error! [form msg]
-  (form-error! [form msg])
+(defn fatal-error! [form ^String msg]
+  (form-error! form msg)
   (throw (RuntimeException. msg)))

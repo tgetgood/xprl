@@ -5,14 +5,14 @@
             [janus.ast :as ast])
   (:import [java.io PushbackReader StringReader File FileReader EOFException]))
 
-(defn string-reader [s]
+(defn string-reader [^String s]
   {:reader (PushbackReader. (StringReader. s))
    :string s
    :until  '()
    :line   1
    :col    1})
 
-(defn file-reader [fname]
+(defn file-reader [^String fname]
   {:reader (-> fname File. FileReader. PushbackReader.)
    :file   fname
    :until  '()
@@ -23,7 +23,7 @@
   (dissoc r :token :until :result :reader))
 
 (defn read1 [s]
-  (let [next (.read (:reader s))]
+  (let [next (.read ^PushbackReader (:reader s))]
     (if (< next 0)
       nil
       (-> s
@@ -32,7 +32,7 @@
 
 (defn unread1
   [s c]
-  (.unread (:reader s) (int c))
+  (.unread ^PushbackReader (:reader s) (int c))
   (update s :col dec))
 
 (declare read)
@@ -44,14 +44,14 @@
   (contains? delimiters s))
 
 (defn buildtoken [old]
-  (let [new (read1 old)
-        c   (:result new)]
+  (let [new     (read1 old)
+        ^char c (:result new)]
     (cond
       (nil? new) (assoc old :result :eof)
 
       (or (contains? delimiters c) (Character/isWhitespace c)) (unread1 new c)
 
-      (= c (first (:until new))) (unread1 new c)
+      (= c ^char (first (:until new))) (unread1 new c)
 
       :else (recur (assoc new :token (str (:token old) c))))))
 
@@ -66,8 +66,8 @@
           (assoc :col (inc cols))))))
 
 (defn consumewhitespace [current]
-  (let [next (read1 current)
-        c    (:result next)]
+  (let [next    (read1 current)
+        ^char c (:result next)]
     (cond
       (nil? next) (assoc current :result :eof)
 
@@ -192,7 +192,7 @@
       \b (assoc next :result \backspace)
       \f (assoc next :result \formfeed)
       \u (read-unicode next)
-      (if (.isDigit Character (:result next))
+      (if (Character/isDigit ^char (:result next))
         (read-unicode-octal next)
         (throw (RuntimeException.
                 (str "Invalid char escape: \\" (:result next))))))))
