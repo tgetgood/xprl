@@ -19,6 +19,13 @@
    :line   1
    :col    1})
 
+(defn stdin-reader []
+  {:reader *in*
+   :file "stdin"
+   :until '()
+   :col 1
+   :line 1})
+
 (defn meta [r]
   (dissoc r :token :until :result :reader))
 
@@ -51,7 +58,7 @@
 
       (or (contains? delimiters c) (Character/isWhitespace c)) (unread1 new c)
 
-      (= c ^char (first (:until new))) (unread1 new c)
+      (and (seq (:until new)) (= c ^char (first (:until new)))) (unread1 new c)
 
       :else (recur (assoc new :token (str (:token old) c))))))
 
