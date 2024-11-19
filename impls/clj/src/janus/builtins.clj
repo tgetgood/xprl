@@ -36,9 +36,15 @@
    })
 
 (def fns
-  {"+*"     +
-   "**"     *
-   "-*"     -
+  {"+*" +
+   "**" *
+   "-*" -
+   "/*" /
+   ">*" >
+   "<*" <
+   "=*" =
+
+   "nth*" (fn [c i] (nth c (dec i)))
    ;; REVIEW: Is there a better way to do data (non-branching) selection in
    ;; clojure?
    "select" (fn [p t f]
