@@ -57,9 +57,9 @@
         1
         (* n (recur (- n 1)))))))
 
-;; (def fact (Y fact1))
+(def fact (Y fact1))
 
-;; (def f2 (aY fact1))
+(def f2 (aY fact1))
 
 #_(def iterator
   (fn [recur]

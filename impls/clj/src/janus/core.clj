@@ -10,6 +10,7 @@
 
 (def srcpath "../../src/")
 (def corexprl (str srcpath "core.xprl"))
+(def testxprl (str srcpath "test.xprl"))
 
 (def env (atom base-env))
 
@@ -48,5 +49,5 @@
 (defn r [form]
   (rt/pushngo! i/eval form {} {i/return #(reset! o %)}))
 
-(t/set-min-level! :trace)
-(t/set-ns-filter! "janus.interpreter")
+;; (t/set-min-level! :warn)
+;; (t/set-ns-filter! "janus.interpreter")
