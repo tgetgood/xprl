@@ -160,21 +160,35 @@
   (pp/simple-dispatch (->Pair head tail)))
 
 (defn mustr [s params body]
-  (str "(#" s " " params " " body))
+  (str "(#" s " " params " " body) ")")
+
+(defn ppmu [t params body]
+  ;; (pp/pprint-meta p)
+  (pp/pprint-logical-block
+   :prefix "(" :suffix ")"
+   ;; TODO: Dispatch on head of pair to format
+   (pp/write-out t)
+   (format-pair (symbol "μ") [params body])))
 
 (defrecord PartialMu [params body]
   Object
   (toString [_]
-    (mustr "Pμ")))
+    (mustr "Pμ" params body)))
 
 (ps PartialMu)
+
+(defmethod pp/simple-dispatch PartialMu [{:keys [params body]}]
+  (ppmu (symbol "#Pμ") params body))
 
 (defrecord Mu [env source params body]
   Object
   (toString [_]
-    (mustr "μ")))
+    (mustr "μ" params body)))
 
 (ps Mu)
+
+(defmethod pp/simple-dispatch Mu [{:keys [params body]}]
+  (ppmu (symbol "#μ") params body))
 
 (defrecord PrimitiveFunction [f]
   Object
@@ -186,6 +200,11 @@
   (print-method f w)
   (.write w "]"))
 
+(defmethod pp/simple-dispatch PrimitiveFunction [{:keys [f]}]
+  (pp/pprint-logical-block
+   :prefix "#pMac[" :suffix "]"
+   (pp/simple-dispatch f)))
+
 (defrecord PrimitiveMacro [f]
   Object
   (toString [_]
@@ -196,9 +215,20 @@
   (print-method f w)
   (.write w "]"))
 
-(defrecord ContextSwitch [env])
+(defmethod pp/simple-dispatch PrimitiveMacro [{:keys [f]}]
+  (pp/pprint-logical-block
+   :prefix "#pFn[" :suffix "]"
+   (pp/simple-dispatch f)))
 
-(defrecord TopLevel [name form meta])
+(defrecord TopLevel [name form meta]
+  Object
+  (toString [_]
+    (str form)))
+
+(ps TopLevel)
+
+(defmethod pp/simple-dispatch TopLevel [{:keys [form]}]
+  (pp/simple-dispatch form))
 
 ;;;;; Destructuring
 
