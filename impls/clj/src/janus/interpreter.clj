@@ -185,6 +185,7 @@
     (event! :apply/Mu {:data [head tail] :dyn env})
     (letfn [(next [tail]
               (let [bind (ast/destructure (:params head) tail)]
+                (event! :apply.Mu/destructuring bind)
                 (if (nil? bind)
                   (succeed c (ast/->Application head tail))
                   (reduce (:body head) (merge env bind) c))))]

@@ -160,7 +160,7 @@
   (pp/simple-dispatch (->Pair head tail)))
 
 (defn mustr [s params body]
-  (str "(#" s " " params " " body) ")")
+  (str "(#" s " " params " " body ")"))
 
 (defn ppmu [t params body]
   ;; (pp/pprint-meta p)
@@ -249,7 +249,7 @@
   (binding? [x] (every? binding? x))
   (bindings [x] (into [] (comp (map bindings) cat) x))
   (destructure [x y]
-    (if (or (not (seq? y)) (not= (count x) (count y)))
+    (if (or (not (sequential? y)) (not= (count x) (count y)))
       nil
       (reduce merge (map destructure x y))))
 
