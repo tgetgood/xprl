@@ -37,9 +37,10 @@
   (let [[params body] args
         next (fn [params]
                (if (ast/binding? params)
-                 (let [env' (clojure.core/reduce mark env (ast/bindings params))
+                 (let [env' (conj env (clojure.core/reduce
+                                       mark (peek env) (ast/bindings params)))
                        next (fn [cbody]
-                              (succeed c (ast/->Mu env body params cbody)))]
+                              (succeed c (ast/->Mu env' body params cbody)))]
                    (event! :createμ/bound {:params params :body body :dyn env'} )
                    (reduce body env' (rt/withcc c rt/return next)))
                  (do
@@ -132,10 +133,10 @@
   janus.ast.Symbol
   (eval [this env c]
     (event! :eval/Symbol {:symbol this :dyn env :lex (-> this meta :env keys)})
-    (if-let [v (get env this)]
+    (if-let [v (get (peek env) this)]
       (if (= v marker)
         (succeed c (ast/->Immediate this))
-        (reduce v env c))
+        (reduce v (pop env) c))
       ;; What carries its meaning on its back?
       (if-let [v (-> this meta :env (get this))]
         (reduce v env c)
@@ -188,7 +189,8 @@
                 (event! :apply.Mu/destructuring bind)
                 (if (nil? bind)
                   (succeed c (ast/->Application head tail))
-                  (reduce (:body head) (merge env bind) c))))]
+                  (let [env' (conj env (merge (peek env) bind))]
+                    (reduce (:body head) env' c)))))]
       (reduce tail env (rt/withcc c rt/return next))))
 
   janus.ast.PartialMu
