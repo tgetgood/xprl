@@ -4,6 +4,15 @@
             [taoensso.telemere :as t])
   (:import [java.util.concurrent ConcurrentLinkedDeque]))
 
+;;;;; Standard keys
+
+;; TODO: Qualify these keys.
+(def return (ast/keyword "return"))
+(def error (ast/keyword "error"))
+(def env (ast/keyword "env"))
+
+;;;;;
+
 (declare ^:dynamic *coordinator* ^:dynamic *executor*)
 
 (def JumpException
@@ -107,6 +116,7 @@
     (push! *executor* tasks)))
 
 (defn withcc
+  {:style/indent 1}
   ([c m]
    (merge c (sanitise-keys m)))
   ([c k v & kvs]
@@ -147,8 +157,9 @@
 
 ;;;;; dev entry
 
-(defn pushngo! [f & args]
-  (try
-    (push! *executor* [[(fn [x] (apply f x)) args]])
-    (catch Exception _
-      (go! *executor*))))
+(defn pushngo! [& forms]
+  (let [tasks (mapv (fn [x] [#(apply (first x) %) (vec (rest x))]) forms)]
+    (try
+      (push! *executor* tasks)
+      (catch Exception _
+        (go! *executor*)))))

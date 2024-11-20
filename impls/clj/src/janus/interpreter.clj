@@ -17,7 +17,6 @@
    (apply [this args env c]))
 
 (defn ni [] (throw (RuntimeException. "not implemented")))
-(def return (ast/keyword "return"))
 
 (defn event!
   [id m]
@@ -32,7 +31,7 @@
   (assoc m s marker))
 
 (defn succeed [c v]
-  (rt/emit c (ast/keyword "return") v))
+  (rt/emit c rt/return v))
 
 (defn createμ [args env c]
   (let [[params body] args
@@ -42,11 +41,11 @@
                        next (fn [cbody]
                               (succeed c (ast/->Mu env body params cbody)))]
                    (event! :createμ/bound {:params params :body body :dyn env'} )
-                   (reduce body env' (rt/withcc c :return next)))
+                   (reduce body env' (rt/withcc c rt/return next)))
                  (do
                    (event! :createμ/unbound {:params params :body body})
                    (succeed c (ast/->PartialMu params body)))))]
-    (reduce params env (rt/withcc c :return next))))
+    (reduce params env (rt/withcc c rt/return next))))
 
 (extend-protocol Reductive
   Object
@@ -64,7 +63,7 @@
                    (reduce
                     x
                     env
-                    (rt/withcc c {return (fn [v] (rt/receive collector i v))})))
+                    (rt/withcc c rt/return (fn [v] (rt/receive collector i v)))))
           tasks (interleave (repeat runner) (map-indexed vector this))]
       (event! :reduce.vector/forks tasks)
       (clojure.core/apply rt/emit c tasks)))
@@ -94,7 +93,7 @@
   (reduced? [_] false)
   (reduce [x env c]
     (event! :reduce/Application {:data x :dyn env})
-    (reduce (:head x) env (rt/withcc c {return #(apply % (:tail x) env c)})))
+    (reduce (:head x) env (rt/withcc c rt/return #(apply % (:tail x) env c))))
 
   janus.ast.PartialMu
   (reduced? [_] false)
@@ -140,7 +139,7 @@
       ;; What carries its meaning on its back?
       (if-let [v (-> this meta :env (get this))]
         (reduce v env c)
-        (fatal-error! this "unbound symbol"))))
+        (fatal-error! c this "unbound symbol"))))
 
   janus.ast.Pair
   (eval [{:keys [head tail] :as this} env c]
@@ -154,7 +153,7 @@
               (if (instance? janus.ast.Immediate form)
                 (succeed c (ast/->Immediate this))
                 (eval form env c)))]
-      (eval form env (rt/withcc c return next))))
+      (eval form env (rt/withcc c rt/return next))))
 
   janus.ast.Application
   (eval [form env c]
@@ -163,7 +162,7 @@
               (if (instance? janus.ast.Application form)
                 (succeed c (ast/->Immediate form))
                 (eval form env c)))]
-      (reduce form env (rt/withcc c return next)))))
+      (reduce form env (rt/withcc c rt/return next)))))
 
 (extend-protocol Applicable
   janus.ast.Immediate
@@ -179,7 +178,7 @@
               (if (instance? janus.ast.Application head)
                 (succeed c (ast/->Application head tail))
                 (apply head tail env c)))]
-      (reduce head env (rt/withcc c {return next}))))
+      (reduce head env (rt/withcc c rt/return next))))
 
   janus.ast.Mu
   (apply [head tail env c]
@@ -189,7 +188,7 @@
                 (if (nil? bind)
                   (succeed c (ast/->Application head tail))
                   (reduce (:body head) (merge env bind) c))))]
-      (reduce tail env (rt/withcc c :return next))))
+      (reduce tail env (rt/withcc c rt/return next))))
 
   janus.ast.PartialMu
   (apply [head tail env c]
@@ -208,4 +207,4 @@
               (succeed c (if (reduced? tail)
                            (clojure.core/apply (:f head) tail)
                            (ast/->Application head tail))))]
-      (reduce tail env (rt/withcc c return next)))))
+      (reduce tail env (rt/withcc c rt/return next)))))
