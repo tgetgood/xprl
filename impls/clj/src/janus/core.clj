@@ -109,6 +109,9 @@
 (defn r [form]
   (rt/pushngo! [i/eval form [] {rt/return #(reset! o %)}]))
 
+(defn ev [s]
+  (r (:result (r/read (assoc (r/string-reader s) :env @env)))))
+
 (t/set-min-level! :info)
 
 (loadfile env corexprl)
