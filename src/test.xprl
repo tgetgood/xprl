@@ -10,8 +10,12 @@
 ((fn [x y [z]] (+ x y z 1)) 2 3 [1]) 7
 (if (= 1 0) 1 2)                     2
 
-(def f (fn [x] 1))
+;; Here follow two different ways to quote a form to protect it from eval.
+;; I don't advocate doing this unless you have good reason.
+;; TODO: Add a special :ktest/skip value which disables the check.
+;; REVIEW: Isn't that just running the lhs for side effects? That wasn't
+;; supposed to be possible. Yet here we are.
+(def f (fn [x] 1))                   ((μ x ~x) . f)
+(def g (fn [x] (x x)))               ((μ [x] ~x) g)
 
-(def g (fn [x] (x x)))
-
-(g f) ; this will error that x is unbound. Why?
+(g f)                                1
