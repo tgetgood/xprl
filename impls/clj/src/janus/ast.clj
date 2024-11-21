@@ -16,12 +16,6 @@
 
 ;;;;; Base types
 
-(deftype True [])
-(deftype False [])
-
-(defonce t (True.))
-(defonce f (False.))
-
 (defrecord Keyword [names]
   Object
   (toString [_]

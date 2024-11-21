@@ -105,8 +105,8 @@
 
 (defn parse-bool [s]
   (cond
-    (= s "true")  ast/t
-    (= s "false") ast/f
+    (= s "true")  true
+    (= s "false") false
     :else         nil))
 
 (defn first-to-pass [s & fs]

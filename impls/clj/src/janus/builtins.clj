@@ -50,8 +50,8 @@
    ;; clojure?
    "select" (fn [p t f]
               (condp identical? p
-                ast/t t
-                ast/f f))})
+                true t
+                false f))})
 
 (def base-env
   (merge
