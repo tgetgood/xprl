@@ -112,10 +112,17 @@
 (defn ev [s]
   (r (:result (r/read (assoc (r/string-reader s) :env @env)))))
 
-(t/set-min-level! :info)
+
+(defn Y [] (ev "(fn [f]
+     ((fn [x] (f (x x))) (fn [x] (f (x x)))))"))
+
+(defn clear-filters! []
+  (t/set-min-level! :info)
+  (t/set-id-filter! "*")
+  (t/set-ns-filter! "*"))
+
+(defn ev-filters! []
+  (t/set-min-level! :trace)
+  (t/set-id-filter! #{:apply/* :eval/* :reduce/*}))
 
 (loadfile env corexprl)
-
-(t/set-min-level! :trace)
-(t/set-id-filter! #{:collector/* :ktest :apply/* :eval/* :reduce/*} )
-;; (t/set-ns-filter! "*")
