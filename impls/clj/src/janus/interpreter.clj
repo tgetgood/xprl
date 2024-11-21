@@ -40,7 +40,10 @@
                  (let [env' (conj env (clojure.core/reduce
                                        mark (peek env) (ast/bindings params)))
                        next (fn [cbody]
-                              (succeed c (ast/->Mu env' body params cbody)))]
+                              (succeed c (with-meta (ast/->Mu params cbody)
+                                           (assoc (meta args)
+                                                  :source body
+                                                  :dyn env'))))]
                    (event! :createμ/bound {:params params :body body :dyn env'} )
                    (reduce body env' (rt/withcc c rt/return next)))
                  (do
