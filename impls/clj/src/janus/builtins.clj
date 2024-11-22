@@ -16,7 +16,7 @@
         body (last form)]
     [name body (assoc (meta form) :doc doc :source body)]))
 
-(defn xprl-def [form env c]
+(defn xprl-def [form c]
   (let [[name body defmeta] (validate-def c form)]
     (letfn [(next [cform]
               (let [def  (ast/->TopLevel name cform defmeta)
@@ -26,7 +26,7 @@
                   (ast/keyword "env")    lex'
                   (ast/keyword "return") name)))]
       (t/event! :def/evalbody {:level :trace :data body})
-      (i/eval body env (rt/withcc c :return next)))))
+      (i/eval body (rt/withcc c :return next)))))
 
 (def macros
   {"def" xprl-def
