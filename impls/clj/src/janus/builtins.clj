@@ -20,10 +20,10 @@
   (let [[name body defmeta] (validate-def c form)]
     (letfn [(next [cform]
               (let [def  (ast/->TopLevel name cform defmeta)
-                    env' (assoc (:env (meta form)) name def)]
+                    lex' (assoc (:lex (meta form)) name def)]
                 (t/event! :def/top {:level :trace :data [name cform]})
                 (rt/emit c
-                  (ast/keyword "env")    env'
+                  (ast/keyword "env")    lex'
                   (ast/keyword "return") name)))]
       (t/event! :def/evalbody {:level :trace :data body})
       (i/eval body env (rt/withcc c :return next)))))

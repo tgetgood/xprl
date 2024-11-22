@@ -21,8 +21,7 @@
 
 (def forms (r/read-file corexprl) )
 
-(def t (r/read (assoc (r/file-reader corexprl) :env @env)))
-
+(def t (r/read (r/file-reader corexprl) @env))
 
 (def o (atom nil))
 
@@ -35,13 +34,13 @@
     ;;
     ;; TODO: Rewrite this as soon as statefuls are implemented.
     (letfn [(looper [reader]
-              (let [reader (r/read (assoc reader :env @env))
-                    result (:result reader)]
-                (util/form-log! :debug result "eval form")
-                (if (= :eof result)
+              (let [reader (r/read reader @env)
+                    form   (:form reader)]
+                (util/form-log! :debug form "eval form")
+                (if (= :eof form)
                   @env
                   (rt/pushngo!
-                   [i/eval result [] (rt/withcc conts
+                   [i/eval form [] (rt/withcc conts
                                        rt/return (fn [res]
                                                    (println res)
                                                    (looper reader)))]))))]
@@ -62,7 +61,7 @@
         c   {rt/env #(reset! env %) rt/error #(t/event! :ktest {:data % :msg
                                                                 "bbom" })}]
     (letfn [(comparator [r1 r2]
-              (let [[f1 f2] (map :result [r1 r2])]
+              (let [[f1 f2] (map :form [r1 r2])]
                 {rt/return
                  (fn [[v1 v2]]
                    (if (= v1 v2)
@@ -86,12 +85,12 @@
                          :data {:form form
                                 :meta (r/meta init-form)}}
                         message)
-                (tset! (:result init-form))))
+                (tset! (:form init-form))))
             (looper [r]
-              (let [r1      (r/read (assoc r :env @env))
-                    f1      (:result r1)
-                    r2      (r/read (assoc r1 :env @env))
-                    f2      (:result r2)
+              (let [r1      (r/read r @env)
+                    f1      (:form r1)
+                    r2      (r/read r1 @env)
+                    f2      (:form r2)
                     collect (rt/collector (comparator r1 r2) 2)]
                 (t/log! {:id   :ktest :level :debug
                          :data {:lhs r1 :rhs r2}}
@@ -110,7 +109,7 @@
   (rt/pushngo! [i/eval form [] {rt/return #(reset! o %)}]))
 
 (defn ev [s]
-  (r (:result (r/read (assoc (r/string-reader s) :env @env)))))
+  (r (:form (r/read (r/string-reader s) @env))))
 
 
 (defn Y [] (ev "(fn [f]

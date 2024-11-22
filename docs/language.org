@@ -235,6 +235,11 @@ This is largely an aid to my own memory so bear with me.
    I don't have direct attributions at hand, but there's more than a little
    Xanadu in the above.
 
+   That doesn't seem like the concern of a language per se. But when you
+   consider that telemetry and debugging are mostly about rebuilding context
+   that was thrown away for performance reasons, you'll see that it makes sense
+   to think about it at the language runtime level as well.
+
    This is very high level. I'll add the details of how it works in this
    language (environment?) as the prototypes evolve.
 ** Purity and the State (statefuls)

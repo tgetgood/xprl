@@ -2,6 +2,7 @@
   "This reader uses the weirdest monadish data pattern, but it seems to work."
   (:refer-clojure :exclude [read meta])
   (:require [clojure.string :as str]
+            [clojure.set :as s]
             [janus.ast :as ast])
   (:import [java.io PushbackReader StringReader File FileReader EOFException]))
 
@@ -42,7 +43,7 @@
   (.unread ^PushbackReader (:reader s) (int c))
   (update s :col dec))
 
-(declare read)
+(declare read*)
 
 (def delimiters
   #{\( \[ \{ \;})
@@ -125,10 +126,10 @@
       (ast/symbol s))))
 
 (defn readimmediate [r]
-  (update (read r) :result ast/->Immediate))
+  (update (read* r) :result ast/->Immediate))
 
 (defn read-all [r]
-  (let [next (read r)]
+  (let [next (read* r)]
     (if (or (= :close (:result next)) (= :eof (:result next)))
       (assoc next :result (:result r))
       (recur (assoc next :result (conj (:result r) (:result next)))))))
@@ -169,7 +170,7 @@
     (assoc next :result m)))
 
 (defn readdiscard [r]
-  (dissoc (read r) :result))
+  (dissoc (read* r) :result))
 
 (defn readlinecomment [r]
   (let [next (read1 r)]
@@ -249,11 +250,13 @@
       (-> next (assoc :result :close) (update :until rest))
 
       (contains? dispatch c) ((get dispatch c) next)
-      :else                  (let [next  (readtoken (unread1 next c))
-                                   token (interpret next)]
-                               (assoc next :result token)))))
 
-(defn read [r]
+      :else (let [next  (readtoken (unread1 next c))
+                  token (interpret next)]
+              (assoc next :result token)))))
+
+(defn read*
+  [r]
   (let [w (consumewhitespace (assoc r :token ""))
         m (meta w)
         o (readinner w)]
@@ -262,10 +265,18 @@
       (instance? clojure.lang.IObj (:result o)) (update o :result with-meta m)
       :else                                     o)))
 
-(defn read-file [fname]
+(defn read [reader env]
+  (s/rename-keys (read* (assoc reader :lex env :dyn {})) {:result :form}))
+
+(defn read-file
+  "Reads all forms from file `fname` and returns then in a vector.
+  Note that this does not set the context and so the returned forms cannot be
+  evaluated if they contain any unbound symbols.
+  Only really useful for testing the reader."
+  [fname]
   (loop [results []
          reader  (file-reader fname)]
-    (let [next (read reader)
+    (let [next (read* reader)
           result  (:result next)]
       (if (= :eof result)
         results

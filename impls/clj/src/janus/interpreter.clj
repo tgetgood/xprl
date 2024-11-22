@@ -135,13 +135,13 @@
 
   janus.ast.Symbol
   (eval [this env c]
-    (event! :eval/Symbol {:symbol this :dyn env :lex (-> this meta :env keys)})
+    (event! :eval/Symbol {:symbol this :dyn env :lex (-> this meta :lex keys)})
     (if-let [v (get (peek env) this)]
       (if (= v marker)
         (succeed c (ast/->Immediate this))
         (reduce v (pop env) c))
       ;; What carries its meaning on its back?
-      (if-let [v (-> this meta :env (get this))]
+      (if-let [v (-> this meta :lex (get this))]
         (reduce v env c)
         (fatal-error! c this "unbound symbol"))))
 
@@ -203,7 +203,7 @@
 
   janus.ast.PrimitiveMacro
   (apply [head tail env c]
-    (event! :apply/Macro {:data [head tail (dissoc (meta tail) :env)] :dyn env})
+    (event! :apply/Macro {:data [head tail (dissoc (meta tail) :lex)] :dyn env})
     ((:f head) tail env c))
 
   janus.ast.PrimitiveFunction
