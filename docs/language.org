@@ -172,6 +172,71 @@ This is largely an aid to my own memory so bear with me.
 * Outline
   Sections to be written.
 ** History, Environment, and Context
+   I gave a [[https://www.youtube.com/watch?v=Kgw9fblSOx4][talk]] on some of these ideas a long time ago. My opinions on the
+   benefits haven't changed, but I've found better ways to implement them.
+
+   You can only have unique permalinks without global concensus if:
+
+   1) You and the link author share some context
+      At the very least you have to look in the right place.
+   2) The links can grow in size arbitrarily
+      Fixed size hashes will eventually lead to collision.
+   3) Divergences can be converged without consulting either author
+      If two people who've never heard of each other publish under the same hash
+      at roughly the same time, anyone who knows of both must be able to
+      "decorrupt" the hashmap by themselves in a way that anyone else with whom
+      they communicate can understand and replicate. The original authors might
+      be lightyears away so they cannot be relied upon. Even if they're right
+      here, they can't be relied upon to agree.
+
+   None of those criteria have anything to do with hashes.
+
+   Hashes are useful for their concision and cease to be beneficial when you
+   start to need sha512 to guarantee uniqueness.
+
+   Using large hashes makes microreferences infeasible for the same reason that
+   credit card fees make microtransactions infeasible.
+
+   It turns out that if you keep a history of edits going all the way back to
+   the beginning of the web, then you and the person you're sending to (or
+   receiving from) can always go back to a shared context and regrow from there.
+
+   In general you don't even need to go back very far if you communicate with
+   this other person frequently.
+
+   So my approach is to never throw away history. Spool it out to disk or other
+   durable storage if you don't need it in ram (and you don't, mostly) but don't
+   throw it away.
+
+   Some sort of compression will required eventually. Kafka has a decent model
+   for this. But it's critical that we only squash linear sequences and don't
+   remove branching from the network, otherwise we'll lose recombination down
+   the line.
+
+   There's utility in keeping the history of every keystroke in your editor.
+   That utility becomes a liability when publishing. The published history of
+   your work should be a sample from the tree of edits you've made. Meta data
+   might need to change, but the structure will have to be preserved.
+
+   You ought to keep your superset of your published work for posterity (or
+   yourself). It's surprising what you can learn about your own thought process
+   by watching your keystrokes played back to you in real time.
+
+   Archives and anthologies can in turn be coarser samplings of published works.
+   Again the branching structure needs to be preserved, but details can be
+   thrown away where they're not of interest.
+
+   Mathematically these nested compressions form a fractal. Fractals make for
+   natural compression algorithms, and the readers of your work will only ever
+   need to download a tiny fraction of changes you've made to a blank page over
+   your writing carreer.
+
+   If it isn't obvious, my thinking was skewed by Ted Nelson's work decades ago.
+   I don't have direct attributions at hand, but there's more than a little
+   Xanadu in the above.
+
+   This is very high level. I'll add the details of how it works in this
+   language (environment?) as the prototypes evolve.
 ** Purity and the State (statefuls)
 ** Transduction
 ** Message Passing
@@ -198,21 +263,84 @@ This is largely an aid to my own memory so bear with me.
 
    Hardly a trivial problem, but there's real opportunity here.
 ** Work stealing
+   The work stealing implementation is based on Cilk, but immutability
+   simplifies a lot of things.
+
+   When a μ emits messages, they are pushed into the work stack and control
+   returns to the main loop. The main loop takes the top item off the stack and
+   runs it. If the work stack is empty, then it attempts to steal work from
+   another worker.
+
+   The thief randomly shuffles the list of other known workers and tries to
+   steal work from each of them until successful.
+
+   When work is stolen, it is stolen from the *bottom* of the (upwards growing)
+   stack. This is based on the reasoning that things at the bottom of the stack
+   are closer to the root of the computation, will represent more work, and thus
+   will minimise steals.
+
+   Unlike cilk, we only need one stack. We don't need to worry about workers
+   stepping on each other's caches because everything is immutable, so you can't
+   invalidate the cache. Once work is stolen, it and its decendents will be
+   executed by the thief unless they are stolen in turn.
+
+   This should help with distribution, but stealing will need to be a bit more
+   sophisticated to minimise data transfer over the network.
+
+   One other note: as currently implemented, evaluating a vector of length N
+   results in N messages being sent to eval, which can lead to each element
+   being evaluated in parallel. Thus we get the auto parallelism of Multilisp
+   — where (f x y z) will eval x, y, and z in parallel before applying them to f
+   — without the complexity that comes with leaving it up to the programmer to
+   ensure order of evaluation doesn't matter.
+
+   We can also get pipeline parallelism automatically in long transduction
+   chains, but that's a story for somewhere else.
 ** Offloading work to GPU
    Most consumer machines have gpus nowadays and a lot of streaming tasks map
    natuarally to them — though many others don't.
 
    Figuring out which can only be done in general at runtime.
+
+   The plan is to use Vulkan instead of compute centred apis as is normally
+   done, because there are vulkan drivers for basically every graphics chip out
+   there. Plus you have a lot more flexibility than with cuda or opencl.
+
+   Spirv takes a lot of inspiration from llvm, so code generation doesn't
+   require going up to C and back down again as it does with glsl. This is only
+   a theoretical benefit and I reserve the right to revile my present self at
+   some future date.
+
+   Plus there are a lot of cool things you can do with mesh shaders and ray
+   tracers. They aren't just for graphics any more than rasterisers are. Maybe a
+   little bit more.
 ** Compiler
 ** FFI / Distributed Execution
    These aren't normally the same thing, but they both boil down to talking to
    other computers, so their solutions largely overlap.
 * Comparisons
+  I don't know how useful these are. Mostly thinking out loud.
 ** FP
    Immutability? Check. Big check.
 
+   Types? Yes for the machine, no for the programmer. I'm thinking of putting in
+   a clos/julia style polymorphism mechanism, but then I'd have to start
+   worrying a lot more about types. I'm torn.
+
+   Types in currently trendy languages seem to be all about being more static
+   and preferring syntax over semantics. Types are about *shape*, not *meaning*
+   and as such they're the same as text in a source file and in the runtime.
+   That's a very powerful thing, but I have a generalisation of homoiconicity
+   which strikes me as a lot more powerful. And more fun to use.
+
    Functions? Not really. Mathematical functions can be implemented easily, but
    they're a special case of a more general construct.
+
+   The basic operator of the language, μ, takes one argument (receives one
+   message) and sends zero or more messages on each of zero or more channels.
+   This is based on Hickey's transduction and on Bird's work on Squiggol, but
+   with with convergence and divergence of streams which makes it more powerful
+   and more complicated. I still have an algebra though.
 ** FBP
    I had never heard of FBP until quite recently. Reading Morrison's book (2010)
    makes it clear that a lot of my ideas are not new and have been in use —
@@ -305,16 +433,12 @@ This is largely an aid to my own memory so bear with me.
     fascilitate the composition of systems.
 
     Somewhat hyperbolically, I want a language whose todomvc is kubernetes.
-** Structured Programming
-   Here's a fun one: is this a structured language?
 
-   Well, the fundamental unit of control is longjmp, so that might be a no.
-
-   Arbitrary gotos aren't possible; there's still quite a bit of structure. It's
-   more like an actor system or coroutines where you can send control to any
-   agent you know how to reach.
-
-   Loops and branches are accomplished by selecting the continuation of the
-   current computation.
-
-   This is a silly digression.
+* References
+  Some reading that ~might~ help you understand this project:
+  - The Act of Creation — Arthur Koestler
+  - Steps to an Ecology of Mind — Gregory Bateson
+  - Seven Clues to the Origin of Life — A.G. Cairns-Smith
+  - Do You Want to Enter the Area? — Charles Bukowski
+    If you can't find that, try the posthumously watered down "So You Want to be
+    a Writer?".

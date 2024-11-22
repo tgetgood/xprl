@@ -1,0 +1,44 @@
+* Log
+** [2024-11-21 Thu] Keep all the data
+   When I started out writing the reader I surprised myself a little bit with
+   the accretion pattern where nothing retured a result of its own, but rather
+   added new stuff to its input (a map).
+
+   At some point in the reader I "fixed" that and made the result a first class
+   thing, packing all the rest in as metadata.
+
+   I now think that was a mistake.
+
+   The read in form is only one aspect of the reader's result. The source file
+   and location are others. In this language the lexical environment of the
+   thing being read is another.
+
+   And this philosphy can be carried forward into execution. Evaluation doesn't
+   return a result, it just adds another step to the chain. I spent a lot of
+   time inserting telemetry to be able to see the steps of the interpreter to
+   help debug. But why isn't every step that led to a current form accessible
+   directly from that form by walking a chain of history links?
+
+   I hope that this approach will also simplify the handling of dynamic
+   environment. The complexity of tracking the bindings of nested μs has been a
+   pain all through the julia prototypes and still is now. I need a simple way
+   to think about and handle it.
+
+   We don't pass the lexical environment through the interpreter because it's
+   part of the expression here. To change the lexical environment of a form is
+   to change the form itself.
+
+   The dynamic environment is different. To pass different arguments to a μ
+   is expected. Of course passing arguments produces a new thing and different
+   arguments produce different new things, so maybe the distinction is weaker
+   than I had been thinking.
+
+   The dynamic environment of a form was created by passing arguments to an
+   ancestor, so by now it is essentially part of the lexical environment.
+
+   But then what about the continuations? I certainly can pass them around as
+   part of the form being evaluated. That form can change them by calling the
+   builtin mechanisms.
+
+   I have no idea if that will help anything or make things hopelessly
+   complicated, but I guess I'll find out.

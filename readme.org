@@ -17,6 +17,13 @@
 
   Instead, let's focus on a set of things that I don't think should be as hard
   as they are in practice, and a set of assumptions that need to be questioned.
+* Implementations
+  The julia implementation is the original prototype, but is no longer being
+  updated. I'll keep it around as a reference for awhile yet.
+
+  The clojure implementation is far from complete, but the act of reimplementing
+  it in a different paradigm has forced me to clarify a number of things and the
+  clojure implementation is better in most ways.
 * Usage
   This is still very early. There's no editor support, basically no tooling. All
   we have is a some data structures, an interpreter, and a repl. To run the repl:
