@@ -27,7 +27,11 @@
 
 (defn loadfile [env fname]
   (let [conts {rt/env    #(reset! env %)
-               rt/return #(throw (RuntimeException. "boom!"))}]
+               rt/return #(throw (RuntimeException. "boom!"))
+               rt/error  (fn [{:keys [form message]}]
+                           (t/log! {:id   :fileloader :level :error
+                                    :data form}
+                                   message))}]
     ;; HACK: This repl will not work if we enable multiple executors and work
     ;; stealing. This is because it depends on the order in which the outputs of
     ;; `xprl-def` are executed.
