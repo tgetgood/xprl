@@ -124,12 +124,7 @@
   (reduced? [x] (and (reduced? (:head x)) (reduced? (:tail x))))
   (reduce [x c]
     (event! :reduce/Pair {:data x})
-    (succeed c x))
-
-  janus.ast.TopLevel
-  (reduced? [x] (reduced? (:form x)))
-  (reduce [{:keys [form]} c]
-    (succeed c form)))
+    (succeed c x)))
 
 (extend-protocol Evaluable
   Object
@@ -144,7 +139,8 @@
 
   janus.ast.Symbol
   (eval [this c]
-    (event! :eval/Symbol {:symbol this :lex (-> this meta :lex keys)})
+    (event! :eval/Symbol {:symbol this :lex (-> this meta :lex keys)
+                          :dyn (:dyn (meta this))} )
     (if-let [v (get (:dyn (meta this)) this)]
       (if (instance? Unbound v)
         (succeed c (ast/->Immediate this))
@@ -179,7 +175,7 @@
 
 (extend-protocol Applicable
   janus.ast.Immediate
-  ;; Immediates cannot be applied. This is a delay tactic.
+  ;; Immediates cannot be applied yet. This is a delay tactic.
   (apply [head tail c]
     (event! :apply/Immediate {:data [head tail]})
     (succeed c (ast/->Application head tail)))

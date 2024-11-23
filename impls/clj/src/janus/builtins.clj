@@ -14,12 +14,14 @@
   (let [name (first form)
         doc  (if (= 3 (count form)) (second form) "")
         body (last form)]
-    [name body (assoc (meta form) :doc doc :source body)]))
+    [name body (assoc (meta form) :doc doc :source body
+                      ;; FIXME: namespaces
+                      :bound-to {:name name :namespace "???"})]))
 
 (defn xprl-def [form c]
   (let [[name body defmeta] (validate-def c form)]
     (letfn [(next [cform]
-              (let [def  (ast/->TopLevel name cform defmeta)
+              (let [def  (with-meta cform defmeta)
                     lex' (assoc (:lex (meta form)) name def)]
                 (t/event! :def/top {:level :trace :data [name cform]})
                 (rt/emit c

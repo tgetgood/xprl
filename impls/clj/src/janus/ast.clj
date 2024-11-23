@@ -214,16 +214,6 @@
    :prefix "#pFn[" :suffix "]"
    (pp/simple-dispatch f)))
 
-(defrecord TopLevel [name form meta]
-  Object
-  (toString [_]
-    (str form)))
-
-(ps TopLevel)
-
-(defmethod pp/simple-dispatch TopLevel [{:keys [form]}]
-  (pp/simple-dispatch form))
-
 ;;;;; Destructuring
 
 (defprotocol Destructurable
