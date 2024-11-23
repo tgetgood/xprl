@@ -126,6 +126,6 @@
 
 (defn ev-filters! []
   (t/set-min-level! :trace)
-  (t/set-id-filter! #{:apply/* :eval/* :reduce/*}))
+  (t/set-id-filter! #{:apply/* :eval/* :reduce/* :fileloader :ktest}))
 
 (loadfile env corexprl)
