@@ -134,6 +134,10 @@
   (toString [_]
     (str "~" form)))
 
+(defn immediate [form]
+  (with-meta (->Immediate form)
+    (meta form)))
+
 (ps Immediate)
 
 (defmethod pp/simple-dispatch Immediate [i]
@@ -145,6 +149,9 @@
   Object
   (toString [_]
     (str "#" (.toString (->Pair head tail)))))
+
+(defn application [head tail]
+  (with-meta (->Application head tail) (meta head)))
 
 (ps Application)
 

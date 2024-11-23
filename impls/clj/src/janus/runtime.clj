@@ -83,10 +83,11 @@
 ;;;;; Emission
 
 (defn sanitise [k]
-  (cond
-    (ast/keyword? k) k
-    (keyword k)      (ast/keyword (name k))
-    :else            (throw (RuntimeException. "invalid continuation key."))))
+  (when-not (ast/keyword? k)
+    (t/log! {:level :error :data [(type k) k]}
+            "Only xprl keywords can be used in cc maps.")
+    (throw (RuntimeException. "")))
+  k)
 
 (defn sanitise-keys [m]
   (into (empty m) (map (fn [[k v]] [(sanitise k) v])) m))
@@ -96,13 +97,16 @@
     (t/log! :warn ["message sent on unbound channel:" c])))
 
 (defn parse-emission [c [k v]]
-  (let [k (if (keyword? k) (ast/keyword (name k)) k)]
-    (t/log! :debug ["Emission:" k (get c k) v])
-    (cond
-      (ast/keyword? k) [(get c k unbound-channel) v]
-      ;; TODO: What kind of function?
-      (fn? k)          [k v]
-      :else            (throw (RuntimeException.
+  (t/log! :debug ["Emission:" k (get c k) v])
+  (cond
+    (ast/keyword? k) [(get c k unbound-channel) v]
+    ;; TODO: What kind of function?
+    (fn? k)          [k v]
+    :else            (do
+                       (t/log! {:level :error
+                                :data [(type k) k]}
+                               "Only fns and xprl keywords can be channels.")
+                       (throw (RuntimeException.
                                (str k " is not a valid channel."))))))
 
 (defn emit
@@ -153,7 +157,7 @@
   (when (= 0 (:n @c))
     (let [{:keys [next elements unset]} @c]
       (t/event! :collector/join {:level :trace :data elements})
-      (emit next :return elements))))
+      (emit next return elements))))
 
 ;;;;; dev entry
 

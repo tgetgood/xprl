@@ -14,9 +14,7 @@
   (let [name (first form)
         doc  (if (= 3 (count form)) (second form) "")
         body (last form)]
-    [name body (assoc (meta form) :doc doc :source body
-                      ;; FIXME: namespaces
-                      :bound-to {:name name :namespace "???"})]))
+    [name body (assoc (meta form) :doc doc :source body)]))
 
 (defn xprl-def [form c]
   (let [[name body defmeta] (validate-def c form)]
@@ -28,7 +26,7 @@
                   (ast/keyword "env")    lex'
                   (ast/keyword "return") name)))]
       (t/event! :def/evalbody {:level :trace :data body})
-      (i/eval body (rt/withcc c :return next)))))
+      (i/eval body (rt/withcc c rt/return next)))))
 
 (def macros
   {"def" xprl-def
