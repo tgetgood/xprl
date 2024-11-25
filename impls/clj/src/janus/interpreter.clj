@@ -60,22 +60,22 @@
 (defn marker []
   (->Unbound (gensym)))
 
-(defprotocol P
-  (w [form mask]))
-
-(defn walker [form mask]
-  (let [m (update (meta form) :dyn merge mask)] (with-meta form m)))
-
-(defmacro extend-it [types]
-  `(do (extend Object P {:w (fn [form# _#] form#)})
-
-       ~@(map (fn [type#] `(extend ~type# P {:w walker})) types)))
-
-(extend-it [janus.ast.Symbol janus.ast.Pair janus.ast.Application
-            janus.ast.Mu janus.ast.PartialMu janus.ast.Immediate])
+(defmacro on-ast-types [form body]
+  `(condp instance? ~form
+     ~@(into [] (comp (map (fn [t#] `[~t# ~body])) cat)
+             [janus.ast.Symbol janus.ast.Immediate janus.ast.Application
+              janus.ast.Pair janus.ast.Mu janus.ast.PartialMu])
+     ~form))
 
 (defn pushbind [mask tree]
-  (walk/postwalk (fn [form] (w form mask)) tree))
+  (walk/postwalk
+   (fn [form]
+     (on-ast-types form
+       (let [m (update (meta form) :dyn merge mask)]
+         (event! ::pushbind {:form form :old (:dyn (meta form))
+                             :new (:dyn m)})
+         (with-meta form m))))
+   tree))
 
 (defn unbind [syms marker tree]
   (pushbind (into {} (map (fn [s] [s marker])) syms) tree))
