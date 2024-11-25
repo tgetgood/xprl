@@ -19,7 +19,7 @@
 (defn xprl-def [form c]
   (let [[name body defmeta] (validate-def c form)]
     (letfn [(next [cform]
-              (let [def  (with-meta cform defmeta)
+              (let [def  (with-meta cform (merge (meta cform) defmeta))
                     lex' (assoc (:lex (meta form)) name def)]
                 (t/event! :def/top {:level :trace :data [name cform]})
                 (rt/emit c
@@ -48,11 +48,16 @@
 
    ;; REVIEW: Is there a better way to do data (non-branching) selection in
    ;; clojure?
+   ;; REVIEW: The smalltalk style if can be implemented in xprl without any
+   ;; builtins. That's very elegant, but does it have other advantages?
+   ;; The downside is that I would have to implement all of the boolean builtins
+   ;; myself instead of just calling them.
    "select" (fn [p t f]
               (condp identical? p
                 true t
                 false f))})
 
+;; TODO: Set metadata on primitives
 (def base-env
   (merge
    (into {} (map (fn [[k v]] [(ast/symbol k) (ast/->PrimitiveMacro v)])) macros)

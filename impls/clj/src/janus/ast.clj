@@ -151,7 +151,8 @@
     (str "#" (.toString (->Pair head tail)))))
 
 (defn application [head tail]
-  (with-meta (->Application head tail) (meta head)))
+  (with-meta (->Application head tail)
+    (select-keys (meta head) [:file :string :line :col])))
 
 (ps Application)
 
@@ -203,8 +204,8 @@
 
 (defmethod pp/simple-dispatch PrimitiveFunction [{:keys [f]}]
   (pp/pprint-logical-block
-   :prefix "#pMac[" :suffix "]"
-   (pp/simple-dispatch f)))
+   :prefix "#pFn[" :suffix "]"
+   (pp/write-out f)))
 
 (defrecord PrimitiveMacro [f]
   Object
@@ -218,8 +219,8 @@
 
 (defmethod pp/simple-dispatch PrimitiveMacro [{:keys [f]}]
   (pp/pprint-logical-block
-   :prefix "#pFn[" :suffix "]"
-   (pp/simple-dispatch f)))
+   :prefix "#pMac[" :suffix "]"
+   (pp/write-out f)))
 
 ;;;;; Destructuring
 

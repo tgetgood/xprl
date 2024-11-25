@@ -19,7 +19,9 @@
 (def s
   (r/string-reader "[0x4e [{:asd 34} [#{:sd 34}]] \n;comment\n #_(f x y [23]) ~(bob x [1 2 3])]"))
 
-(def forms (r/read-file corexprl) )
+(def dyn {})
+
+(def forms (r/read-file corexprl))
 
 (def t (r/read (r/file-reader corexprl) @env))
 
@@ -62,8 +64,8 @@
   [env fname]
   ;; Don't modify outside environment.
   (let [env (atom (if (instance? clojure.lang.IDeref env) @env env))
-        c   {rt/env #(reset! env %) rt/error #(t/event! :ktest {:data % :msg
-                                                                "bbom" })}]
+        c   {rt/env #(reset! env %) rt/error #(t/event! :ktest {:data %
+                                                                :msg  "bbom"})}]
     (letfn [(comparator [r1 r2]
               (let [[f1 f2] (map :form [r1 r2])]
                 {rt/return
@@ -119,13 +121,16 @@
 (defn Y [] (ev "(fn [f]
      ((fn [x] (f (x x))) (fn [x] (f (x x)))))"))
 
+(defn t []
+  (ev "(fn [x] (+ x 1))"))
+
 (defn clear-filters! []
   (t/set-min-level! :info)
+  (t/set-min-level! :event :info)
   (t/set-id-filter! "*")
   (t/set-ns-filter! "*"))
 
 (defn ev-filters! []
-  (t/set-min-level! :trace)
-  (t/set-id-filter! #{:apply* :eval* :reduce* :fileloader :ktest}))
+  (t/set-min-level! :janus.interpreter/trace :trace))
 
 (loadfile env corexprl)

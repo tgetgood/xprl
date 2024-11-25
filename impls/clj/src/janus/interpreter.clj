@@ -25,23 +25,37 @@
     (with-meta o (assoc (meta o) :history/operation op :history/value prev))
     o))
 
+(defn with-history
+  {:style/indent 1}
+  [o & kvs]
+  (if (instance? clojure.lang.IObj o)
+    (with-meta o
+      (assoc (meta o) :history (clojure.core/apply hash-map kvs)))
+    o))
+
 (defn dyn-form
   [x]
   {:form x :dyn (-> x meta :dyn)})
 
 (defn event!
   [id m]
-  (t/event! id {:level :trace :data m}))
+  (t/event! id {:level :trace :data m :kind ::trace}))
 
 (defn succeed [c v]
   (rt/emit c rt/return v))
 
-(defrecord Unbound [mark])
+(defrecord Unbound [mark]
+  Object
+  (toString [_]
+    (str "#unbound[" mark "]") ))
+
+(defmethod print-method Unbound [this ^java.io.Writer w]
+  (.write w (str this)))
 
 (defmethod pp/simple-dispatch Unbound [{:keys [mark]}]
-  (pp/write-out "unbound[")
-  (pp/simple-dispatch mark)
-  (pp/write-out "]"))
+  (pp/pprint-logical-block
+   {:prefix "#unbound[" :suffix "]"}
+   (pp/write-out mark)))
 
 (defn marker []
   (->Unbound (gensym)))
@@ -60,7 +74,6 @@
 
 (defn createμ [args c]
   (let [[params body] args
-
         next (fn [params]
                (if (ast/binding? params)
                  (let [m     (marker)
@@ -72,35 +85,37 @@
                                                    :history/value args
                                                    :source body
                                                    :marker m))))]
-                   (event! :createμ/bound {:params params :body body} )
+                   (event! ::createμ.bound {:params params :body body})
                    (reduce body' (rt/withcc c rt/return next)))
                  (do
-                   (event! :createμ/unbound {:params params :body body})
+                   (event! ::createμ.unbound {:params params :body body})
                    (succeed c (with-meta (ast/->PartialMu params body)
                                 (assoc (meta args)
                                        :history/operation :createμ
                                        :history/value args))))))]
+    (event! ::createμ {:params (dyn-form params) :body (dyn-form body)})
     (reduce params (rt/withcc c rt/return next))))
 
 (extend-protocol Reductive
   Object
   (reduced? [_] true)
   (reduce [o c]
-    (event! :reduce/fallthrough (dyn-form o))
-    (succeed c (tag-meta o :reduce/fallthrough ::unchanged)))
+    (event! ::reduce.fallthrough (dyn-form o))
+    (succeed c (with-history o
+                 ::reduced-from :self)))
 
   clojure.lang.APersistentVector
   (reduced? [x] (every? reduced? x))
   (reduce [this c]
-    (event! :reduce/vector {:data this})
-    (let [next (fn [v] (succeed c (tag-meta v :reduce/vector this)))
+    (event! ::reduce.vector (dyn-form this))
+    (let [next (fn [v] (succeed c (with-meta v
+                                    (assoc (meta this) ::reduced-from this))))
           collector (rt/collector (rt/withcc c rt/return next) (count this))
           runner (fn [[i x]]
                    (reduce
                     x
                     (rt/withcc c rt/return (fn [v] (rt/receive collector i v)))))
           tasks (interleave (repeat runner) (map-indexed vector this))]
-      (event! :reduce.vector/forks tasks)
       (clojure.core/apply rt/emit c tasks)))
 
   clojure.lang.AMapEntry
@@ -119,33 +134,34 @@
   janus.ast.Immediate
   (reduced? [_] false)
   (reduce [x c]
-    (event! :reduce/Immediate (dyn-form x))
-    (eval (tag-meta (:form x) :reduce/Immediate x) c))
+    (event! ::reduce.Immediate (dyn-form x))
+    (eval (with-history (:form x) ::reduced-from x)
+          c))
 
   janus.ast.Application
   (reduced? [_] false)
   (reduce [x c]
-    (event! :reduce/Application (dyn-form x))
-    (reduce (tag-meta (:head x) :reduce/Application x)
+    (event! ::reduce.Application x)
+    (reduce (with-history (:head x) ::reduced-from x)
             (rt/withcc c rt/return #(apply % (:tail x) c))))
 
   janus.ast.PartialMu
   (reduced? [_] false)
   (reduce [x c]
-    (event! :reduce/PartialMu (dyn-form x))
-    (createμ [(:params x) (:body x)] c))
+    (event! ::reduce.PartialMu (dyn-form x))
+    (createμ (with-meta [(:params x) (:body x)] (meta x)) c))
 
   janus.ast.Mu
   (reduced? [x] (reduced? (:body x)))
   (reduce [x c]
-    (event! :reduce/Mu (dyn-form x))
-    (createμ [(:params x) (:body x)] c))
+    (event! ::reduce.Mu (dyn-form x))
+    (createμ (with-meta [(:params x) (:body x)] (meta x)) c))
 
   janus.ast.Pair
   (reduced? [x] (and (reduced? (:head x)) (reduced? (:tail x))))
   (reduce [x c]
-    (event! :reduce/Pair (dyn-form x))
-    (succeed c (tag-meta x :reduce/Pair ::unchanged))))
+    (event! ::reduce.Pair (dyn-form x))
+    (succeed c (tag-meta x ::reduce.Pair ::unchanged))))
 
 (extend-protocol Evaluable
   Object
@@ -160,21 +176,30 @@
 
   janus.ast.Symbol
   (eval [this c]
-    (event! :eval/Symbol {:symbol this :lex (-> this meta :lex keys)
-                          :dyn (:dyn (meta this))} )
     (if-let [v (get (:dyn (meta this)) this)]
       (if (instance? Unbound v)
-        (succeed c (ast/immediate this))
-        (reduce (tag-meta v :eval.Symbol/dynamic this) c))
+        (do
+          (event! ::eval.symbol.unbound (dyn-form this))
+          (succeed c (ast/immediate this)))
+        (do
+          (event! ::eval.symbol.dynamic (dyn-form this))
+          (reduce (with-meta v
+                    (update (meta v) :dyn #(merge (-> this meta :dyn) %)))
+                  c)))
       ;; What has two backs and carries its meaning on each?
       (if-let [v (-> this meta :lex (get this))]
-        (reduce (tag-meta v :eval.Symbol/lexical this) c)
+        (do
+          (event! ::eval.symbol.lexical
+                  {:form this :lex (-> this meta :lex (select-keys [this]))})
+          (reduce (tag-meta v :eval.Symbol/lexical this) c))
         (fatal-error! c this "unbound symbol"))))
 
   janus.ast.Pair
   (eval [{:keys [head tail] :as this} c]
-    (event! :eval/Pair {:data this})
-    (reduce (tag-meta (ast/application (ast/immediate head) tail) :eval/Pair this) c))
+    (event! :eval/Pair (dyn-form this))
+    (reduce (tag-meta (ast/application (ast/immediate head) tail)
+                      :eval/Pair this)
+            c))
 
   janus.ast.Immediate
   (eval [{:keys [form] :as this} c]
@@ -215,10 +240,11 @@
   (apply [head tail c]
     (event! :apply/Mu {:head (dyn-form head) :tail (dyn-form tail)})
     (letfn [(next [tail']
-              (let [bind (ast/destructure (:params head) tail')]
+              (let [bind (ast/destructure (:params head) tail')
+                    app  (ast/application head tail')]
                 (event! :apply.Mu/destructuring bind)
                 (if (nil? bind)
-                  (succeed c (ast/application head tail'))
+                  (succeed c (tag-meta app :apply.Mu/failure tail))
                   ;; FIXME: Make sure the bindings have the correct Unbound so
                   ;; that we don't set lexically shadowed values.
                   (let [body (pushbind bind (:body head))]
@@ -227,21 +253,30 @@
 
   janus.ast.PartialMu
   (apply [head tail c]
-    (event! :apply/PartialMu {:data [head tail]})
-    (succeed c (ast/application head tail)))
+    (event! :apply/PartialMu {:head (dyn-form head) :tail (dyn-form tail)})
+    (letfn [(next [head']
+              (condp instance? head'
+                janus.ast.PartialMu (succeed c (ast/application head' tail))
+                janus.ast.Mu (apply head' tail c)))]
+      (reduce head (rt/withcc c rt/return next))))
 
   janus.ast.PrimitiveMacro
   (apply [head tail c]
     (event! :apply/Macro [head tail (dissoc (meta tail) :lex)])
-    ((:f head) tail c))
+    (letfn [(next [v]
+              (succeed c (tag-meta v :apply/PrimitiveMacro
+                                   (ast/application head tail))))]
+      ((:f head) tail (rt/withcc c rt/return next))))
 
   janus.ast.PrimitiveFunction
   (apply [head tail c]
     (event! :apply/Fn {:data [head tail]})
     (letfn [(next [tail]
-              (succeed c (if (reduced? tail)
-                           (clojure.core/apply (:f head) tail)
-                           (ast/application head tail))))]
+              (let [v (if (reduced? tail)
+                        (clojure.core/apply (:f head) tail)
+                        (ast/application head tail))]
+                (succeed c (tag-meta v :apply/PrimitiveFn
+                                     (ast/application head tail)))))]
       (reduce tail (rt/withcc c rt/return next)))))
 
 ;; I think that I want what I'm calling the dynamic environment (thinks passed
