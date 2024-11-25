@@ -60,13 +60,22 @@
 (defn marker []
   (->Unbound (gensym)))
 
+(defprotocol P
+  (w [form mask]))
+
+(defn walker [form mask]
+  (let [m (update (meta form) :dyn merge mask)] (with-meta form m)))
+
+(defmacro extend-it [types]
+  `(do (extend Object P {:w (fn [form# _#] form#)})
+
+       ~@(map (fn [type#] `(extend ~type# P {:w walker})) types)))
+
+(extend-it [janus.ast.Symbol janus.ast.Pair janus.ast.Application
+            janus.ast.Mu janus.ast.PartialMu janus.ast.Immediate])
+
 (defn pushbind [mask tree]
-  (walk/postwalk (fn [form]
-                   (if (instance? clojure.lang.IObj form)
-                     (with-meta form
-                       (update (meta form) :dyn merge mask))
-                     form))
-                 tree))
+  (walk/postwalk (fn [form] (w form mask)) tree))
 
 (defn unbind [syms marker tree]
   (pushbind (into {} (map (fn [s] [s marker])) syms) tree))
@@ -140,19 +149,22 @@
 
   janus.ast.Application
   (reduced? [_] false)
-  (reduce [x c]
-    (event! ::reduce.Application x)
-    (reduce (with-history (:head x) ::reduced-from x)
-            (rt/withcc c rt/return #(apply % (:tail x) c))))
+  (reduce [{:keys [head tail] :as x} c]
+    (event! ::reduce.Application {:head (dyn-form head) :tail (dyn-form tail)})
+    (reduce (with-history head ::reduced-from x)
+            (rt/withcc c rt/return #(apply % tail c))))
 
   janus.ast.PartialMu
-  (reduced? [_] false)
+  ;; REVIEW: Is a partial μ a value or a thing waiting for more information?
+  ;; I'm starting to think it should be treated as a value.
+  (reduced? [_] true)
   (reduce [x c]
     (event! ::reduce.PartialMu (dyn-form x))
     (createμ (with-meta [(:params x) (:body x)] (meta x)) c))
 
   janus.ast.Mu
-  (reduced? [x] (reduced? (:body x)))
+  ;; A μ is a value
+  (reduced? [_] true)
   (reduce [x c]
     (event! ::reduce.Mu (dyn-form x))
     (createμ (with-meta [(:params x) (:body x)] (meta x)) c))
@@ -181,11 +193,10 @@
         (do
           (event! ::eval.symbol.unbound (dyn-form this))
           (succeed c (ast/immediate this)))
-        (do
-          (event! ::eval.symbol.dynamic (dyn-form this))
-          (reduce (with-meta v
-                    (update (meta v) :dyn #(merge (-> this meta :dyn) %)))
-                  c)))
+        (let [dyn (merge (-> this meta :dyn) (-> v meta :dyn))]
+          (event! ::eval.symbol.dynamic
+                  (assoc (dyn-form this) :ref (:dyn (meta v)) :merged dyn))
+          (reduce (pushbind dyn v) c)))
       ;; What has two backs and carries its meaning on each?
       (if-let [v (-> this meta :lex (get this))]
         (do
@@ -278,10 +289,3 @@
                 (succeed c (tag-meta v :apply/PrimitiveFn
                                      (ast/application head tail)))))]
       (reduce tail (rt/withcc c rt/return next)))))
-
-;; I think that I want what I'm calling the dynamic environment (thinks passed
-;; as arguments) to be static, but I still want the continuations to follow
-;; dynamic scoping. The whole point of named channels is that a μ doesn't know
-;; what's connected to them, so the semantics aren't violated if that gets
-;; changed between the time the μ is defined and the time messages actually get
-;; sent.

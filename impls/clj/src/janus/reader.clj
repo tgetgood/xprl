@@ -266,7 +266,7 @@
       :else                                     o)))
 
 (defn read [reader env]
-  (s/rename-keys (read* (assoc reader :lex env :dyn {})) {:result :form}))
+  (s/rename-keys (read* (assoc reader :lex env)) {:result :form}))
 
 (defn read-file
   "Reads all forms from file `fname` and returns then in a vector.

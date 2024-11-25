@@ -46,10 +46,6 @@
   (fn [f]
      ((fn [x] (f (x x))) (fn [x] (f (x x))))))
 
-(def aY
-  (fn [f]
-    ((fn [x] (f (fn [y] ((x x) y)))) (fn [x] (f (fn [y] ((x x) y)))))))
-
 (def fact1
   (fn [recur]
     (fn [n]
@@ -58,8 +54,6 @@
         (* n (recur (- n 1)))))))
 
 (def fact (Y fact1))
-
-(def f2 (aY fact1))
 
 #_(def iterator
   (fn [recur]

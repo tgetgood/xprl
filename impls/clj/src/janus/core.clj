@@ -115,18 +115,22 @@
   (rt/pushngo! [i/eval form {rt/return #(reset! o %)}]))
 
 (defn ev [s]
-  (r (:form (r/read (r/string-reader s) @env))))
+  (try
+    (r (:form (r/read (r/string-reader s) @env)))
+    (catch Exception _
+      (println "")
+      @o)))
 
 
 (defn Y [] (ev "(fn [f]
      ((fn [x] (f (x x))) (fn [x] (f (x x)))))"))
 
 (defn t []
-  (ev "(fn [x] (+ x 1))"))
+  (ev "((fn [x] (+ x 1)) 1)"))
 
 (defn clear-filters! []
   (t/set-min-level! :info)
-  (t/set-min-level! :event :info)
+  (t/set-min-level! :janus.interpreter/trace :info)
   (t/set-id-filter! "*")
   (t/set-ns-filter! "*"))
 

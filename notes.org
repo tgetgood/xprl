@@ -1,12 +1,13 @@
 * Todo list
   The big outstanding items. Most of it is tooling.
-** traceable execution
-   Debugging is currently a few small steps above black magic. That's not
-   sustainable. I need an evaluator that I can run step by step.
+** Better handling of dynamic environments
+   Currently we manage the dynamic environment (arguments passed to μs) using
+   metadata on the AST. This requires walking the AST when we load code referred
+   to by a symbol. Unsurprisingly this is slow. But it's not *that* slow. I can
+   live with it for the moment.
 
-   I already have a pretty well worked out algebra on ASTs, but I only use it on
-   paper. Let's try implementing an interpreter that uses that. It's going to be
-   slow, but I'm sick of manually wading through bits of the ast.
+   The plan is to switch to a compiler once the language is more fleshed out
+   anyway.
 ** Bootstrapped repl
    Julia's repl is pretty slick in the terminal, but the emacs integration is
    primitive, slow, and not very fun to use (term-mode sucks up all key presses

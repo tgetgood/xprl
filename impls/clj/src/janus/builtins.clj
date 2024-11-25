@@ -28,12 +28,16 @@
       (t/event! :def/evalbody {:level :trace :data body})
       (i/eval body (rt/withcc c rt/return next)))))
 
+
 (def macros
   {"def" xprl-def
    "μ"   i/createμ
    ;; "withcc" withcc
    ;; "emit"   emit
    })
+
+
+(def plus (fn [& args] (reduce + args)))
 
 (def fns
   {"+*" +
