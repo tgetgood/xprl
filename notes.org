@@ -22,13 +22,9 @@
    Along with the whole transduction setup
 ** bit blobs
    for interop and bootstrapping
-** Test runner
-   Manually checking regressions is killing me
 ** executors
    schedulers and work stealing
 ** Namespaces
-** Error handling
-   This is a bucket category. Errors are pretty rough right now.
 ** Layered architecture
    Take the basic idea direct from vulkan. Rewrite the interpreter so that all
    functions can be indirected and move all non-critical logic out of the main
