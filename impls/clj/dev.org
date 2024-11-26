@@ -42,3 +42,26 @@
 
    I have no idea if that will help anything or make things hopelessly
    complicated, but I guess I'll find out.
+** [2024-11-26 Tue] Keep a little less data
+   It turns out having everything but the form itself hidden until you want it
+   makes understanding what's going on a lot easier. Too much into isn't
+   helpful.
+
+   But we still want to keep it. In fact I need to keep a lot more info, like a
+   trace of the entire history of evaluation. The "metacircular debugger" of
+   distant dreams.
+
+   But all of the things I'm tracking: telemetry, performance, history, etc. are
+   hopelessly clogging the main algorithm and making it hard to see the
+   interpreter as the deeply simple thing it really is. That's a problem when
+   I'm trying to look deeper.
+
+   So I need some sort of middleware facility that lets me add in these things
+   by aggregation instead of interleaving them with each other.
+
+   Maybe something based on Vulkan's layers concept would suffice. It's simple
+   both conceptually and to implement, has zero cost if unused, and lets the end
+   configurer decide what does and doesn't get used. Lots of nice properties.
+
+   I'll have to switch to multimethods most likely, but protocols are already
+   causing more grief than is justified by present performance needs.

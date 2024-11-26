@@ -29,3 +29,7 @@
 ** Namespaces
 ** Error handling
    This is a bucket category. Errors are pretty rough right now.
+** Layered architecture
+   Take the basic idea direct from vulkan. Rewrite the interpreter so that all
+   functions can be indirected and move all non-critical logic out of the main
+   implementation.
