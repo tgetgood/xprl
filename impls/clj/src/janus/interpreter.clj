@@ -60,22 +60,15 @@
 (defn marker []
   (->Unbound (gensym)))
 
-(defmacro on-ast-types [form body]
-  `(condp instance? ~form
-     ~@(into [] (comp (map (fn [t#] `[~t# ~body])) cat)
-             [janus.ast.Symbol janus.ast.Immediate janus.ast.Application
-              janus.ast.Pair janus.ast.Mu janus.ast.PartialMu])
-     ~form))
-
 (defn pushbind [mask tree]
-  (walk/postwalk
-   (fn [form]
-     (on-ast-types form
-       (let [m (update (meta form) :dyn merge mask)]
-         (event! ::pushbind {:form form :old (:dyn (meta form))
-                             :new (:dyn m)})
-         (with-meta form m))))
-   tree))
+  (walk/postwalk (fn [form]
+                   (if (instance? clojure.lang.IObj form)
+                     (let [m (update (meta form) :dyn merge mask)]
+                       (event! ::pushbind {:form form :old (:dyn (meta form))
+                                           :new (:dyn m)})
+                       (with-meta form m))
+                     form))
+                 tree))
 
 (defn unbind [syms marker tree]
   (pushbind (into {} (map (fn [s] [s marker])) syms) tree))
