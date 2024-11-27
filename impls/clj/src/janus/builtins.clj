@@ -33,6 +33,11 @@
    "μ"   i/createμ
    ;; "withcc" withcc
    ;; "emit"   emit
+
+   ;; returns what would have been emitted as data so that we can inspect/modify
+   ;; it.
+   ;; "capture" capture
+
    })
 
 (defn nth* [c i]

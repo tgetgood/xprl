@@ -169,6 +169,256 @@ This is largely an aid to my own memory so bear with me.
    =def= adds an evaluation to the beginning of its body, for instance. I think
    that's the right thing to do as well, but it adds a bit of asymmetry to the
    definition of metaprogramming operations like =fn= and =wrap=.
+* Reduction and the AST
+  As covered in the previous section, whether or not an expression will ever be
+  evaluated — that is whether a given expression is code or data — is expressed
+  syntactically. Given =(f x)= the question of whether =x= will or will not be
+  evaluated doesn't depend on the *type* of =f=, but on its syntax.
+
+  Syntax is topological. But it has no notion of time. The question of *whether*
+  an expression will be evaluated is syntactic, but the question of *when* an
+  expression will be evaluated is contextual: it depends on the unknowns in the
+  expression and on whoever provides them.
+
+  Take for example, the humble =λ=. Copying from above, we have:
+
+   #+BEGIN_SRC clojure
+   (def fn
+     (μ [params body]
+        ~(μ args
+            ~((μ ~params ~~body) . ~~args))))
+   #+END_SRC
+
+   Notice that everything here is a symbol, even =def= and =μ=. This expression
+   can only be evaluated in an environment that provides meaning for those
+   symbols. And yes, you can override them if you want to. You can also rebind
+   =self-insert-command= if you feel like it.
+
+   Some notes on abstract syntax: =(f x y)= is a Pair, in our parlance. The head
+   is the ~symbol~ =f= and the tail is the list (of symbols) =[x y]=.
+
+   A Pair is just data. It doesn't represent a function application. An
+   Application is represented by =#(...)= to distinguish it from a pair.
+
+   =#(f x y)= represents the application of =[x y]= to the *symbol* =f=, which
+   is senseless and would result in error.
+
+   In a traditional lisp, we have
+   =(eval (f . tail))= => =(apply (eval f) (eval tail))=.
+
+   But we aren't writing an applicative language, so we want something more
+   like:
+
+   =(eval (f . tail))= => =(apply (eval f) tail)=
+
+   Which is represented syntactically by our first rule:
+
+   =~(f . tail)= => =#(~f . tail)=
+
+   Thus ~(f x y) -> #(~f x y) which applies [x y] to whatever the symbol =f= is
+   bound to. The μ to which f is bound, might in turn choose to evaluate
+   (lookup) x and y to do something with them.
+
+   The second thing we need to do is create actual μ objects. I don't believe
+   its possible to implement μ in this language, so we need an escape hatch
+   which I've taken to calling primitive macros.
+
+   Let =μ= be bound to the primitive =#Pmac[createμ]= then we have
+
+   =~(μ params body)= => =#(#Pmac[createμ] params body)=
+
+   which causes the underlying implementation of the primitive =createμ= to be
+   called with the tail of the application: =[params body]= as well as the
+   current environment and continuation map.
+
+   It's up to a primitive macro to continue appropriately, which makes them very
+   brittle. As of yet I only need 4 of them. They're all related to manipulating
+   context. Notably all control flow can be implemented as normal μs in the
+   language itself.
+
+   There are also primitive functions which can only be applied to literal
+   values. These aren't essential to having a working language, but while you
+   could implement arithmetic lambda calculus style, it's advisable to wrap the
+   machine's arithmetic capabilities (or those of the implementation language at
+   least).
+
+   Primitive functions are best thought of as functions implemented in another
+   language. We'll come back to them later.
+
+   Our third rule of execution involves what it means to apply arguments to a μ.
+
+   If we let =(#μ params body)= represent an actual μ object with =params= and
+   =body=, then we can write:
+
+   =#((#μ params body) . args)= =>
+   =(extend-enviroment (destructuring-bind params args) body)=
+
+   Note that =extend-environment= and =destructuring-bind= are only defined in
+   the implementation at present. Bootstrapping is not a short term goal.
+
+   This is just Steele's "λ the ultimate declarative" without applicative
+   semantics. A μ takes arguments, binds them to formal parameters, and then
+   reduces its body in the new, extended environment.
+
+   N.B.: "reduction" in this context refers to applying the rules we're laying
+   down. They simplify an expression without necessarily evaluating it. If
+   there's sufficient information, then reduction will fully interpret an
+   expression, but in general there will be arguments that aren't known yet.
+
+   There's a special case of applying arguments which is just β-reduction:
+
+   =#((#μ X Y) . ~Z)= (where X, Y, & Z stand for subexpressions)
+
+   becomes Y with symbols occuring in X renamed to their bindings in Z.
+
+   In particular =#((#μ X Y) . ~X)= => =Y=. This actually comes up a bunch when
+   compiling, so it's important to recognise.
+
+   Finally, eval distributes over lists, and literal values are fixed points to
+   eval.
+
+   That is: =~V= => =V= if V is a literal value (number, string, bool, etc.)
+
+   and: =~[X Y Z]= => =[~X ~Y ~Z]=
+** Summary
+   Reduction is the process of applying the following rules repeatedly until
+   none can be applied any longer:
+
+   An expression is considered "fully reduced" if it contains no immediate or
+   application nodes.
+
+   1) ~(X . Y) <=> #(~X . Y)
+   2) #(#Pmac[f] . tail) => always escapes to implementation
+   3) #(#Pfn[f] . tail) => invokes foreign code iff tail is fully reduced.
+   4) #((#μ X Y) . Z) => Y in the current lexical env extended by {X Z}
+      where {X Z} represents the destructured binding of X to Z
+
+      The essentially says the ~X inside Y means Z.
+   5) #((#μ X Y) . ~Z) => Y with {X Z} as a renaming mask
+      If ~X means ~Z then use of X stands for use of Z.
+
+      The special case Z=X makes this a noop.
+   6) ~V <=> V whenever V is a literal (scalar) value
+   7) ~[X Y ...] <=> [~X ~Y ...]
+      Similar rules apply to maps and sets in the obvious fashion.
+
+   Some of these rules are reversable, some are not because information is lost.
+
+   The order in which these rules are applied is irrelevant since all
+   permutations will result in the same final state (possibly with some
+   backtracking over the reversible rules, I'm not sure).
+
+   I have a handwavy proof that validates my intuition regarding the previous
+   assertion, so be skeptical.
+
+   This (indirectly) answers the question of when an immediate expression gets
+   evaluated. By following the rules from a valid input, you will always end up
+   at a value. That value might be a μ waiting on arguments. Obviously the
+   interior of that μ will be blocked to some extent until those arguments are
+   known.
+
+   Note on implementation:
+
+   The current interpreter implicitly embodies these rules. When I get around to
+   writing a compiler, the first step will be an explicit search over these
+   rules to find a "maximally reduced normal form" which can then be translated
+   into lower level code. But that's for another day.
+* The Environment
+* The Continuation Map and Emission
+  One of the bigger differences between this language and standard lisp (or any
+  von neumann style language with which I'm familiar) is that there is no single
+  "current continuation", but instead a set of them. And control can pass to any
+  number of them from the current expression. It can even pass to several of
+  them several times each.
+
+  This is not too different from an actor system, but messages are always sent
+  in batches from tail position. The continuation map is akin to Erlang's
+  "address book", but it's aggressively local and indirected. You can't send
+  messages to named things, you send messages on named channels (whose name you
+  choose), and something above you in the call graph binds those names to μs.
+
+  You can also send messages to functions directly, but since functions are
+  pure, this isn't like sending messages to actors, it's more like setting up a
+  subcomputation.
+
+  The underlying theory comes from what Koestler called holarchy which is the
+  idea that each unit is autonomous from its own point of view: it can set up
+  subcomputations and connect the results of those to channels, but it's
+  simultaneously subordinate to higher levels in that it doesn't ultimately know
+  how its outputs will be used, nor whence its inputs come.
+
+  A more programming friendly metaphor: Pure functions can't do anything at the
+  end of the day. That's why we needed monads before we could create Haskell.
+
+  Do blocks (progn for the die hard lispers) exist because we generally want our
+  code to do things other than compute and return answers. These side effects
+  are the source of all kinds of complexity. We can't live without them, but oh
+  boy.
+
+  So, I've made a change to the traditional structure: there are no progns.
+  Function arguments are not evaluated in order. You can't control the sequence
+  in which things happen at all. All you can do is establish data dependencies
+  between computations and then send batches of messages.
+
+  So if you want to add logging to a program, you can't just stick in a
+  statement and have a side effect coming from nowhere. But you can intercept a
+  batch of messages and add one more message to be sent to a logging queue.
+
+  So we can still perform side effects, but those side effects must exist as
+  pure data (messages) sent to the things that actually bang on the world. Those
+  messages can be logged, replayed, or even filtered. That makes a big
+  difference.
+
+  The continuation map doesn't exist as a first class thing from within the
+  language. Rather it is maintained by the runtime (interpreter presently) and
+  can be modified by calling primitive macros. I don't want to write code in cps
+  if I can avoid it.
+
+  When a batch of messages are emitted, they are all delivered (logically
+  speaking) concurrently. If there's enough spare compute, they'll be delivered
+  (execute) in parallel, otherwise they get queued. See the section on work
+  stealing for details. Not being able to depend on order of delivery saves us a
+  world of pain when it comes to starvation and race conditions.
+
+  The only guarantees we make on delivery are
+
+  1) messages are delivered strictly after they are sent
+  2) multiple messages sent from A to B are delivered exactly once and in order
+
+  Note that if A and C both send messages to B, then those streams can be
+  interleaved in any fashion, but the subsets from A and C will be in the order
+  sent.
+
+  These are the only guarantees we can provide without pretending special
+  relativity doesn't apply to us. For better or for worse, it does apply to us.
+
+  In essence, a fully consistent totally ordered view of the world is only
+  possible from a single point in space. Once you have multiple actors in
+  different locations, perspective becomes an irreducible aspect of the system.
+
+  So if you want a consistent view, put messages in a queue and process them in
+  serial. It's not that hard.
+
+  Now it's time to talk about our next special construct. The Stateful.
+* Statefuls
+  The name needs some work.
+
+  Sometimes a computation needs to retain state across messages. Given that we
+  have no mechanism by which to assign or mutate, how do we accomplish it?
+
+  The easiest way would be to have a μ which from tail position sends a messages
+  to its future self (plus whatever emissions it needs to make).
+
+  This would be a perfect solution except for the fact that we have no control
+  over the order of delivery, so how do we know that your future self will
+  receive its new state before it receives its next input?
+
+  Sadly you can't.
+
+  So, as far as I can tell — and I may be wrong, I hope I'm wrong, but I don't
+  think I'm wrong — we need a special construct to represent a stateful
+  accumulator.
+
 * Outline
   Sections to be written.
 ** History, Environment, and Context
@@ -180,7 +430,8 @@ This is largely an aid to my own memory so bear with me.
    1) You and the link author share some context
       At the very least you have to look in the right place.
    2) The links can grow in size arbitrarily
-      Fixed size hashes will eventually lead to collision.
+      Fixed size hashes will eventually lead to collision. I don't care how few
+      atoms there are in the observable universe.
    3) Divergences can be converged without consulting either author
       If two people who've never heard of each other publish under the same hash
       at roughly the same time, anyone who knows of both must be able to
@@ -242,7 +493,6 @@ This is largely an aid to my own memory so bear with me.
 
    This is very high level. I'll add the details of how it works in this
    language (environment?) as the prototypes evolve.
-** Purity and the State (statefuls)
 ** Transduction
 ** Message Passing
 ** JIT and runtime optimisation
