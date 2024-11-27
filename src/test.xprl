@@ -21,3 +21,8 @@
 (g f)                                1
 
 (fact 5)                             120
+
+;; Scope test
+;; Don't want dynamic scope to creep into the language just because we're using
+;; it in the implementation
+((fn [x] (((fn [x] x) +) x ((fn [x] (+ x 1)) 2))) 5) #_=>  8
