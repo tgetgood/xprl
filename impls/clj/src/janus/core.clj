@@ -46,10 +46,10 @@
                 (if (= :eof form)
                   @env
                   (rt/pushngo!
-                   [i/eval form (rt/withcc conts
-                                  rt/return (fn [res]
-                                              (println res)
-                                              (looper reader)))]))))]
+                   [i/eval form {} (rt/withcc conts
+                                     rt/return (fn [res]
+                                                 (println res)
+                                                 (looper reader)))]))))]
       (looper (r/file-reader fname)))))
 
 (def ^:dynamic *t nil)
@@ -104,15 +104,15 @@
                 (if (or (= :eof f1) (= :eof f2))
                   (t/log! {:level :info :id :ktest} "All tests passed!")
                   (rt/pushngo!
-                   [i/eval f1 (rt/withcc c
-                                rt/return #(rt/receive collect 0 %)
-                                rt/error  (handler r1))]
-                   [i/eval f2 (rt/withcc c
-                                rt/return #(rt/receive collect 1 %))]))))]
+                   [i/eval f1 {} (rt/withcc c
+                                   rt/return #(rt/receive collect 0 %)
+                                   rt/error  (handler r1))]
+                   [i/eval f2 {} (rt/withcc c
+                                   rt/return #(rt/receive collect 1 %))]))))]
       (looper (r/file-reader fname)))))
 
 (defn r [form]
-  (rt/pushngo! [i/eval form {rt/return #(reset! o %)}]))
+  (rt/pushngo! [i/eval form {} {rt/return #(reset! o %)}]))
 
 (defn ev [s]
   (try

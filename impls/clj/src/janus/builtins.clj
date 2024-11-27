@@ -16,7 +16,7 @@
         body (last form)]
     [name body (assoc (meta form) :doc doc :source body)]))
 
-(defn xprl-def [form c]
+(defn xprl-def [form env c]
   (let [[name body defmeta] (validate-def c form)]
     (letfn [(next [cform]
               (let [def  (with-meta cform (merge (meta cform) defmeta))
@@ -26,8 +26,7 @@
                   (ast/keyword "env")    lex'
                   (ast/keyword "return") name)))]
       (t/event! :def/evalbody {:level :trace :data body})
-      (i/eval body (rt/withcc c rt/return next)))))
-
+      (i/eval body env (rt/withcc c rt/return next)))))
 
 (def macros
   {"def" xprl-def
@@ -36,19 +35,24 @@
    ;; "emit"   emit
    })
 
+(defn nth* [c i]
+  (nth c (dec i)))
 
-(def plus (fn [& args] (reduce + args)))
+(defn select [p t f]
+  (condp identical? p
+    true t
+    false f))
 
 (def fns
-  {"+*" +
-   "**" *
-   "-*" -
+  {"+*" (with-meta + {:name '+})
+   "**" (with-meta * {:name '*})
+   "-*" (with-meta - {:name '-})
    "/*" /
    ">*" >
    "<*" <
-   "=*" =
+   "=*" (with-meta = {:name '=})
 
-   "nth*" (fn [c i] (nth c (dec i))) ; Base 1 indexing
+   "nth*" (with-meta nth* {:name 'nth*}) ; Base 1 indexing
 
    ;; REVIEW: Is there a better way to do data (non-branching) selection in
    ;; clojure?
@@ -56,10 +60,7 @@
    ;; builtins. That's very elegant, but does it have other advantages?
    ;; The downside is that I would have to implement all of the boolean builtins
    ;; myself instead of just calling them.
-   "select" (fn [p t f]
-              (condp identical? p
-                true t
-                false f))})
+   "select" (with-meta select {:name 'select})})
 
 ;; TODO: Set metadata on primitives
 (def base-env

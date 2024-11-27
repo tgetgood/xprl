@@ -192,35 +192,59 @@
 (defmethod pp/simple-dispatch Mu [{:keys [params body]}]
   (ppmu (symbol "#μ") params body))
 
+(defn fname [f]
+  (or (:name (meta f)) (str f)))
+
 (defrecord PrimitiveFunction [f]
   Object
   (toString [_]
-    (str "#pFn[" f "]")))
+    (str "#pFn[" (fname f) "]")))
 
 (defmethod print-method PrimitiveFunction [{:keys [f]} ^Writer w]
   (.write w "#pFn[")
-  (print-method f w)
+  (if-let [name (:name (meta f))]
+    (.write w name)
+    (print-method f w))
   (.write w "]"))
 
 (defmethod pp/simple-dispatch PrimitiveFunction [{:keys [f]}]
   (pp/pprint-logical-block
    :prefix "#pFn[" :suffix "]"
-   (pp/write-out f)))
+   (if-let [name (:name (meta f))]
+     (pp/write-out name)
+     (pp/write-out f))))
 
 (defrecord PrimitiveMacro [f]
   Object
   (toString [_]
-    (str "#pMac[" f "]")))
+    (str "#pMac[" (fname f) "]")))
 
 (defmethod print-method PrimitiveMacro [{:keys [f]} ^Writer w]
   (.write w "#pMac[")
-  (print-method f w)
+  (if-let [name (:name (meta f))]
+    (.write w name)
+    (print-method f w))
   (.write w "]"))
 
 (defmethod pp/simple-dispatch PrimitiveMacro [{:keys [f]}]
   (pp/pprint-logical-block
    :prefix "#pMac[" :suffix "]"
-   (pp/write-out f)))
+   (if-let [name (:name (meta f))]
+     (pp/write-out name)
+     (pp/write-out f))))
+
+;;;;; Context
+
+(defrecord ContextSwitch [env form]
+  Object
+  (toString [_]
+    ;; REVIEW: Is it a good idea to make this totally invisible?
+    (str form)))
+
+(ps ContextSwitch)
+
+(defmethod pp/simple-dispatch ContextSwitch [{:keys [form]}]
+  (pp/write-out form))
 
 ;;;;; Destructuring
 
