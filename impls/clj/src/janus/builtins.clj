@@ -44,15 +44,15 @@
     false f))
 
 (def fns
-  {"+*" (with-meta + {:name '+})
-   "**" (with-meta * {:name '*})
-   "-*" (with-meta - {:name '-})
+  {"+*" +
+   "**" *
+   "-*" -
    "/*" /
    ">*" >
    "<*" <
-   "=*" (with-meta = {:name '=})
+   "=*" =
 
-   "nth*" (with-meta nth* {:name 'nth*}) ; Base 1 indexing
+   "nth*" nth* ; Base 1 indexing
 
    ;; REVIEW: Is there a better way to do data (non-branching) selection in
    ;; clojure?
@@ -60,10 +60,14 @@
    ;; builtins. That's very elegant, but does it have other advantages?
    ;; The downside is that I would have to implement all of the boolean builtins
    ;; myself instead of just calling them.
-   "select" (with-meta select {:name 'select})})
+   "select" select})
 
-;; TODO: Set metadata on primitives
+(defn tagged [f]
+  (fn [[k v]]
+    (let [k' (ast/symbol k)]
+      [k' (f (with-meta v {:name k'}))])))
+
 (def base-env
   (merge
-   (into {} (map (fn [[k v]] [(ast/symbol k) (ast/->PrimitiveMacro v)])) macros)
-   (into {} (map (fn [[k v]] [(ast/symbol k) (ast/->PrimitiveFunction v)])) fns)))
+   (into {} (map (tagged ast/->PrimitiveMacro)) macros)
+   (into {} (map (tagged ast/->PrimitiveFunction)) fns)))

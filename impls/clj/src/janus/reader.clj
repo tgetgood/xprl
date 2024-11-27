@@ -126,7 +126,7 @@
       (ast/symbol s))))
 
 (defn readimmediate [r]
-  (update (read* r) :result ast/->Immediate))
+  (update (read* r) :result ast/immediate))
 
 (defn read-all [r]
   (let [next (read* r)]

@@ -129,14 +129,16 @@
        (.write ^Writer *out* " . ")
        (pp/write-out tail)))))
 
-(defrecord Immediate [form]
+(defrecord Immediate [form env]
   Object
   (toString [_]
     (str "~" form)))
 
-(defn immediate [form]
-  (with-meta (->Immediate form)
-    (meta form)))
+(defn immediate
+  ([form] (immediate form {}))
+  ([form env]
+   (with-meta (->Immediate form env)
+     (meta form))))
 
 (ps Immediate)
 
@@ -145,13 +147,13 @@
   (.write ^Writer *out* "~")
   (pp/write-out (:form i)))
 
-(defrecord Application [head tail]
+(defrecord Application [head tail env]
   Object
   (toString [_]
     (str "#" (.toString (->Pair head tail)))))
 
-(defn application [head tail]
-  (with-meta (->Application head tail)
+(defn application [head tail env]
+  (with-meta (->Application head tail env)
     (select-keys (meta head) [:file :string :line :col])))
 
 (ps Application)
@@ -232,19 +234,6 @@
    (if-let [name (:name (meta f))]
      (pp/write-out name)
      (pp/write-out f))))
-
-;;;;; Context
-
-(defrecord ContextSwitch [env form]
-  Object
-  (toString [_]
-    ;; REVIEW: Is it a good idea to make this totally invisible?
-    (str form)))
-
-(ps ContextSwitch)
-
-(defmethod pp/simple-dispatch ContextSwitch [{:keys [form]}]
-  (pp/write-out form))
 
 ;;;;; Destructuring
 

@@ -30,36 +30,29 @@
 (defn succeed [c v]
   (rt/emit c rt/return v))
 
-;; REVIEW: I don't think these markers need to be unique anymore since we're
-;; insulating μs from their parents with context switches.
-(defrecord Unbound [mark]
+(defrecord Unbound []
   Object
   (toString [_]
-    (str "#unbound[" mark "]") ))
+    "#unbound"))
 
 (defmethod print-method Unbound [this ^java.io.Writer w]
   (.write w (str this)))
 
-(defmethod pp/simple-dispatch Unbound [{:keys [mark]}]
-  (pp/pprint-logical-block
-   {:prefix "#unbound[" :suffix "]"}
-   (pp/write-out mark)))
+(defmethod pp/simple-dispatch Unbound [this]
+  (pp/write-out (str this)))
 
-(defn marker []
-  (->Unbound (gensym)))
+(def marker (->Unbound))
 
 (defn createμ [args env c]
   (let [[params body] args
         next (fn [params]
                (if (ast/binding? params)
-                 (let [m    (marker)
-                       bind (into {} (map (fn [k] [k m])) (ast/bindings params))
+                 (let [bind (into {} (map (fn [k] [k marker]))
+                                  (ast/bindings params))
                        env' (merge env bind)
                        next (fn [cbody]
                               (succeed c (with-meta (ast/->Mu params cbody)
-                                           (assoc (meta args)
-                                                  :source body
-                                                  :marker m))))]
+                                           (assoc (meta args) :source body))))]
                    (event! ::createμ.bound {:params params :body body})
                    (reduce body env' (return c next)))
                  (do
@@ -82,7 +75,7 @@
     (if (::reduced? (meta this))
       ;; The current implementation re-reduces expressions quite often, so this
       ;; is just a cache.
-      ;; TODO: Do this more systematically.
+      ;; TODO: Do this more systematically. Maybe as a layer.
       (do
         (event! ::reduce.vector.noop {:form this})
         (succeed c this))
@@ -112,15 +105,19 @@
 
   janus.ast.Immediate
   (reduced? [_] false)
-  (reduce [x env c]
-    (event! ::reduce.Immediate x)
-    (eval (:form x) env c))
+  (reduce [x dyn c]
+    (event! ::reduce.Immediate {:form x :env (:env x) :dyn dyn} )
+    (eval (:form x) (merge (:env x) dyn) c))
 
   janus.ast.Application
   (reduced? [_] false)
-  (reduce [{:keys [head tail] :as x} env c]
-    (event! ::reduce.Application {:head head :tail tail :dyn env})
-    (reduce head env (return c #(apply % tail env c))))
+  (reduce [{:keys [head tail env] :as x} dyn c]
+    ;; An application carries bindings with it from the context of its
+    ;; definition, but those can be overridden by bindings in the context in
+    ;; which is finds itself embedded. This is basically classic dynamic scope.
+    (let [env' (merge env dyn)]
+      (event! ::reduce.Application {:head head :tail tail :env env :dyn dyn})
+      (reduce head env' (return c #(apply % tail env' c)))))
 
   janus.ast.PartialMu
   (reduced? [_] true)
@@ -138,13 +135,7 @@
   (reduced? [x] (and (reduced? (:head x)) (reduced? (:tail x))))
   (reduce [x env c]
     (event! ::reduce.Pair {:form x :dyn env})
-    (succeed c x))
-
-  janus.ast.ContextSwitch
-  (reduced? [_] true)
-  (reduce [x env c]
-    (event! ::reduce.ContextSwitch {:form (:form x) :env (:env x) :dyn env})
-    (reduce (:form x) (:env x) c)))
+    (succeed c x)))
 
 (extend-protocol Evaluable
   Object
@@ -155,7 +146,7 @@
   clojure.lang.APersistentVector
   (eval [this env c]
     (event! :eval/Vector {:form this :dyn env})
-    (reduce (mapv ast/immediate this) env c))
+    (reduce (mapv #(ast/immediate % env) this) env c))
 
   janus.ast.Symbol
   (eval [this env c]
@@ -163,7 +154,7 @@
       (if (instance? Unbound v)
         (do
           (event! ::eval.symbol.unbound (select-keys env [this]))
-          (succeed c (ast/immediate this)))
+          (succeed c (ast/immediate this env)))
         (do
           (event! ::eval.symbol.dynamic (select-keys env [this]))
           ;; REVIEW: The value of every dynamic binding should be a context
@@ -189,25 +180,27 @@
   janus.ast.Pair
   (eval [{:keys [head tail] :as this} env c]
     (event! ::eval.Pair {:form this :dyn env})
-    (reduce (ast/application (ast/immediate head) tail) env c))
+    (reduce (ast/application (ast/immediate head env) tail env) env c))
 
   janus.ast.Immediate
-  (eval [{:keys [form] :as this} env c]
-    (event! ::eval.Immediate {:form this :dyn env})
-    (letfn [(next [form]
-              (if (instance? janus.ast.Immediate form)
-                (succeed c (ast/immediate this))
-                (eval form env c)))]
-      (eval form env (return c next))))
+  (eval [{:keys [form env] :as this} dyn c]
+    (let [env' (merge env dyn)]
+      (event! ::eval.Immediate {:form form :env env :dyn dyn})
+      (letfn [(next [form]
+                (if (instance? janus.ast.Immediate form)
+                  (succeed c (ast/immediate this env'))
+                  (eval form env' c)))]
+        (eval form env' (return c next)))))
 
   janus.ast.Application
   (eval [form env c]
-    (event! ::eval.Application {:form form :dyn env})
-    (letfn [(next [form]
-              (if (instance? janus.ast.Application form)
-                (succeed c (ast/immediate form))
-                (eval form env c)))]
-      (reduce form env (return c next)))))
+    (let [env' (merge env (:env form))]
+      (event! ::eval.Application {:form form :env env'})
+      (letfn [(next [form]
+                (if (instance? janus.ast.Application form)
+                  (succeed c (ast/immediate form env'))
+                  (eval form env' c)))]
+        (reduce form env' (return c next))))))
 
 (extend-protocol Applicable
   janus.ast.Immediate
@@ -215,14 +208,14 @@
   ;; immediate can be evaled.
   (apply [head tail env c]
     (event! ::apply.Immediate {:form [head tail]})
-    (succeed c (ast/application head tail)))
+    (succeed c (ast/application head tail env)))
 
   janus.ast.Application
   (apply [head tail env c]
     (event! ::apply.Application {:data [head tail]})
     (letfn [(next [head']
               (if (instance? janus.ast.Application head)
-                (succeed c (ast/application head' tail))
+                (succeed c (ast/application head' tail env))
                 (apply head' tail env c)))]
       (reduce head env (return c next))))
 
@@ -236,16 +229,8 @@
                   (if (reduced? tail')
                     (fatal-error! c {:params (:params head) :args tail'}
                                   "Failed to bind arguments to μ.")
-                    ;; FIXME: There's something wrong here with context switches
-                    ;; not sticking around when they ought to. I'm not entirely
-                    ;; clear in my own head when they "ought to". Need to get
-                    ;; this worked out.
-                    (succeed c (ast/application head
-                                                (ast/->ContextSwitch env tail'))))
-                  (let [env' (into
-                              env
-                              (map (fn [[k v]] [k (ast/->ContextSwitch env v)]))
-                              bind)]
+                    (succeed c (ast/application head tail' env)))
+                  (let [env' (merge env bind)]
                     (reduce (:body head) env' c)))))]
       (reduce tail env (return c next))))
 
@@ -254,7 +239,7 @@
     (event! ::apply.PartialMu {:head head :tail tail})
     (letfn [(next [head']
               (condp instance? head'
-                janus.ast.PartialMu (succeed c (ast/application head' tail))
+                janus.ast.PartialMu (succeed c (ast/application head' tail env))
                 janus.ast.Mu        (apply head' tail env c)))]
       (reduce head env (return c next))))
 
@@ -268,7 +253,8 @@
   (apply [head tail env c]
     (event! ::apply.Fn {:form [head tail] :dyn env})
     (letfn [(next [tail']
+              (event! ::apply.Fn.tail {:form tail'})
               (succeed c (if (reduced? tail')
                            (clojure.core/apply (:f head) tail')
-                           (ast/application head tail'))))]
+                           (ast/application head tail' env))))]
       (reduce tail env (return c next)))))
