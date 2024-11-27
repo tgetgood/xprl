@@ -30,18 +30,7 @@
 (defn succeed [c v]
   (rt/emit c rt/return v))
 
-(defrecord Unbound []
-  Object
-  (toString [_]
-    "#unbound"))
-
-(defmethod print-method Unbound [this ^java.io.Writer w]
-  (.write w (str this)))
-
-(defmethod pp/simple-dispatch Unbound [this]
-  (pp/write-out (str this)))
-
-(def marker (->Unbound))
+(def marker ::unbound)
 
 (defn createμ [args env c]
   (let [[params body] args
@@ -106,8 +95,9 @@
   janus.ast.Immediate
   (reduced? [_] false)
   (reduce [x dyn c]
-    (event! ::reduce.Immediate {:form x :env (:env x) :dyn dyn} )
-    (eval (:form x) (merge (:env x) dyn) c))
+    (let [env' (merge (:env x) dyn)]
+      (event! ::reduce.Immediate {:form x :env (:env x) :dyn dyn :merged env'})
+      (eval (:form x) env' c)))
 
   janus.ast.Application
   (reduced? [_] false)
@@ -151,7 +141,7 @@
   janus.ast.Symbol
   (eval [this env c]
     (if-let [v (get env this)]
-      (if (instance? Unbound v)
+      (if (= v ::unbound)
         (do
           (event! ::eval.symbol.unbound (select-keys env [this]))
           (succeed c (ast/immediate this env)))
@@ -193,8 +183,8 @@
         (eval form env' (return c next)))))
 
   janus.ast.Application
-  (eval [form env c]
-    (let [env' (merge env (:env form))]
+  (eval [form dyn c]
+    (let [env' (merge (:env form) dyn)]
       (event! ::eval.Application {:form form :env env'})
       (letfn [(next [form]
                 (if (instance? janus.ast.Application form)
