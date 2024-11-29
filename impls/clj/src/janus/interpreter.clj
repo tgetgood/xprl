@@ -32,16 +32,25 @@
 
 (def marker ::unbound)
 
+(defn validate-μ [args]
+  (condp = (count args)
+    3 (do (assert (instance? janus.ast.Symbol (first args)))
+          args)
+    2 [nil (first args) (second args)]))
+
 (defn createμ [args env c]
-  (let [[params body] args
+  (let [[name params body] (validate-μ args)
         next (fn [params]
                (if (ast/binding? params)
                  (let [bind (into {} (map (fn [k] [k marker]))
                                   (ast/bindings params))
-                       env' (merge env bind)
+                       env' (merge env bind (when name {name marker}))
                        next (fn [cbody]
                               (succeed c (with-meta (ast/->Mu params cbody)
-                                           (assoc (meta args) :source body))))]
+                                           (merge (meta args)
+                                                  {:source body}
+                                                  (when name
+                                                    {:name name})))))]
                    (event! ::createμ.bound {:params params :body body})
                    (reduce body env' (return c next)))
                  (do
@@ -213,7 +222,13 @@
   (apply [head tail env c]
     (event! ::apply.Mu {:head head :tail tail :dyn env})
     (letfn [(next [tail']
-              (let [bind (ast/destructure (:params head) tail')]
+              (let [bind (merge (ast/destructure (:params head) tail')
+                                ;; If a μ is named, then bind its name to it
+                                ;; in the env of the body when applying
+                                ;; arguments. This prevents circular links when
+                                ;; creating the μ in the first place.
+                                (when-let [name (:name (meta head))]
+                                  {name head}))]
                 (event! ::apply.Mu.destructuring {:bindings bind})
                 (if (nil? bind)
                   (if (reduced? tail')

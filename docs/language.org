@@ -415,7 +415,7 @@ This is largely an aid to my own memory so bear with me.
 
   Sadly you can't.
 
-  So, as far as I can tell — and I may be wrong, I hope I'm wrong, but I don't
+  Thus, as far as I can tell — and I may be wrong, I hope I'm wrong, but I don't
   think I'm wrong — we need a special construct to represent a stateful
   accumulator.
 
