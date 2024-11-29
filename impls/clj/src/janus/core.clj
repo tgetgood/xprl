@@ -28,7 +28,7 @@
 (def o (atom nil))
 
 (defn loadfile [env fname]
-  (let [conts {rt/env    #(reset! env %)
+  (let [conts {rt/env    #(swap! env merge %)
                rt/return #(throw (RuntimeException. "boom!"))
                rt/error  (fn [{:keys [form message]}]
                            (t/log! {:id   :fileloader :level :error
@@ -64,7 +64,7 @@
   [env fname]
   ;; Don't modify outside environment.
   (let [env (atom (if (instance? clojure.lang.IDeref env) @env env))
-        c   {rt/env #(reset! env %) rt/error #(t/event! :ktest {:data %
+        c   {rt/env #(swap! env merge %) rt/error #(t/event! :ktest {:data %
                                                                 :msg  "bbom"})}]
     (letfn [(comparator [r1 r2]
               (let [[f1 f2] (map :form [r1 r2])]
@@ -121,6 +121,16 @@
       (println "")
       @o)))
 
+(defn rep []
+  (try
+    (let [form (r/read (r/stdin-reader) @env)]
+      (rt/pushngo!
+       [i/eval (:form form) {} {rt/return #(reset! o %)
+                                rt/env    #(swap! env merge %)
+                                rt/error  #(t/log! :error %)}]))
+    (catch Exception _
+      (println "")
+      @o)))
 
 (defn Y [] (ev "(fn [f]
      ((fn [x] (f (x x))) (fn [x] (f (x x)))))"))
