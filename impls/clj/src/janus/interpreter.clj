@@ -34,14 +34,13 @@
 
 (defn validate-μ [args]
   (condp = (count args)
-    3 (do (assert (instance? janus.ast.Symbol (first args)))
-          args)
+    3 args
     2 [nil (first args) (second args)]))
 
 (defn createμ [args env c]
   (let [[name params body] (validate-μ args)
         next (fn [params]
-               (if (ast/binding? params)
+               (if (and (ast/binding? params) (or (nil? name) (reduced? name)))
                  (let [bind (into {} (map (fn [k] [k marker]))
                                   (ast/bindings params))
                        env' (merge env bind (when name {name marker}))
@@ -56,7 +55,8 @@
                  (do
                    (event! ::createμ.unbound {:params params :body body})
                    (succeed c (with-meta (ast/->PartialMu params body)
-                                (meta args))))))]
+                                (merge (meta args)
+                                       (when name {:name name})))))))]
     (event! ::createμ {:params params :body body :dyn env})
     (reduce params env (return c next))))
 
@@ -122,13 +122,13 @@
   (reduced? [_] true)
   (reduce [x env c]
     (event! ::reduce.PartialMu {:form x :dyn env})
-    (createμ (with-meta [(:params x) (:body x)] (meta x)) env c))
+    (createμ (with-meta [(:name (meta x)) (:params x) (:body x)] (meta x)) env c))
 
   janus.ast.Mu
   (reduced? [_] true)
   (reduce [x env c]
     (event! ::reduce.Mu {:form x :dyn env})
-    (createμ (with-meta [(:params x) (:body x)] (meta x)) env c))
+    (createμ (with-meta [(:name (meta x)) (:params x) (:body x)] (meta x)) env c))
 
   janus.ast.Pair
   (reduced? [x] (and (reduced? (:head x)) (reduced? (:tail x))))

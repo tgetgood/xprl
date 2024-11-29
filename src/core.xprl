@@ -13,6 +13,12 @@
      ~(μ args
          ~((μ ~params ~~body) . ~~args))))
 
+(def defn
+  (μ [name params body]
+     ~(def ~name
+        (μ ~name args
+           ~((μ ~params ~~body) . ~~args)))))
+
 (def nth (wrap . nth*))
 
 (def + (wrap . +*))
@@ -54,6 +60,11 @@
         (* n (recur (- n 1)))))))
 
 (def fact (Y fact1))
+
+(defn ! [n]
+  (if (= n 0)
+    1
+    (* n (! (- n 1)))))
 
 #_(def iterator
   (fn [recur]
