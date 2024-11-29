@@ -204,8 +204,8 @@
 
 (defmethod print-method PrimitiveFunction [{:keys [f]} ^Writer w]
   (.write w "#pFn[")
-  (if-let [name (:name (meta f))]
-    (.write w name)
+  (if-let [n (:name (meta f))]
+    (.write w (str n))
     (print-method f w))
   (.write w "]"))
 
@@ -223,8 +223,8 @@
 
 (defmethod print-method PrimitiveMacro [{:keys [f]} ^Writer w]
   (.write w "#pMac[")
-  (if-let [name (:name (meta f))]
-    (.write w name)
+  (if-let [n (:name (meta f))]
+    (.write w (str n))
     (print-method f w))
   (.write w "]"))
 
