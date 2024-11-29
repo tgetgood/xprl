@@ -6,7 +6,6 @@
 (nth [1 2 3] 1)                      1
 ((fn x (+ 1 x)) . 1)                 2
 (inc 6)                              7
-;; (map inc)                            inc
 ((fn [x y [z]] (+ x y z 1)) 2 3 [1]) 7
 (if (= 1 0) 1 2)                     2
 
@@ -26,3 +25,7 @@
 ;; Don't want dynamic scope to creep into the language just because we're using
 ;; it in the implementation
 ((fn [x] (((fn [x] x) +) x ((fn [x] (+ x 1)) 2))) 5) #_=>  8
+
+;; f and (map f) should always be the same in general, but testing functions for
+;; equality is something of a sore point at the moment...
+;; (map inc)                            inc

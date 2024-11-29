@@ -49,9 +49,9 @@
 (defn symbol [s]
   (cond
     ;; TODO: Intern symbols
-    (= s ".")          dot
+    (= s ".")            dot
     (re-find #"^\.+$" s) (->Symbol [s])
-    :else              (->Symbol (split-symbolic s))))
+    :else                (->Symbol (split-symbolic s))))
 
 (defn keyword [s]
   (->Keyword (split-symbolic s)))
