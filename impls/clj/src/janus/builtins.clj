@@ -16,17 +16,30 @@
         body (last form)]
     [name body (assoc (meta form) :doc doc :source body)]))
 
-(defn xprl-def [form env c]
-  (let [[name body defmeta] (validate-def c form)]
-    (letfn [(next [cform]
-              (let [def  (with-meta cform (merge (meta cform) defmeta))
-                    lex' (assoc (:lex (meta form)) name def)]
-                (t/event! :def/top {:level :trace :data [name cform]})
-                (rt/emit c
-                  (ast/keyword "env")    lex'
-                  (ast/keyword "return") name)))]
-      (t/event! :def/evalbody {:level :trace :data body})
-      (i/eval body env (rt/withcc c rt/return next)))))
+(defn xprl-def [form args env c]
+  (let [[name body defmeta] (validate-def c args)]
+    (letfn [(next [name']
+              (cond
+                (instance? janus.ast.Symbol name')
+                (letfn [(next [body']
+                          (let [def  (with-meta body' (merge (meta body') defmeta))
+                                lex' (assoc (:lex (meta args)) name' def)]
+                            (i/event! ::def.top {:name name' :body body'
+                                                 :env (keys lex')})
+                            (rt/emit c
+                              (ast/keyword "env")    lex'
+                              (ast/keyword "return") name')))]
+                  (i/event! ::def.evalbody {:body body :name name'})
+                  (i/eval body env (rt/withcc c rt/return next)))
+
+                (i/reduced? name')
+                (fatal-error! c name' "Can only bind Symbols in env.")
+
+                :else (do
+                        (i/event! ::def.delay {:form form :args args :env env
+                                               :name name'})
+                        (i/succeed c (ast/application form args env)))))]
+      (i/reduce name env (rt/withcc c rt/return next)))))
 
 (def macros
   {"def" xprl-def

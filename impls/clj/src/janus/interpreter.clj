@@ -37,7 +37,7 @@
     3 args
     2 [nil (first args) (second args)]))
 
-(defn createμ [args env c]
+(defn createμ [_ args env c]
   (let [[name params body] (validate-μ args)
         next (fn [params]
                (if (and (ast/binding? params) (or (nil? name) (reduced? name)))
@@ -122,13 +122,13 @@
   (reduced? [_] true)
   (reduce [x env c]
     (event! ::reduce.PartialMu {:form x :dyn env})
-    (createμ (with-meta [(:name (meta x)) (:params x) (:body x)] (meta x)) env c))
+    (createμ x (with-meta [(:name (meta x)) (:params x) (:body x)] (meta x)) env c))
 
   janus.ast.Mu
   (reduced? [_] true)
   (reduce [x env c]
     (event! ::reduce.Mu {:form x :dyn env})
-    (createμ (with-meta [(:name (meta x)) (:params x) (:body x)] (meta x)) env c))
+    (createμ x (with-meta [(:name (meta x)) (:params x) (:body x)] (meta x)) env c))
 
   janus.ast.Pair
   (reduced? [x] (and (reduced? (:head x)) (reduced? (:tail x))))
@@ -149,6 +149,7 @@
 
   janus.ast.Symbol
   (eval [this env c]
+    ;; (event! ::eval.symbol {:form this :dyn env :lex (:env (meta this))})
     (if-let [v (get env this)]
       (if (= v ::unbound)
         (do
@@ -252,7 +253,7 @@
   (apply [head tail env c]
     (event! ::apply.Macro [head tail (dissoc (meta tail) :lex)])
     (letfn [(next [v] (succeed c v))]
-      ((:f head) tail env (return c next))))
+      ((:f head) head tail env (return c next))))
 
   janus.ast.PrimitiveFunction
   (apply [head tail env c]
