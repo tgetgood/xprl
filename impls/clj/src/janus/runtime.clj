@@ -31,7 +31,7 @@
   (t/event! ::work-steal {:level :trace})
   ;; TODO: steal work!
   (t/log! :info "Work queue empty. Nothing to do")
-  (throw (RuntimeException. "stealing not implemented.")))
+  #_(throw (RuntimeException. "stealing not implemented.")))
 
 (defn push! [^ConcurrentLinkedDeque exec tasks]
   (t/event! ::push-tasks {:data  {:count (count tasks)
