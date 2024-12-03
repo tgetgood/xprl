@@ -121,7 +121,7 @@
       (println "")
       @o)))
 
-(defn rep [env]
+(defn re [env]
   (try
     (let [form (r/read (r/stdin-reader) @env)]
       (rt/pushngo!
@@ -143,12 +143,12 @@
     (println)
     (print ">> ")
     (flush)
-    (loop [f (rep env)]
+    (loop [f (re env)]
       (println f)
       (print ">> ")
       (flush)
       (when (not= f :eof)
-        (recur (rep env))))))
+        (recur (re env))))))
 
 (defn Y [] (ev "(fn [f]
      ((fn [x] (f (x x))) (fn [x] (f (x x)))))"))
