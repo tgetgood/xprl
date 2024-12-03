@@ -29,3 +29,38 @@
    Take the basic idea direct from vulkan. Rewrite the interpreter so that all
    functions can be indirected and move all non-critical logic out of the main
    implementation.
+* Observations
+** [2024-11-30 Sat] Atemporality and Messaging
+   One assumption that I've been making about message passing is that if a μ
+   emits messages, then we know that those message will be sent at a point in
+   time strictly after μ receives its arguments.
+
+   Not being able to assume this seems like it would make it virtually
+   impossible to reason about what's going on over time.
+
+   Te current implementation of the interpreter, however, violates this in
+   certain circumstances.
+
+   The basic assumption of the interpreter is that every time we get more
+   information (a message delivered to a μ), we run the computation as far
+   forward as we can with that info.
+
+   But then what happens if we have something like:
+
+   (μ x (μ y (emit :ch (f x))))
+
+   where the emission doesn't depend on the value of =y= that will be sent to
+   the inner μ.
+
+   In this circumstance, (f x) will be emitted on :ch as soon as the outer μ
+   receives a value for x. This means that the inner μ won't even be around to
+   receive a message, which can lead to problems down the line.
+
+   μs and emission are, in essence, a coordination language where the actual
+   computations are performed by "external interpreters", or primitive functions
+   which call out to ... something. In this case host language operations, but
+   that won't be the case forever.
+
+   So I think I'm going to classify the current behaviour as a bug. Eager
+   interpretation is almost always the right thing to do, but not with emit, and
+   likely not with other primitive macros.

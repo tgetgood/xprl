@@ -39,11 +39,37 @@
                         (i/succeed c (ast/application form args env)))))]
       (i/reduce name env (rt/withcc c rt/return next)))))
 
+(defn emit [mac kvs env c]
+  (letfn [(next [v]
+            (if (i/reduced? v)
+              (apply rt/emit c v)
+              (i/succeed c (with-meta (ast/application
+                                       mac (with-meta v
+                                             (assoc (meta v)
+                                                    :reduced? true)))
+                             (meta mac)))))]
+    (let [coll (rt/collector (i/return c next) (count kvs))
+          tasks
+          (into
+           []
+           (comp
+            (map-indexed
+             (fn [i x]
+               [(if (even? i)
+                  ;; eval keys
+                  (fn [x] (i/eval x env (i/return c #(rt/receive coll i %))))
+                  ;; reduce values
+                  (fn [x] (i/reduce x env (i/return c #(rt/receive coll i %)))))
+                x]))
+            cat)
+           kvs)]
+      (apply rt/emit c tasks))))
+
 (def macros
   {"def" xprl-def
    "μ"   i/createμ
    ;; "withcc" withcc
-   ;; "emit"   emit
+   "emit"   emit
 
    ;; returns what would have been emitted as data so that we can inspect/modify
    ;; it.
