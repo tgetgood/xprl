@@ -121,7 +121,7 @@
       (println "")
       @o)))
 
-(defn rep []
+(defn rep [env]
   (try
     (let [form (r/read (r/stdin-reader) @env)]
       (rt/pushngo!
@@ -131,6 +131,24 @@
     (catch Exception _
       (println "")
       @o)))
+
+(defn repl [& args]
+  (t/set-min-level! :warn)
+  (let [env (atom base-env)]
+    (try
+      (println "Loading core.xprl")
+      (loadfile env corexprl)
+      (catch Exception _
+        (println "Ready.")))
+    (println)
+    (print ">> ")
+    (flush)
+    (loop [f (rep env)]
+      (println f)
+      (print ">> ")
+      (flush)
+      (when (not= f :eof)
+        (recur (rep env))))))
 
 (defn Y [] (ev "(fn [f]
      ((fn [x] (f (x x))) (fn [x] (f (x x)))))"))
@@ -146,5 +164,3 @@
 
 (defn ev-filters! []
   (t/set-min-level! :janus.interpreter/trace :trace))
-
-(loadfile env corexprl)

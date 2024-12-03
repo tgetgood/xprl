@@ -27,28 +27,37 @@
 * Usage
   This is still very early. There's no editor support, basically no tooling. All
   we have is a some data structures, an interpreter, and a repl. To run the repl:
+** Clojure
+   From the clj dir ("impls/clj/"), run
+   #+BEGIN_SRC sh
+     clojure -Arepl -X
+   #+END_SRC
 
-  #+BEGIN_SRC julia
-    # First time project setup
-    import Pkg
-    Pkg.activate("./") # Assumes you're running the repl from project root.
-    Pkg.instantiate()
+   or call =janus.core/repl= from your editor. Note: nrepl in emacs handles
+   =read= by taking stdin from the minibuffer. This is a little weird, but not
+   unusable.
+** Julia
+   #+BEGIN_SRC julia
+     # First time project setup
+     import Pkg
+     Pkg.activate("./") # Assumes you're running the repl from jl project root.
+     Pkg.instantiate()
 
-    # Optional, takes a while but speeds up subsequent runs
-    Pkg.precompile()
+     # Optional, takes a while but speeds up subsequent runs
+     Pkg.precompile()
 
-    # Run a demo
-    include("src/core.jl")
-  #+END_SRC
+     # Run a demo
+     include("src/core.jl")
+   #+END_SRC
 
-  Once the project has been instantiated, you can run the repl from a terminal
-  in the root directory with
+   Once the project has been instantiated, you can run the repl from a terminal
+   in the root directory with
 
-  #+BEGIN_SRC sh
-    julia --project=. src/core.jl
-  #+END_SRC
+   #+BEGIN_SRC sh
+     julia --project=. src/core.jl
+   #+END_SRC
 
-  Have fun. Or try to without rlwrap...
+   Have fun. Or try to without rlwrap...
 * Docs
   For a primer on the language (in progress) See docs/langauge.org.
 

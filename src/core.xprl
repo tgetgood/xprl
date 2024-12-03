@@ -1,8 +1,8 @@
 #_(ns janus.core
   (:require [primitives#abc123 as base]))
 
-(emit :env {def ~(μ [name body]
-                    (emit :env {name ~body}))})
+;; (emit :env {def ~(μ [name body]
+;;                     (emit :env {name ~body}))})
 
 (def wrap
   "Wraps a μ or primitive that takes only literal values in a function that
