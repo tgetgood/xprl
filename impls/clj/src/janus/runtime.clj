@@ -14,23 +14,6 @@
 
 ;;;;;
 
-;; FIXME: next and running? should be volative mutables, but I don't want to
-;; deal with that until performance actually becomes a problem.
-;;
-;; Remember: an executor is bound to a single thread, so concurrency isn't an
-;; issue except during work stealing.
-(defrecord Executor [^ConcurrentLinkedDeque queue next running?])
-
-(defn create-executor []
-  ;; REVIEW: ConcurrentLinkedDeque is obviously too much overhead for the main
-  ;; event loop of a real system. The design calls for singlethreaded dequeues
-  ;; with a steal operation that needs to be somewhat coordinated. We'll get
-  ;; there eventually.
-  (->Executor (ConcurrentLinkedDeque.) (atom nil) (atom false)))
-
-(def ^:dynamic *coordinator* nil)
-(def ^:dynamic *executor* (create-executor))
-
 (def JumpException
   "Special exception to unroll stack in event loop."
   (proxy [java.lang.RuntimeException]
@@ -43,39 +26,9 @@
   (t/log! :debug "Work queue empty. Nothing to do")
   nil)
 
-(declare go!)
-
-(defn push!
-  [^Executor exec tasks]
-  (t/event! ::push-tasks {:data  {:count (count tasks)
-                                  :tasks tasks}
-                          :level :trace})
-  (when (seq tasks)
-    (if @(:next exec)
-      (.addAll (:queue exec) (reverse tasks))
-      (do
-        (when (< 1 (count tasks))
-          (.addAll (:queue exec) (reverse (rest tasks))))
-        (compare-and-set! (:next exec) nil (first tasks)))))
-  (if @(:running? exec)
-    (throw JumpException)
-    (do
-      (reset! (:running? exec) true)
-      (go! exec))))
-
 (defn run! [task]
   (t/event! ::run {:level :trace :data {:fn (first task) :args (rest task)}})
   ((first task) (rest task))
-  ;; FIXME: As currently implemented, the stack will grow until some task emits
-  ;; nothing.
-  ;;
-  ;; A task emitting nothing means that a thread of execution has died.
-  ;;
-  ;; Presumably the value it was working on was either discarded or aggregated
-  ;; into something else.
-  ;;
-  ;; This isn't so different from normal stack behaviour, but I'm not optimising
-  ;; tail calls, so this might well blow up.
   (throw JumpException))
 
 (defmacro check-jump
@@ -91,22 +44,72 @@
            (t/error! {:level :debug :id ::executor-error}  e#)
            false)))))
 
-(defn go!
-  ([^Executor exec]
-   (when (check-jump
-           (if-let [task @(:next exec)]
-             (do
-               (t/event! ::jump-task {:data task :level :trace})
-               (reset! (:next exec) nil)
-               (run! task)))
-           (if-let [task (.pollLast (:queue exec))]
-             (do
-               (t/event! ::pop-task {:data task :level :trace})
-               (run! task))
-             (if-let [work (steal! *coordinator* exec)]
-               (push! exec work)
-               (reset! (:running? exec) false))))
-     (recur exec))))
+(defprotocol Queue
+  (push! [this tasks])
+  (go! [this]))
+
+(defprotocol Initable
+  (start! [this])
+  (stop! [this])
+  (running? [this]))
+
+(defprotocol FnCache
+  (clear! [this])
+  (store! [this task])
+  (next-task [this]))
+
+(deftype Executor [^ConcurrentLinkedDeque queue
+                   ^:unsynchronized-mutable next
+                   ^:unsynchronized-mutable running?]
+
+  Queue
+  (push! [this tasks]
+    (if next
+      (.addAll queue tasks)
+      (do
+        (set! next (first tasks))
+        (.addAll queue (rest tasks))))
+    (if running?
+      (throw JumpException)
+      (start! this)))
+  (go! [this]
+    (if-let [task (next-task this)]
+      (when (check-jump (run! task))
+        (recur))
+      (if-let [work (steal! nil this)]
+        (push! this work)
+        (stop! this))))
+
+  Initable
+  (start! [this]
+    (set! running? true)
+    (go! this))
+  (stop! [_]
+    (set! running? false))
+  (running? [_]
+    running?)
+
+  FnCache
+  (clear! [_]
+    (set! next nil))
+  (store! [_ task]
+    (set! next task))
+  (next-task [_]
+    (if next
+      (let [n' next]
+        (set! next nil)
+        n')
+      (.pollLast queue))))
+
+(defn create-executor []
+  ;; REVIEW: ConcurrentLinkedDeque is obviously too much overhead for the main
+  ;; event loop of a real system. The design calls for singlethreaded dequeues
+  ;; with a steal operation that needs to be somewhat coordinated. We'll get
+  ;; there eventually.
+  (->Executor (ConcurrentLinkedDeque.) nil false))
+
+(def ^:dynamic *coordinator* nil)
+(def ^:dynamic *executor* (create-executor))
 
 ;;;;; Emission
 

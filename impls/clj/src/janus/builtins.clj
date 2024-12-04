@@ -26,7 +26,7 @@
                             (i/event! ::def.top {:name name' :body body'})
                             (rt/emit c
                                      (ast/keyword "env")   {name' def}
-                                     (ast/keyword "return"r name')))]
+                                     (ast/keyword "return") name')))]
                   (i/event! ::def.evalbody {:body body :name name'})
                   (i/eval body env (i/return c next)))
 

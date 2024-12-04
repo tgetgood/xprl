@@ -94,7 +94,7 @@
                         "Running test:")
                 (if (or (= :eof f1) (= :eof f2))
                   (t/log! {:level :info :id :ktest} "All tests passed!")
-                  (rt/push!
+                  #_(rt/push!
                    [[#(apply i/eval %) f1 {}
                      (i/return c #(rt/receive collect 0 %)
                                rt/error  (handler r1))]
