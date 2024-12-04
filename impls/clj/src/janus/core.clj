@@ -1,4 +1,5 @@
 (ns janus.core
+  (:refer-clojure :exclude [eval])
   (:require
    [janus.ast :as ast]
    [janus.builtins :refer [base-env]]
@@ -14,21 +15,13 @@
 
 (def env (atom base-env))
 
-(def cx (r/file-reader corexprl))
-
-(def s
-  (r/string-reader "[0x4e [{:asd 34} [#{:sd 34}]] \n;comment\n #_(f x y [23]) ~(bob x [1 2 3])]"))
-
-(def dyn {})
-
-(def forms (r/read-file corexprl))
-
-(def t (r/read (r/file-reader corexprl) @env))
-
 (def o (atom nil))
 
+(defn eval [form conts]
+  (rt/push! rt/*executor* [[#(apply i/eval %) form {} conts]]))
+
 (defn loadfile [env fname]
-  (let [conts {rt/env    #(swap! env merge %)
+  (let [conts {rt/env    #(apply swap! env merge %)
                rt/return #(throw (RuntimeException. "boom!"))
                rt/error  (fn [{:keys [form message]}]
                            (t/log! {:id   :fileloader :level :error
@@ -45,11 +38,9 @@
                 (util/form-log! :debug form "eval form")
                 (if (= :eof form)
                   @env
-                  (rt/pushngo!
-                   [i/eval form {} (rt/withcc conts
-                                     rt/return (fn [res]
-                                                 (println res)
-                                                 (looper reader)))]))))]
+                  (eval form (i/return conts (fn [res]
+                                               (println res)
+                                               (looper reader)))))))]
       (looper (r/file-reader fname)))))
 
 (def ^:dynamic *t nil)
@@ -103,43 +94,34 @@
                         "Running test:")
                 (if (or (= :eof f1) (= :eof f2))
                   (t/log! {:level :info :id :ktest} "All tests passed!")
-                  (rt/pushngo!
-                   [i/eval f1 {} (rt/withcc c
-                                   rt/return #(rt/receive collect 0 %)
-                                   rt/error  (handler r1))]
-                   [i/eval f2 {} (rt/withcc c
-                                   rt/return #(rt/receive collect 1 %))]))))]
+                  (rt/push!
+                   [[#(apply i/eval %) f1 {}
+                     (i/return c #(rt/receive collect 0 %)
+                               rt/error  (handler r1))]
+                    [#(apply i/eval %) f2 {}
+                     (i/return c #(rt/receive collect 1 %))]]))))]
       (looper (r/file-reader fname)))))
 
-(defn r [form]
-  (rt/pushngo! [i/eval form {} {rt/return #(reset! o %)}]))
-
 (defn ev [s]
-  (try
-    (r (:form (r/read (r/string-reader s) @env)))
-    (catch Exception _
-      (println "")
-      @o)))
+  (eval (:form (r/read (r/string-reader s) @env))
+        {rt/return #(reset! o (first %))})
+  @o)
 
 (defn re [env]
-  (try
-    (let [form (r/read (r/stdin-reader) @env)]
-      (rt/pushngo!
-       [i/eval (:form form) {} {rt/return #(reset! o %)
-                                rt/env    #(swap! env merge %)
-                                rt/error  #(t/log! :error %)}]))
-    (catch Exception _
-      (println "")
-      @o)))
+  (let [form (r/read (r/stdin-reader) @env)]
+    (eval (:form form) {rt/return #(apply reset! o %)
+                        rt/env    (fn [e']
+                                    (println e')
+                                    (swap! env merge e'))
+                        rt/error  #(t/log! :error %)}))
+  @o)
 
 (defn repl [& args]
   (t/set-min-level! :warn)
   (let [env (atom base-env)]
-    (try
-      (println "Loading core.xprl")
-      (loadfile env corexprl)
-      (catch Exception _
-        (println "Ready.")))
+    (println "Loading core.xprl")
+    (loadfile env corexprl)
+    (println "Ready.")
     (println)
     (print ">> ")
     (flush)
@@ -157,10 +139,14 @@
   (ev "((fn [x] (+ x 1)) 1)"))
 
 (defn clear-filters! []
-  (t/set-min-level! :info)
+  (t/set-min-level! :warn)
   (t/set-min-level! :janus.interpreter/trace :info)
+  (t/set-min-level! :event #{"janus.runtime"} :info)
   (t/set-id-filter! "*")
   (t/set-ns-filter! "*"))
 
 (defn ev-filters! []
   (t/set-min-level! :janus.interpreter/trace :trace))
+
+(defn rt-filters! []
+  (t/set-min-level! :event #{"janus.runtime"} :trace))

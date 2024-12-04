@@ -21,7 +21,7 @@
 (defn ni [] (throw (RuntimeException. "not implemented")))
 
 (defn return [c next]
-  (rt/withcc c rt/return next))
+  (rt/withcc c rt/return #(clojure.core/apply next %)))
 
 (defn event!
   [id m]
@@ -83,10 +83,12 @@
                      (succeed c (with-meta v
                                   (assoc (meta this) ::reduced? (reduced? v)))))
               collector (rt/collector (return c next) (count this))
-              runner (fn [[i x]]
+              runner (fn [[[i x]]]
+                       (event! :reduce.vector.runner {:i i :x x})
                        (reduce x env
                                (return c (fn [v] (rt/receive collector i v)))))
               tasks (interleave (repeat runner) (map-indexed vector this))]
+          (event! ::reduce.vector.tasks tasks)
           (clojure.core/apply rt/emit c tasks)))))
 
   clojure.lang.AMapEntry

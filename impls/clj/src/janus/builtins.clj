@@ -25,10 +25,10 @@
                           (let [def (with-meta body' (merge (meta body') defmeta))]
                             (i/event! ::def.top {:name name' :body body'})
                             (rt/emit c
-                                     (ast/keyword "env")    {name' def}
-                                     (ast/keyword "return") name')))]
+                                     (ast/keyword "env")   {name' def}
+                                     (ast/keyword "return"r name')))]
                   (i/event! ::def.evalbody {:body body :name name'})
-                  (i/eval body env (rt/withcc c rt/return next)))
+                  (i/eval body env (i/return c next)))
 
                 (i/reduced? name')
                 (fatal-error! c name' "Can only bind Symbols in env.")
@@ -37,7 +37,7 @@
                         (i/event! ::def.delay {:form form :args args :env env
                                                :name name'})
                         (i/succeed c (ast/application form args env)))))]
-      (i/reduce name env (rt/withcc c rt/return next)))))
+      (i/reduce name env (i/return c next)))))
 
 (defn emit [mac kvs env c]
   (letfn [(next [v]
