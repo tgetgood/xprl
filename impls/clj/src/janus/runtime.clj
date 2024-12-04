@@ -65,10 +65,14 @@
   Queue
   (push! [this tasks]
     (if next
-      (.addAll queue tasks)
+      (if (= 1 (count tasks))
+        (.add queue (first tasks))
+        (.addAll queue tasks))
       (do
         (set! next (first tasks))
-        (.addAll queue (rest tasks))))
+        (if (= 2 (count tasks))
+          (.add queue (second tasks))
+          (.addAll queue (rest tasks)))))
     (if running?
       (throw JumpException)
       (start! this)))
