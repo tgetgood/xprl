@@ -18,11 +18,41 @@
 
     true))
 
-(defmulti reduce
-  "Syntactically reduce an expression in a given dynamic environment."
-  (fn [form dyn continuations opts] (type form)))
+(declare emit)
 
-(defmethod reduce Object [form dyn cs opts]
-  {:return form})
+(defmulti reduce (fn [form] (type form)))
+(defmulti eval (fn [form] (type form)))
+(defmulti apply (fn [head tail] (type head)))
+(defmulti envwrapper (fn [form dyn] (type form)))
 
-;; (defmethod reduce clojure.lang.PersistentVector)
+(defmacro add-method [multi [t args body]]
+  `(defmethod multi ~t ~args ~body))
+
+(defmacro impls
+  {:style/indent [1]}
+  [multi & body]
+  `(do ~@(into [] (map (fn [[t args body]]
+                         `(defmethod ~multi ~t ~args ~body)))
+               (partition 3 body))))
+
+(impls reduce
+  Object [form]
+  {:call (emit rt/return form)}
+
+  janus.ast.Immediate [{:keys [form]}]
+  {:call (eval form)}
+
+  janus.ast.Application [{:keys [head tail]}]
+  {:call (reduce head)
+   :next (fn [head'] {:call (apply head' tail)})}
+  )
+
+(impls envwrapper
+  :default [form dyn]
+
+  )
+#_(def evals
+  {Object              (fn [form] {:emit [rt/return form]})
+   janus.ast.Immediate (fn [{:keys [form]}]
+                         {:eval form
+                          :next (fn [form'] {:eval form'})})})
