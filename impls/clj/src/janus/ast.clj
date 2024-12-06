@@ -150,11 +150,13 @@
 (defrecord Application [head tail env]
   Object
   (toString [_]
-    (str "#" (.toString (->Pair head tail)))))
+    (str "#" (str (->Pair head tail)))))
 
-(defn application [head tail env]
-  (with-meta (->Application head tail env)
-    (select-keys (meta head) [:file :string :line :col])))
+(defn application
+  ([head tail] (application head tail {}))
+  ([head tail env]
+   (with-meta (->Application head tail env)
+     (select-keys (meta head) [:file :string :line :col]))))
 
 (ps Application)
 
