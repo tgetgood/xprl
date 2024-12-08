@@ -1,5 +1,5 @@
 (ns janus.runtime
-  (:refer-clojure :exclude [run!])
+  (:refer-clojure :exclude [run! delay])
   (:require [janus.ast :as ast]
             ;; FIXME: Minimise runtime requirements
             [taoensso.telemere :as t])
@@ -11,6 +11,7 @@
 (def return (ast/keyword "return"))
 (def error (ast/keyword "error"))
 (def env (ast/keyword "env"))
+(def delay (ast/keyword "delay"))
 
 ;;;;;
 

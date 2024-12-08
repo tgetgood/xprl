@@ -186,7 +186,7 @@
 (defmethod pp/simple-dispatch PartialMu [{:keys [params body]}]
   (ppmu (symbol "#Pμ") params body))
 
-(defrecord Mu [params body]
+(defrecord Mu [params body activation-fn]
   Object
   (toString [_]
     (mustr "μ" params body)))

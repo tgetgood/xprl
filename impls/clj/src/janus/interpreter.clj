@@ -37,28 +37,42 @@
     3 args
     2 [nil (first args) (second args)]))
 
-(defn createμ [_ args env c]
-  (let [[name params body] (validate-μ args)
-        next (fn [params]
-               (if (and (ast/binding? params) (or (nil? name) (reduced? name)))
-                 (let [bind (into {} (map (fn [k] [k marker]))
-                                  (ast/bindings params))
-                       env' (merge env bind (when name {name marker}))
-                       next (fn [cbody]
-                              (succeed c (with-meta (ast/->Mu params cbody)
-                                           (merge (meta args)
-                                                  {:source body}
-                                                  (when name
-                                                    {:name name})))))]
-                   (event! ::createμ.bound {:params params :body body})
-                   (reduce body env' (return c next)))
-                 (do
-                   (event! ::createμ.unbound {:params params :body body})
-                   (succeed c (with-meta (ast/->PartialMu params body)
-                                (merge (meta args)
-                                       (when name {:name name})))))))]
-    (event! ::createμ {:params params :body body :dyn env})
-    (reduce params env (return c next))))
+(defn createμ [_ tail dyn ccs]
+  (let [[name params body] (validate-μ tail)
+        loose-ends         (atom #{})
+        return-ch          (atom nil)]
+    (letfn [(delay [[sym ccs]]
+                   (event! ::createμ.delay sym)
+                   (if-let [bound @return-ch]
+                     (throw (RuntimeException. "This should be unreachable!!"))
+                     (swap! loose-ends conj
+                            (fn [env apply-ccs]
+                              (eval sym env (return apply-ccs (get ccs rt/return)))))))
+            (ret [value]
+              (if-let [ccs @return-ch]
+                (do
+                  (event! ::createμ.return.async value)
+                  (rt/emit ccs rt/return value))
+                (do
+                  (event! ::createμ.return.delay value)
+                  (add-watch return-ch (gensym)
+                             (fn [k ref _ ccs]
+                               (remove-watch ref k)
+                               (event! ::createμ.return.delayed value)
+                               (rt/emit ccs rt/return value))))))
+            (next [params']
+              (let [bind (into {} (map (fn [k] [k marker]))
+                               (ast/bindings params))
+                    env' (merge dyn bind (when name {name marker}))]
+                (event! ::createμ.params params')
+                (reduce body env' (rt/withcc ccs rt/return ret rt/delay delay))))]
+      (event! ::createμ {:args tail :dyn dyn})
+      (rt/emit ccs
+        reduce [params dyn (rt/withcc ccs rt/return next rt/delay delay)]
+        rt/return (ast/->Mu params body
+                            (fn [bound-env ccs]
+                              (reset! return-ch ccs)
+                              (run! #(% bound-env ccs) @loose-ends)))))))
 
 (extend-protocol Reductive
   Object
@@ -233,18 +247,13 @@
                                 (when-let [name (:name (meta head))]
                                   {name head}))]
                 (event! ::apply.Mu.destructuring {:bindings bind})
-                (if (nil? bind)
-                  (if (reduced? tail')
-                    (fatal-error! c {:params (:params head) :args tail'}
-                                  "Failed to bind arguments to μ.")
-                    (succeed c (ast/application head tail' env)))
-                  (let [env' (merge env bind)]
-                    (reduce (:body head) env' c)))))]
+                ((:activation-fn head) bind c)))]
       (reduce tail env (return c next))))
 
   janus.ast.PartialMu
   (apply [head tail env c]
     (event! ::apply.PartialMu {:head head :tail tail})
+    (throw (RuntimeException. "unreachable!!"))
     (letfn [(next [head']
               (condp instance? head'
                 janus.ast.PartialMu (succeed c (ast/application head' tail env))

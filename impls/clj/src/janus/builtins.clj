@@ -68,7 +68,7 @@
 (defn clear [ctx]
   (dissoc ctx :form :head :tail))
 
-(defn select [{[p t f] :tail :as ctx}]
+#_(defn select [[p t f] dyn ccs]
   (let [marker (gensym)]
     (-> ctx
         clear
@@ -94,7 +94,7 @@
    ;; effectively in μs because we want it (intuitively) to perform the "switch"
    ;; as soon as the predicate resolves, but a function must wait for all args
    ;; to resolve.
-   "select" select
+   ;; "select" select
 
    ;; returns what would have been emitted as data so that we can inspect/modify
    ;; it.
