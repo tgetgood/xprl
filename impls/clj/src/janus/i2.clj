@@ -1,10 +1,24 @@
 (ns janus.i2
-  (:refer-clojure :exclude [eval apply reduce reduced?])
+  (:refer-clojure :exclude [eval apply reduce reduced? delay])
   (:require
    [janus.ast :as ast]
    [janus.runtime :as rt]
    [janus.util :refer [fatal-error!]]
    [taoensso.telemere :as t]))
+
+;;;;; Statefuls
+
+(defrecord Stateful [queue state body])
+
+(defn stateful [args env continuations]
+  (let [queue (atom clojure.lang.PersistentQueue/EMPTY)
+        state (atom nil)]
+    (letfn [])
+    #_(->Stateful
+                 ))
+  )
+
+;;;;; Value check
 
 (defn reduced? [x]
   (condp instance? x
@@ -49,13 +63,36 @@
     3 args
     2 [::anon (first args) (second args)]))
 
-(defn createμ [{:keys [tail dyn continuations] :as ctx}]
-  (let [[name params body] (validate-μ tail)]
-    (reduce
-     (-> ctx
-         (assoc :form params :previous ctx)
-         (assoc-in [:continuations ]))))
-  )
+(def marker ::unbound)
+
+(defn createμ [_ tail dyn ccs]
+  (let [[name params body] (validate-μ tail)
+        loose-ends         (atom #{})
+        return-ch          (atom nil)]
+    (letfn [(delay [sym ccs]
+                   (if-let [bound @return-ch]
+                     (throw (RuntimeException. "This should be unreachable!!"))
+                     (swap! loose-ends conj
+                            (fn [env apply-ccs]
+                              (i/eval sym env (return apply-ccs (get ccs rt/return)))))))
+            (ret [value]
+              (if-let [ccs @return-ch]
+                (rt/emit ccs rt/return value)
+                (add-watch return-ch (gensym)
+                           (fn [k ref _ ccs]
+                             (remove-watch ref k)
+                             (rt/emit ccs rt/return value)))))
+            (next [params']
+              (let [bind (into {} (map (fn [k] [k marker]))
+                               (ast/bindings params))
+                    env' (merge env bind (when name {name marker}))]
+                (reduce body env' (rt/withcc c rt/return ret rt/delay delay))))]
+      (rt/emit ccs
+        reduce [params dyn (rt/withcc ccs rt/return next rt/delay delay)]
+        rt/return (->ast/Mu params body
+                            (fn [[bound-env ccs]
+                                 (reset! return-ch ccs)
+                                 (run! #(% bound-env ccs) @loose-ends)]))))))
 
 (impls reduce*
   Object [{:keys [form] :as ctx}]
