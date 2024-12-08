@@ -65,11 +65,36 @@
            kvs)]
       (apply rt/emit c tasks))))
 
+(defn clear [ctx]
+  (dissoc ctx :form :head :tail))
+
+(defn select [{[p t f] :tail :as ctx}]
+  (let [marker (gensym)]
+    (-> ctx
+        clear
+        (assoc :form p)
+        (assoc-in [:continuations rt/return]
+                  (fn [{p' :form}]
+                    (assert (boolean? p)
+                            "Select only takes a literal boolean as first arg.")
+                    (-> ctx
+                        clear
+                        (assoc :return-from ctx)
+                        (assoc :form (if p' t f))
+                        i/reduce)))
+        i/reduce)))
+
 (def macros
   {"def" xprl-def
    "μ"   i/createμ
    ;; "withcc" withcc
    "emit"   emit
+
+   ;; Select can be a function, but then it's basically impossible to use
+   ;; effectively in μs because we want it (intuitively) to perform the "switch"
+   ;; as soon as the predicate resolves, but a function must wait for all args
+   ;; to resolve.
+   "select" select
 
    ;; returns what would have been emitted as data so that we can inspect/modify
    ;; it.
@@ -79,11 +104,6 @@
 
 (defn nth* [c i]
   (nth c (dec i)))
-
-(defn select [p t f]
-  (condp identical? p
-    true t
-    false f))
 
 (def fns
   {"+*" +
@@ -95,14 +115,7 @@
    "=*" =
 
    "nth*" nth* ; Base 1 indexing
-
-   ;; REVIEW: Is there a better way to do data (non-branching) selection in
-   ;; clojure?
-   ;; REVIEW: The smalltalk style if can be implemented in xprl without any
-   ;; builtins. That's very elegant, but does it have other advantages?
-   ;; The downside is that I would have to implement all of the boolean builtins
-   ;; myself instead of just calling them.
-   "select" select})
+   })
 
 (defn tagged [f]
   (fn [[k v]]

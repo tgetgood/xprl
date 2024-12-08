@@ -18,11 +18,17 @@
 
     true))
 
-(declare emit)
+(defn emit [ctx & args]
+  (clojure.core/apply rt/emit (:continuations ctx) args))
 
-(defmulti reduce (fn [form] (type form)))
-(defmulti eval (fn [form] (type form)))
-(defmulti apply (fn [head tail] (type head)))
+(defmulti reduce* (fn [ctx] (type (:form ctx))))
+(defmulti eval*   (fn [ctx] (type (:form ctx))))
+(defmulti apply*  (fn [ctx] (type (:head ctx))))
+
+(def ^:dynamic reduce reduce*)
+(def ^:dynamic eval eval*)
+(def ^:dynamic apply apply*)
+
 (defmulti envwrapper (fn [form dyn] (type form)))
 
 (defmacro add-method [multi [t args body]]
@@ -35,9 +41,25 @@
                          `(defmethod ~multi ~t ~args ~body)))
                (partition 3 body))))
 
-(impls reduce
-  Object [form]
-  {:call (emit rt/return form)}
+(defn return [ctx f]
+  (assoc-in ctx [:continuations rt/return] f))
+
+(defn validate-μ [args]
+  (condp = (count args)
+    3 args
+    2 [::anon (first args) (second args)]))
+
+(defn createμ [{:keys [tail dyn continuations] :as ctx}]
+  (let [[name params body] (validate-μ tail)]
+    (reduce
+     (-> ctx
+         (assoc :form params :previous ctx)
+         (assoc-in [:continuations ]))))
+  )
+
+(impls reduce*
+  Object [{:keys [form] :as ctx}]
+  (emit ctx rt/return form)
 
   janus.ast.Immediate [{:keys [form]}]
   {:call (eval form)}
@@ -51,6 +73,11 @@
   :default [form dyn]
 
   )
+
+(defn reduce-with [tx ctx]
+  (binding [reduce (fn [ctx] (reduce* (tx ctx)))]
+    (reduce ctx)))
+
 #_(def evals
   {Object              (fn [form] {:emit [rt/return form]})
    janus.ast.Immediate (fn [{:keys [form]}]
