@@ -1,7 +1,8 @@
 (ns janus.runtime
   (:refer-clojure :exclude [run! delay])
-  (:require [janus.ast :as ast]
-            ;; FIXME: Minimise runtime requirements
+  ;; FIXME: Minimise runtime requirements
+  (:require [clojure.repl :as repl]
+            [janus.ast :as ast]
             [taoensso.telemere :as t])
   (:import [java.util.concurrent ConcurrentLinkedDeque]))
 
@@ -28,8 +29,11 @@
   nil)
 
 (defn run! [task]
-  (t/event! ::run {:level :trace :data {:fn (first task) :args (rest task)}})
-  ((first task) (rest task))
+  (assert (= 2 (count task)) (str  "Too Many args: " (str task)))
+  (t/event! ::run {:level :trace :data {:fn   (first task)
+                                        :meta (meta (first task))
+                                        :args (second task)}})
+  ((first task) (second task))
   (throw JumpException))
 
 (defmacro check-jump
@@ -135,9 +139,11 @@
 (defn parse-emission [c [k v]]
   (t/log! :debug ["Emission:" k (get c k) v])
   (cond
-    (ast/keyword? k) [(get c k unbound-channel) v]
+    (ast/keyword? k) [(with-meta (get c k unbound-channel)
+                        (merge (meta k) {:ch k}))
+                      v]
     ;; TODO: What kind of function?
-    (fn? k)          [k v]
+    (fn? k)          [(with-meta k (merge (meta k) {:ch :none})) v]
     :else            (do
                        (t/log! {:level :error
                                 :data [(type k) k]}

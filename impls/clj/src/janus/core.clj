@@ -18,10 +18,14 @@
 (def o (atom nil))
 
 (defn eval [form conts]
-  (rt/push! rt/*executor* [[#(apply i/eval %) form {} conts]]))
+  (rt/push! rt/*executor* [[(with-meta #(apply i/eval %) {:name "eval"})
+                            [form {} conts]]]))
 
 (defn loadfile [env fname]
-  (let [conts {rt/env    #(apply swap! env merge %)
+  ;; HACK: The executor doesn't clean up properly in the face of errors!
+  (rt/stop! rt/*executor*)
+
+  (let [conts {rt/env    #(swap! env merge %)
                rt/return #(throw (RuntimeException. "boom!"))
                rt/error  (fn [{:keys [form message]}]
                            (t/log! {:id   :fileloader :level :error
@@ -38,9 +42,10 @@
                 (util/form-log! :debug form "eval form")
                 (if (= :eof form)
                   @env
-                  (eval form (i/return conts (fn [res]
-                                               (println res)
-                                               (looper reader)))))))]
+                  (eval form (i/with-return conts
+                               (fn [res]
+                                 (println res)
+                                 (looper reader)))))))]
       (looper (r/file-reader fname)))))
 
 (def ^:dynamic *t nil)
@@ -55,8 +60,8 @@
   [env fname]
   ;; Don't modify outside environment.
   (let [env (atom (if (instance? clojure.lang.IDeref env) @env env))
-        c   {rt/env #(swap! env merge %) rt/error #(t/event! :ktest {:data %
-                                                                :msg  "bbom"})}]
+        c   {rt/env   #(swap! env merge %)
+             rt/error #(t/event! :ktest {:data % :msg "bbom"})}]
     (letfn [(comparator [r1 r2]
               (let [[f1 f2] (map :form [r1 r2])]
                 {rt/return
@@ -95,11 +100,11 @@
                 (if (or (= :eof f1) (= :eof f2))
                   (t/log! {:level :info :id :ktest} "All tests passed!")
                   #_(rt/push!
-                   [[#(apply i/eval %) f1 {}
-                     (i/return c #(rt/receive collect 0 %)
+                     [[i/eval f1 {}
+                     (i/with-return c #(rt/receive collect 0 %)
                                rt/error  (handler r1))]
-                    [#(apply i/eval %) f2 {}
-                     (i/return c #(rt/receive collect 1 %))]]))))]
+                      [i/eval f2 {}
+                     (i/with-return c #(rt/receive collect 1 %))]]))))]
       (looper (r/file-reader fname)))))
 
 (defn ev [s]
@@ -109,7 +114,7 @@
 
 (defn re [env]
   (let [form (r/read (r/stdin-reader) @env)]
-    (eval (:form form) {rt/return #(apply reset! o %)
+    (eval (:form form) {rt/return #(reset! o %)
                         rt/env    (fn [e']
                                     (println e')
                                     (swap! env merge e'))

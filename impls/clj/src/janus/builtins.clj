@@ -28,7 +28,7 @@
                                      (ast/keyword "env")   {name' def}
                                      (ast/keyword "return") name')))]
                   (i/event! ::def.evalbody {:body body :name name'})
-                  (i/eval body env (i/return c next)))
+                  (i/eval body env (i/with-return c next)))
 
                 (i/reduced? name')
                 (fatal-error! c name' "Can only bind Symbols in env.")
@@ -37,7 +37,7 @@
                         (i/event! ::def.delay {:form form :args args :env env
                                                :name name'})
                         (i/succeed c (ast/application form args env)))))]
-      (i/reduce name env (i/return c next)))))
+      (i/reduce name env (i/with-return c next)))))
 
 (defn emit [mac kvs env c]
   (letfn [(next [v]
@@ -48,7 +48,7 @@
                                              (assoc (meta v)
                                                     :reduced? true)))
                              (meta mac)))))]
-    (let [coll (rt/collector (i/return c next) (count kvs))
+    (let [coll (rt/collector (i/with-return c next) (count kvs))
           tasks
           (into
            []
@@ -57,9 +57,11 @@
              (fn [i x]
                [(if (even? i)
                   ;; eval keys
-                  (fn [x] (i/eval x env (i/return c #(rt/receive coll i %))))
+                  (fn [x] (i/eval x env (i/with-return
+                                          c #(rt/receive coll i %))))
                   ;; reduce values
-                  (fn [x] (i/reduce x env (i/return c #(rt/receive coll i %)))))
+                  (fn [x] (i/reduce x env (i/with-return
+                                            c #(rt/receive coll i %)))))
                 x]))
             cat)
            kvs)]

@@ -20,8 +20,8 @@
 ;; FIXME: just find all calls to this
 (defn ni [] (throw (RuntimeException. "not implemented")))
 
-(defn return [c next]
-  (rt/withcc c rt/return #(clojure.core/apply next %)))
+(defn with-return {:style/indent 1} [c next]
+  (rt/withcc c rt/return next))
 
 (defn event!
   [id m]
@@ -42,12 +42,17 @@
         loose-ends         (atom #{})
         return-ch          (atom nil)]
     (letfn [(delay [[sym ccs]]
-                   (event! ::createμ.delay sym)
-                   (if-let [bound @return-ch]
-                     (throw (RuntimeException. "This should be unreachable!!"))
-                     (swap! loose-ends conj
-                            (fn [env apply-ccs]
-                              (eval sym env (return apply-ccs (get ccs rt/return)))))))
+                   (event! ::createμ.delay {:symbol     sym :return @return-ch
+                                            :loose-ends @loose-ends})
+                   (when @return-ch
+                     (throw (RuntimeException. "This should be unreachable!!")))
+                   (event! ::createμ.check sym)
+                   (swap! loose-ends conj
+                          (fn [env apply-ccs]
+                            (eval sym env (with-return apply-ccs
+                                            (get ccs rt/return)))))
+                   (event! ::createμ.delay.post {:symbol     sym
+                                                 :loose-ends @loose-ends}))
             (ret [value]
               (if-let [ccs @return-ch]
                 (do
@@ -68,9 +73,15 @@
                 (reduce body env' (rt/withcc ccs rt/return ret rt/delay delay))))]
       (event! ::createμ {:args tail :dyn dyn})
       (rt/emit ccs
-        reduce [params dyn (rt/withcc ccs rt/return next rt/delay delay)]
+        (fn [args] (clojure.core/apply reduce args))
+        [params dyn (rt/withcc ccs rt/return next rt/delay delay)]
         rt/return (ast/->Mu params body
                             (fn [bound-env ccs]
+                              (event! ::μ.activation
+                                      {:env        bound-env
+                                       :params     params
+                                       :body       body
+                                       :loose-ends @loose-ends})
                               (reset! return-ch ccs)
                               (run! #(% bound-env ccs) @loose-ends)))))))
 
@@ -96,11 +107,14 @@
         (let [next (fn [v]
                      (succeed c (with-meta v
                                   (assoc (meta this) ::reduced? (reduced? v)))))
-              collector (rt/collector (return c next) (count this))
-              runner (fn [[[i x]]]
-                       (event! :reduce.vector.runner {:i i :x x})
-                       (reduce x env
-                               (return c (fn [v] (rt/receive collector i v)))))
+              collector (rt/collector (with-return c next) (count this))
+              runner (with-meta
+                       (fn [[i x]]
+                         (event! :reduce.vector.runner {:i i :x x})
+                         (reduce x env
+                                 (with-return c
+                                   (fn [v] (rt/receive collector i v)))))
+                       {:name "reduce vector runner"})
               tasks (interleave (repeat runner) (map-indexed vector this))]
           (event! ::reduce.vector.tasks tasks)
           (clojure.core/apply rt/emit c tasks)))))
@@ -132,7 +146,7 @@
     ;; which is finds itself embedded. This is basically classic dynamic scope.
     (let [env' (merge env dyn)]
       (event! ::reduce.Application {:head head :tail tail :env env :dyn dyn})
-      (reduce head env' (return c #(apply % tail env' c)))))
+      (reduce head env' (with-return c #(apply % tail env' c)))))
 
   janus.ast.PartialMu
   (reduced? [_] true)
@@ -170,7 +184,8 @@
       (if (= v ::unbound)
         (do
           (event! ::eval.symbol.unbound (select-keys env [this]))
-          (succeed c (ast/immediate this env)))
+          (rt/emit c rt/delay [this c])
+          #_(succeed c (ast/immediate this env)))
         (do
           (event! ::eval.symbol.dynamic (select-keys env [this]))
           ;; REVIEW: The value of every dynamic binding should be a context
@@ -204,9 +219,10 @@
       (event! ::eval.Immediate {:form form :env env :dyn dyn})
       (letfn [(next [form]
                 (if (instance? janus.ast.Immediate form)
-                  (succeed c (ast/immediate this env'))
+                  (throw (RuntimeException. "unreachable??"))
+                  #_(succeed c (ast/immediate this env'))
                   (eval form env' c)))]
-        (eval form env' (return c next)))))
+        (eval form env' (with-return c next)))))
 
   janus.ast.Application
   (eval [form dyn c]
@@ -214,9 +230,10 @@
       (event! ::eval.Application {:form form :env env'})
       (letfn [(next [form]
                 (if (instance? janus.ast.Application form)
-                  (succeed c (ast/immediate form env'))
+                  (throw (RuntimeException. "unreachable??"))
+                  #_(succeed c (ast/immediate form env'))
                   (eval form env' c)))]
-        (reduce form env' (return c next))))))
+        (reduce form env' (with-return c next))))))
 
 (extend-protocol Applicable
   janus.ast.Immediate
@@ -233,7 +250,7 @@
               (if (instance? janus.ast.Application head)
                 (succeed c (ast/application head' tail env))
                 (apply head' tail env c)))]
-      (reduce head env (return c next))))
+      (reduce head env (with-return c next))))
 
   janus.ast.Mu
   (apply [head tail env c]
@@ -248,7 +265,7 @@
                                   {name head}))]
                 (event! ::apply.Mu.destructuring {:bindings bind})
                 ((:activation-fn head) bind c)))]
-      (reduce tail env (return c next))))
+      (reduce tail env (with-return c next))))
 
   janus.ast.PartialMu
   (apply [head tail env c]
@@ -258,13 +275,13 @@
               (condp instance? head'
                 janus.ast.PartialMu (succeed c (ast/application head' tail env))
                 janus.ast.Mu        (apply head' tail env c)))]
-      (reduce head env (return c next))))
+      (reduce head env (with-return c next))))
 
   janus.ast.PrimitiveMacro
   (apply [head tail env c]
     (event! ::apply.Macro [head tail (dissoc (meta tail) :lex)])
     (letfn [(next [v] (succeed c v))]
-      ((:f head) head tail env (return c next))))
+      ((:f head) head tail env (with-return c next))))
 
   janus.ast.PrimitiveFunction
   (apply [head tail env c]
@@ -274,4 +291,4 @@
               (succeed c (if (reduced? tail')
                            (clojure.core/apply (:f head) tail')
                            (ast/application head tail' env))))]
-      (reduce tail env (return c next)))))
+      (reduce tail env (with-return c next)))))
