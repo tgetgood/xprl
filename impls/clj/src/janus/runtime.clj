@@ -16,6 +16,8 @@
 
 ;;;;;
 
+(declare ^:dynamic *executor*)
+
 (def JumpException
   "Special exception to unroll stack in event loop."
   (proxy [java.lang.RuntimeException]
@@ -36,19 +38,6 @@
   ((first task) (second task))
   (throw JumpException))
 
-(defmacro check-jump
-  {:style/indent 0}
-  [& body]
-  `(try
-     ~@body
-     (catch RuntimeException e#
-       (if (identical? e# JumpException)
-         true
-         (do
-           (t/log! :error {:id ::executor-error :data (str e#)})
-           (t/error! {:level :debug :id ::executor-error}  e#)
-           false)))))
-
 (defprotocol Queue
   (push! [this tasks])
   (go! [this]))
@@ -62,6 +51,21 @@
   (clear! [this])
   (store! [this task])
   (next-task [this]))
+
+(defmacro check-jump
+  {:style/indent 0}
+  [& body]
+  `(try
+     ~@body
+     (catch RuntimeException e#
+       (if (identical? e# JumpException)
+         true
+         (do
+           (t/log! :error {:id ::executor-error :data (str e#)})
+           (t/error! {:level :debug :id ::executor-error}  e#)
+           (stop! *executor*)
+           (alter-var-root (var *e) (fn [_#] e#))
+           ::stopped)))))
 
 (deftype Executor [^ConcurrentLinkedDeque queue
                    ^:unsynchronized-mutable next
