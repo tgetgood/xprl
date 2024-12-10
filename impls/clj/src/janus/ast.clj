@@ -165,9 +165,6 @@
   (.write ^Writer *out* "#")
   (pp/simple-dispatch (->Pair head tail)))
 
-(defn mustr [s params body]
-  (str "(#" s " " params " " body ")"))
-
 (defn ppmu [t params body]
   ;; (pp/pprint-meta p)
   (pp/pprint-logical-block
@@ -176,25 +173,11 @@
    (pp/write-out t)
    (format-pair (symbol "μ") [params body])))
 
-(defrecord PartialMu [params body]
-  Object
-  (toString [_]
-    (mustr "Pμ" params body)))
 
-(ps PartialMu)
+;; (ps Mu)
 
-(defmethod pp/simple-dispatch PartialMu [{:keys [params body]}]
-  (ppmu (symbol "#Pμ") params body))
-
-(defrecord Mu [params body activation-fn]
-  Object
-  (toString [_]
-    (mustr "μ" params body)))
-
-(ps Mu)
-
-(defmethod pp/simple-dispatch Mu [{:keys [params body]}]
-  (ppmu (symbol "#μ") params body))
+;; (defmethod pp/simple-dispatch Mu [{:keys [params body]}]
+;;   (ppmu (symbol "#μ") params body))
 
 (defn fname [f]
   (or (:name (meta f)) (str f)))

@@ -22,7 +22,7 @@
               (cond
                 (instance? janus.ast.Symbol name')
                 (letfn [(next [body']
-                          (let [def (with-meta body' (merge (meta body') defmeta))]
+                          (let [def body']
                             (i/event! ::def.top {:name name' :body body'})
                             (rt/emit c
                                      (ast/keyword "env")   {name' def}

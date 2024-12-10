@@ -32,6 +32,53 @@
 
 (def marker ::unbound)
 
+;;;;; Mu
+
+(defprotocol MuP
+  (register-delay! [this sym return-continuation])
+  (set-static! [this value] "For constant functions.")
+  (activate! [this env calling-continuations]))
+
+(defprotocol Inspectable
+  (inspect [this]))
+
+(defn mustr [params body]
+  (str "(#μ " params " " body ")"))
+
+(deftype Mu [name
+             params
+             body
+             ^:volatile-mutable loose-ends
+             ^:volatile-mutable cached-value]
+  Object
+  (toString [_]
+    (str "(#μ " params " " body ")"))
+
+  Inspectable
+  (inspect [_]
+    {:params params :body body :name name
+     :loose-ends loose-ends :cached cached-value})
+
+  MuP
+  (set-static! [_ value]
+    (set! cached-value value)
+    (event! ::createμ.return.static value))
+  (register-delay! [_ sym rc]
+    (set! loose-ends (update loose-ends sym conj rc))
+    (event! ::createμ.delay {:symbol sym :loose-ends loose-ends}))
+  (activate! [_ env ccs]
+    (event! ::createμ.activation {:env env})
+    (if (not (nil? cached-value))
+      (rt/emit ccs rt/return cached-value)
+      (clojure.core/apply
+       rt/emit ccs
+       (mapcat (fn [[k vs]]
+                 (map (fn [v] [eval [k env (assoc ccs rt/return v)]]) vs))
+               loose-ends)))))
+
+(defn μ [name params body]
+  (->Mu name params body {} nil))
+
 (defn validate-μ [args]
   (condp = (count args)
     3 args
@@ -39,32 +86,11 @@
 
 (defn createμ [_ tail dyn ccs]
   (let [[name params body] (validate-μ tail)
-        loose-ends         (atom #{})
-        return-ch          (atom nil)]
+        the-μ              (μ name params body)]
     (letfn [(delay [[sym ccs]]
-                   (event! ::createμ.delay {:symbol     sym :return @return-ch
-                                            :loose-ends @loose-ends})
-                   (when @return-ch
-                     (throw (RuntimeException. "This should be unreachable!!")))
-                   (event! ::createμ.check sym)
-                   (swap! loose-ends conj
-                          (fn [env apply-ccs]
-                            (eval sym env (with-return apply-ccs
-                                            (get ccs rt/return)))))
-                   (event! ::createμ.delay.post {:symbol     sym
-                                                 :loose-ends @loose-ends}))
+              (register-delay! the-μ sym (get ccs rt/return)))
             (ret [value]
-              (if-let [ccs @return-ch]
-                (do
-                  (event! ::createμ.return.async value)
-                  (rt/emit ccs rt/return value))
-                (do
-                  (event! ::createμ.return.delay value)
-                  (add-watch return-ch (gensym)
-                             (fn [k ref _ ccs]
-                               (remove-watch ref k)
-                               (event! ::createμ.return.delayed value)
-                               (rt/emit ccs rt/return value))))))
+              (set-static! the-μ value))
             (next [params']
               (let [bind (into {} (map (fn [k] [k marker]))
                                (ast/bindings params))
@@ -75,15 +101,7 @@
       (rt/emit ccs
         (fn [args] (clojure.core/apply reduce args))
         [params dyn (rt/withcc ccs rt/return next rt/delay delay)]
-        rt/return (ast/->Mu params body
-                            (fn [bound-env ccs]
-                              (event! ::μ.activation
-                                      {:env        bound-env
-                                       :params     params
-                                       :body       body
-                                       :loose-ends @loose-ends})
-                              (reset! return-ch ccs)
-                              (run! #(% bound-env ccs) @loose-ends)))))))
+        rt/return the-μ))))
 
 (extend-protocol Reductive
   Object
@@ -147,18 +165,6 @@
     (let [env' (merge env dyn)]
       (event! ::reduce.Application {:head head :tail tail :env env :dyn dyn})
       (reduce head env' (with-return c #(apply % tail env' c)))))
-
-  janus.ast.PartialMu
-  (reduced? [_] true)
-  (reduce [x env c]
-    (event! ::reduce.PartialMu {:form x :dyn env})
-    (createμ x (with-meta [(:name (meta x)) (:params x) (:body x)] (meta x)) env c))
-
-  janus.ast.Mu
-  (reduced? [_] true)
-  (reduce [x env c]
-    (event! ::reduce.Mu {:form x :dyn env})
-    (createμ x (with-meta [(:name (meta x)) (:params x) (:body x)] (meta x)) env c))
 
   janus.ast.Pair
   (reduced? [x] (and (reduced? (:head x)) (reduced? (:tail x))))
@@ -252,30 +258,21 @@
                 (apply head' tail env c)))]
       (reduce head env (with-return c next))))
 
-  janus.ast.Mu
+  Mu
   (apply [head tail env c]
     (event! ::apply.Mu {:head head :tail tail :dyn env})
     (letfn [(next [tail']
-              (let [bind (merge (ast/destructure (:params head) tail')
+              (let [meta (inspect head)
+                    bind (merge (ast/destructure (:params meta) tail')
                                 ;; If a μ is named, then bind its name to it
                                 ;; in the env of the body when applying
                                 ;; arguments. This prevents circular links when
                                 ;; creating the μ in the first place.
-                                (when-let [name (:name (meta head))]
-                                  {name head}))]
+                                (when (:name meta)
+                                  {(:name meta) head}))]
                 (event! ::apply.Mu.destructuring {:bindings bind})
-                ((:activation-fn head) bind c)))]
+                (activate! head bind c)))]
       (reduce tail env (with-return c next))))
-
-  janus.ast.PartialMu
-  (apply [head tail env c]
-    (event! ::apply.PartialMu {:head head :tail tail})
-    (throw (RuntimeException. "unreachable!!"))
-    (letfn [(next [head']
-              (condp instance? head'
-                janus.ast.PartialMu (succeed c (ast/application head' tail env))
-                janus.ast.Mu        (apply head' tail env c)))]
-      (reduce head env (with-return c next))))
 
   janus.ast.PrimitiveMacro
   (apply [head tail env c]
