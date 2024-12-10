@@ -99,17 +99,20 @@
                         "Running test:")
                 (if (or (= :eof f1) (= :eof f2))
                   (t/log! {:level :info :id :ktest} "All tests passed!")
-                  #_(rt/push!
-                     [[i/eval f1 {}
-                     (i/with-return c #(rt/receive collect 0 %)
-                               rt/error  (handler r1))]
-                      [i/eval f2 {}
-                     (i/with-return c #(rt/receive collect 1 %))]]))))]
+                  (rt/push!
+                   rt/*executor*
+                   [[#(apply i/eval %)
+                     [f1 {} (rt/withcc c
+                              rt/return #(rt/receive collect 0 %)
+                              rt/error  (handler r1))]]
+                    [#(apply i/eval %)
+                     [f2 {}
+                      (i/with-return c #(rt/receive collect 1 %))]]]))))]
       (looper (r/file-reader fname)))))
 
 (defn ev [s]
   (eval (:form (r/read (r/string-reader s) @env))
-        {rt/return #(reset! o (first %))})
+        {rt/return #(reset! o %)})
   @o)
 
 (defn re [env]
