@@ -137,14 +137,20 @@
   (into (empty m) (map (fn [[k v]] [(sanitise k) v])) m))
 
 (defn unbound-channel [c]
-  (fn [_ _ _]
-    (t/log! :warn ["message sent on unbound channel:" c])))
+  (fn [args]
+    (t/log! {:level :warn :data {:name c :args args}}
+            "Message sent on unbound channel")))
 
 (defn parse-emission [c [k v]]
-  (t/log! :debug ["Emission:" k (get c k) v])
+  (t/event! ::emit.parse
+            {:level :debug :data {:key k :ch (get c k unbound-channel) :val v}})
   (cond
-    (ast/keyword? k) [(with-meta (get c k unbound-channel)
-                        (merge (meta k) {:ch k}))
+    (and (ast/keyword? k) (contains? c k))
+    [(with-meta (get c k) (merge (dissoc (meta k) :lex) {:ch k :bound true}))
+     v]
+
+    (ast/keyword? k) [(with-meta (unbound-channel k)
+                        (merge (dissoc (meta k) :lex) {:ch k :bound? false}))
                       v]
     ;; TODO: What kind of function?
     (fn? k)          [(with-meta k (merge (meta k) {:ch :none})) v]
@@ -161,7 +167,7 @@
   continuation."
   {:style/indent 1}
   [c & kvs]
-  (t/log! :trace ["emit raw" kvs])
+  (t/event! ::emit.raw {:level :trace :data kvs})
   (let [tasks (map (partial parse-emission c) (partition 2 kvs))]
     (push! *executor* tasks)))
 
