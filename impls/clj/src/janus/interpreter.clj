@@ -67,14 +67,17 @@
     (set! loose-ends (update loose-ends sym conj rc))
     (event! ::createμ.delay {:symbol sym :loose-ends loose-ends}))
   (activate! [_ env ccs]
-    (event! ::createμ.activation {:env env})
+    (event! ::createμ.activation {:env env :ends (count loose-ends)})
     (if (not (nil? cached-value))
       (rt/emit ccs rt/return cached-value)
-      (clojure.core/apply
-       rt/emit ccs
-       (mapcat (fn [[k vs]]
-                 (map (fn [v] [eval [k env (assoc ccs rt/return v)]]) vs))
-               loose-ends)))))
+      (let [msgs (mapcat (fn [[k vs]]
+                           (mapcat (fn [v]
+                                     [#(clojure.core/apply eval %)
+                                      [k env (assoc ccs rt/return v)]])
+                                   vs))
+                         loose-ends)]
+        (event! ::createμ.activation.send msgs)
+        (clojure.core/apply rt/emit ccs msgs)))))
 
 (defn μ [name params body]
   (->Mu name params body {} nil))
