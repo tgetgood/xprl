@@ -113,7 +113,10 @@
 (defn ev [s]
   (eval (:form (r/read (r/string-reader s) @env))
         {rt/return #(reset! o %)})
-  @o)
+  ;; @o
+  )
+
+(add-watch o ::top (fn [_ _ _ v] (println v)))
 
 (defn re [env]
   (let [form (r/read (r/stdin-reader) @env)]

@@ -63,7 +63,15 @@
       (apply rt/emit c tasks))))
 
 (defn capture [_ [form] dyn ccs]
-  )
+  (let [ccs' (into {::rt/unbound (fn [[k v]]
+                                   (println k)
+                                   {::rt/unbound {:key k :value v}})}
+                   (map (fn [[k v]]
+                          (println k)
+                          [k (fn [v]
+                               (rt/emit ccs rt/return [k v]))]))
+                   ccs)]
+    (i/eval form dyn ccs')))
 
 (defn select [_ [p t f] dyn ccs]
   (letfn [(next [p']
@@ -76,7 +84,7 @@
 (def macros
   {
    ;; REVIEW: I don't think `def` actually needs to be builtin at all. But I
-   ;; need statefuls, select,  and eval on maps before I can remove it.
+   ;; need statefuls and eval on maps before I can remove it.
    "def" xprl-def
 
    ;; The grail of bootstrapping would be to implement μ in xprl, but I don't
@@ -90,6 +98,9 @@
    ;; effectively in μs because we want it (intuitively) to perform the "switch"
    ;; as soon as the predicate resolves, but a function must wait for all args
    ;; to resolve.
+   ;;
+   ;; I could implement select in xprl using the smalltalk method. But I don't
+   ;; know if I want to go that way yet.
    "select" select
 
    ;; returns what would have been emitted as data so that we can inspect/modify

@@ -142,16 +142,23 @@
             "Message sent on unbound channel")))
 
 (defn parse-emission [c [k v]]
-  (t/event! ::emit.parse
-            {:level :debug :data {:key k :ch (get c k unbound-channel) :val v}})
+
   (cond
     (and (ast/keyword? k) (contains? c k))
-    [(with-meta (get c k) (merge (dissoc (meta k) :lex) {:ch k :bound true}))
-     v]
+    (do
+      (t/event! ::emit.bound {:level :trace :data {:k k :ch (get c k) :v v}})
+      [(with-meta (get c k) (merge (dissoc (meta k) :lex) {:ch k :bound true}))
+       v])
 
-    (ast/keyword? k) [(with-meta (unbound-channel k)
-                        (merge (dissoc (meta k) :lex) {:ch k :bound? false}))
-                      v]
+    ;; Is this really a good way to go? Method missing? Not sure yet.
+    (contains? c ::unbound) (throw (RuntimeException. "not implemented"))
+
+    (ast/keyword? k)
+    (do
+      (t/event! ::emit.unbound {:level :trace :data {:k k :v v}})
+      [(with-meta ::unbound
+           (merge (dissoc (meta k) :lex) {:ch k}))
+         [k v]])
     ;; TODO: What kind of function?
     (fn? k)          [(with-meta k (merge (meta k) {:ch :none})) v]
     :else            (do
