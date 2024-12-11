@@ -41,13 +41,8 @@
 
 (defn emit [mac kvs env c]
   (letfn [(next [v]
-            (if (i/reduced? v)
-              (apply rt/emit c v)
-              (i/succeed c (with-meta (ast/application
-                                       mac (with-meta v
-                                             (assoc (meta v)
-                                                    :reduced? true)))
-                             (meta mac)))))]
+            (i/event! ::emit.received v)
+            (apply rt/emit c v))]
     (let [coll (rt/collector (i/with-return c next) (count kvs))
           tasks
           (into
@@ -67,28 +62,35 @@
            kvs)]
       (apply rt/emit c tasks))))
 
-(defn clear [ctx]
-  (dissoc ctx :form :head :tail))
+(defn capture [_ [form] dyn ccs]
+  (let [ccs' (into {::rt/unbound (fn [[k v]]
+                                   (println k)
+                                   {::rt/unbound {:key k :value v}})}
+                   (map (fn [[k v]]
+                          (println k)
+                          [k (fn [v]
+                               (rt/emit ccs rt/return [k v]))]))
+                   ccs)]
+    (i/eval form dyn ccs')))
 
-#_(defn select [[p t f] dyn ccs]
-  (let [marker (gensym)]
-    (-> ctx
-        clear
-        (assoc :form p)
-        (assoc-in [:continuations rt/return]
-                  (fn [{p' :form}]
-                    (assert (boolean? p)
-                            "Select only takes a literal boolean as first arg.")
-                    (-> ctx
-                        clear
-                        (assoc :return-from ctx)
-                        (assoc :form (if p' t f))
-                        i/reduce)))
-        i/reduce)))
+(defn select [_ [p t f] dyn ccs]
+  (letfn [(next [p']
+            (i/event! ::select.p p')
+            (case p'
+              true (i/reduce t dyn ccs)
+              false (i/reduce f dyn ccs)))]
+    (i/reduce p dyn (i/with-return ccs next))))
 
 (def macros
-  {"def" xprl-def
+  {
+   ;; REVIEW: I don't think `def` actually needs to be builtin at all. But I
+   ;; need statefuls and eval on maps before I can remove it.
+   "def" xprl-def
+
+   ;; The grail of bootstrapping would be to implement μ in xprl, but I don't
+   ;; have the tools to do that yet.
    "μ"   i/createμ
+
    ;; "withcc" withcc
    "emit"   emit
 
@@ -96,12 +98,31 @@
    ;; effectively in μs because we want it (intuitively) to perform the "switch"
    ;; as soon as the predicate resolves, but a function must wait for all args
    ;; to resolve.
-   ;; "select" select
+   ;;
+   ;; I could implement select in xprl using the smalltalk method. But I don't
+   ;; know if I want to go that way yet.
+   "select" select
 
    ;; returns what would have been emitted as data so that we can inspect/modify
-   ;; it.
-   ;; "capture" capture
-
+   ;; it. The bundle of continuations passed down to the form being evaluated is
+   ;; its only connection to the outside world. If we cut that cable, it's fully
+   ;; sandboxed, if we tap it, we know exactly what it wants to do and can
+   ;; choose what to allow by selectively forwrding.
+   ;;
+   ;; Note, however, that if a computation (form being evaluated) creates
+   ;; channels either by calling (which creates return channels) or by passing
+   ;; functions (μs) to withcc, then those messages will still be sent.
+   ;;
+   ;; The idea is that the subcomputation can proceed uninhibited, but its
+   ;; external connections are subject to monitoring.
+   ;;
+   ;; Autonomous from below, subordinate from above.
+   ;;
+   ;; Will emit potentially many times on its return channel. Use `into` to
+   ;; collect emissions if desired, but remember that `into` doesn't return
+   ;; until the subcomputation is finished, so it could deadlock if the
+   ;; subcomputation requires a response from outside to continue.
+   "capture" capture
    })
 
 (defn nth* [c i]

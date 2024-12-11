@@ -137,15 +137,28 @@
   (into (empty m) (map (fn [[k v]] [(sanitise k) v])) m))
 
 (defn unbound-channel [c]
-  (fn [_ _ _]
-    (t/log! :warn ["message sent on unbound channel:" c])))
+  (fn [args]
+    (t/log! {:level :warn :data {:name c :args args}}
+            "Message sent on unbound channel")))
 
 (defn parse-emission [c [k v]]
-  (t/log! :debug ["Emission:" k (get c k) v])
+
   (cond
-    (ast/keyword? k) [(with-meta (get c k unbound-channel)
-                        (merge (meta k) {:ch k}))
-                      v]
+    (and (ast/keyword? k) (contains? c k))
+    (do
+      (t/event! ::emit.bound {:level :trace :data {:k k :ch (get c k) :v v}})
+      [(with-meta (get c k) (merge (dissoc (meta k) :lex) {:ch k :bound true}))
+       v])
+
+    ;; Is this really a good way to go? Method missing? Not sure yet.
+    (contains? c ::unbound) (throw (RuntimeException. "not implemented"))
+
+    (ast/keyword? k)
+    (do
+      (t/event! ::emit.unbound {:level :trace :data {:k k :v v}})
+      [(with-meta ::unbound
+           (merge (dissoc (meta k) :lex) {:ch k}))
+         [k v]])
     ;; TODO: What kind of function?
     (fn? k)          [(with-meta k (merge (meta k) {:ch :none})) v]
     :else            (do
@@ -161,7 +174,7 @@
   continuation."
   {:style/indent 1}
   [c & kvs]
-  (t/log! :trace ["emit raw" kvs])
+  (t/event! ::emit.raw {:level :trace :data kvs})
   (let [tasks (map (partial parse-emission c) (partition 2 kvs))]
     (push! *executor* tasks)))
 
