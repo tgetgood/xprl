@@ -14,6 +14,10 @@
 (def env (ast/keyword "env"))
 (def delay (ast/keyword "delay"))
 
+(def unbound
+  (with-meta (ast/keyword "xprl.core.channels.unbound")
+    {:name "Unbound channel handler"}))
+
 ;;;;;
 
 (declare ^:dynamic *executor*)
@@ -65,7 +69,7 @@
            (t/error! {:level :debug :id ::executor-error}  e#)
            (stop! *executor*)
            (alter-var-root (var *e) (fn [_#] e#))
-           ::stopped)))))
+           ::error)))))
 
 (deftype Executor [^ConcurrentLinkedDeque queue
                    ^:unsynchronized-mutable next
@@ -142,31 +146,40 @@
             "Message sent on unbound channel")))
 
 (defn parse-emission [c [k v]]
-
   (cond
-    (and (ast/keyword? k) (contains? c k))
-    (do
-      (t/event! ::emit.bound {:level :trace :data {:k k :ch (get c k) :v v}})
-      [(with-meta (get c k) (merge (dissoc (meta k) :lex) {:ch k :bound true}))
-       v])
-
-    ;; Is this really a good way to go? Method missing? Not sure yet.
-    (contains? c ::unbound) (throw (RuntimeException. "not implemented"))
+    ;; TODO: What kind of function?
+    (fn? k) (do
+              (t/event! ::emit.fn {:level :trace :data  {:fn k :args v}})
+              [(with-meta k (merge (meta k) {:ch :none})) v])
 
     (ast/keyword? k)
-    (do
-      (t/event! ::emit.unbound {:level :trace :data {:k k :v v}})
-      [(with-meta ::unbound
-           (merge (dissoc (meta k) :lex) {:ch k}))
-         [k v]])
-    ;; TODO: What kind of function?
-    (fn? k)          [(with-meta k (merge (meta k) {:ch :none})) v]
-    :else            (do
-                       (t/log! {:level :error
-                                :data [(type k) k]}
-                               "Only fns and xprl keywords can be channels.")
-                       (throw (RuntimeException.
-                               (str k " is not a valid channel."))))))
+    ;; Nested conds. real nice.
+    (cond
+      (contains? c k)
+      (do
+        (t/event! ::emit.bound {:level :trace
+                                :data  {:ch-name k :ch (get c k) :msg v}})
+        [(with-meta (get c k) (merge (dissoc (meta k) :lex) {:ch-name k})) v])
+
+      (contains? c unbound)
+      (do
+        (t/event! ::emit.unbound.caught {:level :trace
+                                         :data  {:ch-name k :msg v}})
+        [(get c unbound) {:ch-name k :msg v}])
+
+      ;; It isn't an error to send a message to nobody, even though that might
+      ;; break the system if somebody needs that message.
+      ;; REVIEW: What to do about that?
+      :else (t/event! ::emit.unbound.uncaught
+                      {:level :warn :data {:ch-name k :msg v}
+                       :msg   "Unresolved channel"}))
+
+    :else (do
+            (t/log! {:level :error
+                     :data  [(type k) k]}
+                    "Only fns and xprl keywords can be channels.")
+            (throw (RuntimeException.
+                    (str k " is not a valid channel."))))))
 
 (defn emit
   "For each `kv`, sends `v` to continuation named by `k` in the continuation map
@@ -174,8 +187,9 @@
   continuation."
   {:style/indent 1}
   [c & kvs]
-  (t/event! ::emit.raw {:level :trace :data kvs})
   (let [tasks (map (partial parse-emission c) (partition 2 kvs))]
+    (t/event! ::emit {:level  :trace :data {:raw kvs :tasks tasks}})
+
     (push! *executor* tasks)))
 
 (defn withcc
