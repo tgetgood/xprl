@@ -41,13 +41,8 @@
 
 (defn emit [mac kvs env c]
   (letfn [(next [v]
-            (if (i/reduced? v)
-              (apply rt/emit c v)
-              (i/succeed c (with-meta (ast/application
-                                       mac (with-meta v
-                                             (assoc (meta v)
-                                                    :reduced? true)))
-                             (meta mac)))))]
+            (i/event! ::emit.received v)
+            (apply rt/emit c v))]
     (let [coll (rt/collector (i/with-return c next) (count kvs))
           tasks
           (into
