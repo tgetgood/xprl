@@ -112,7 +112,8 @@
 
 (defn ev [s]
   (eval (:form (r/read (r/string-reader s) @env))
-        {rt/return #(reset! o %)})
+        {rt/return  #(reset! o %)
+         rt/unbound (fn [x] (println "Unbound!" x))})
   ;; @o
   )
 

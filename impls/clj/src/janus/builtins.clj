@@ -63,14 +63,12 @@
       (apply rt/emit c tasks))))
 
 (defn capture [_ [form] dyn ccs]
-  (let [ccs' (into {::rt/unbound (fn [[k v]]
-                                   (println k)
-                                   {::rt/unbound {:key k :value v}})}
+  (let [ccs' (into {rt/unbound (fn [{:keys [ch-name msg]}]
+                                 (rt/emit ccs rt/return [ch-name msg]))}
                    (map (fn [[k v]]
-                          (println k)
                           [k (fn [v]
                                (rt/emit ccs rt/return [k v]))]))
-                   ccs)]
+                   (dissoc ccs rt/unbound))]
     (i/eval form dyn ccs')))
 
 (defn select [_ [p t f] dyn ccs]
