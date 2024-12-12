@@ -116,29 +116,21 @@
   clojure.lang.APersistentVector
   (reduced? [x] (every? reduced? x))
   (reduce [this env c]
-    (if (::reduced? (meta this))
-      ;; The current implementation re-reduces expressions quite often, so this
-      ;; is just a cache.
-      ;; TODO: Do this more systematically. Maybe as a layer.
-      (do
-        (event! ::reduce.vector.noop {:form this})
-        (succeed c this))
-      (do
-        (event! ::reduce.vector {:form this :dyn env})
-        (let [next (fn [v]
-                     (succeed c (with-meta v
-                                  (assoc (meta this) ::reduced? (reduced? v)))))
-              collector (rt/collector (with-return c next) (count this))
-              runner (with-meta
-                       (fn [[i x]]
-                         (event! :reduce.vector.runner {:i i :x x})
-                         (reduce x env
-                                 (with-return c
-                                   (fn [v] (rt/receive collector i v)))))
-                       {:name "reduce vector runner"})
-              tasks (interleave (repeat runner) (map-indexed vector this))]
-          (event! ::reduce.vector.tasks tasks)
-          (clojure.core/apply rt/emit c tasks)))))
+    (event! ::reduce.vector {:form this :dyn env})
+    (let [next (fn [v]
+                 (succeed c (with-meta v
+                              (assoc (meta this) ::reduced? (reduced? v)))))
+          collector (rt/collector (with-return c next) (count this))
+          runner (with-meta
+                   (fn [[i x]]
+                     (event! :reduce.vector.runner {:i i :x x})
+                     (reduce x env
+                             (with-return c
+                               (fn [v] (rt/receive collector i v)))))
+                   {:name "reduce vector runner"})
+          tasks (interleave (repeat runner) (map-indexed vector this))]
+      (event! ::reduce.vector.tasks tasks)
+      (clojure.core/apply rt/emit c tasks)))
 
   clojure.lang.AMapEntry
   (reduced? [x] (and (reduced? (key x)) (reduced? (val x))))
