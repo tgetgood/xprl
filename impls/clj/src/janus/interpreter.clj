@@ -79,6 +79,9 @@
         (event! ::createμ.activation.send msgs)
         (clojure.core/apply rt/emit ccs msgs)))))
 
+;; TODO: Each mu needs a unique delay channel and unbound markers need to be
+;; unique to each μ, otherwise when nested, the inner μ will capture the symbols
+;; of the outer one.
 (defn μ [name params body]
   (->Mu name params body {} nil))
 
