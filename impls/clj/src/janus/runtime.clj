@@ -223,7 +223,8 @@
   (t/event! :collector/receive {:level :trace :data [i v]})
   (swap! c
    (fn [{:keys [n unset elements] :as c}]
-     (assert (and (> n 0) (= (get elements i) unset)) "Inconsistent collector.")
+     (when-not (and (> n 0) (= (get elements i) unset))
+       (t/error! (throw (RuntimeException.))))
      (-> c
          (update :n dec)
          (update :elements assoc i v))))
