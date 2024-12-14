@@ -18,9 +18,7 @@
   (with-meta (ast/keyword "xprl.core.channels.unbound")
     {:name "Unbound channel handler"}))
 
-;;;;;
-
-(declare ^:dynamic *executor*)
+;;;;; Tasks
 
 (def JumpException
   "Special exception to unroll stack in event loop."
@@ -34,13 +32,25 @@
   (t/log! :debug "Work queue empty. Nothing to do")
   nil)
 
-(defn run! [task]
-  (assert (= 2 (count task)) (str  "Too Many args: " (str task)))
-  (t/event! ::run {:level :trace :data {:fn   (first task)
-                                        :meta (meta (first task))
-                                        :args (second task)}})
-  ((first task) (second task))
-  (throw JumpException))
+(defprotocol ITask
+  (run! [this]))
+
+(defrecord Task [f arg meta]
+    ITask
+    (run! [_]
+      (t/event! ::run {:level :trace :data {:fn f :meta meta :arg arg}})
+      (f arg)
+      (throw JumpException)))
+
+(defn task
+  ([f arg]
+   (task f arg {}))
+  ([f arg m]
+   (->Task f arg m)))
+
+(declare ^:dynamic *executor*)
+
+;;;;; Executor
 
 (defprotocol Queue
   (push! [this tasks])
@@ -149,8 +159,8 @@
   (cond
     ;; TODO: What kind of function?
     (fn? k) (do
-              (t/event! ::emit.fn {:level :trace :data  {:fn k :args v}})
-              [(with-meta k (merge (meta k) {:ch :none})) v])
+              (t/event! ::emit.fn {:level :trace :data {:fn k :args v}})
+              (task k v (merge (meta k) {:ch :none})))
 
     (ast/keyword? k)
     ;; Nested conds. real nice.
@@ -159,19 +169,20 @@
       (do
         (t/event! ::emit.bound {:level :trace
                                 :data  {:ch-name k :ch (get c k) :msg v}})
-        [(with-meta (get c k) (merge (dissoc (meta k) :lex) {:ch-name k})) v])
+        (task (get c k) v (merge (dissoc (meta k) :lex) {:ch-name k})))
 
       (contains? c unbound)
       (do
         (t/event! ::emit.unbound.caught {:level :trace
                                          :data  {:ch-name k :msg v}})
-        [(get c unbound) {:ch-name k :msg v}])
+        (task (get c unbound) {:ch-name k :msg v}))
 
       ;; It isn't an error to send a message to nobody, even though that might
       ;; break the system if somebody needs that message.
       ;; REVIEW: What to do about that?
       :else (t/event! ::emit.unbound.uncaught
-                      {:level :warn :data {:ch-name k :msg v}
+                      {:level :warn
+                       :data  {:ch-name k :msg v}
                        :msg   "Unresolved channel"}))
 
     :else (do

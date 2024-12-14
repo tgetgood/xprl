@@ -18,8 +18,8 @@
 (def o (atom nil))
 
 (defn eval [form conts]
-  (rt/push! rt/*executor* [[(with-meta #(apply i/eval %) {:name "eval"})
-                            [form {} conts]]]))
+  (rt/push! rt/*executor*
+            [(rt/task #(apply i/eval %) [form {} conts] {:name "eval"})]))
 
 (defn loadfile [env fname]
   ;; HACK: The executor doesn't clean up properly in the face of errors!
@@ -101,13 +101,13 @@
                   (t/log! {:level :info :id :ktest} "All tests passed!")
                   (rt/push!
                    rt/*executor*
-                   [[#(apply i/eval %)
-                     [f1 {} (rt/withcc c
-                              rt/return #(rt/receive collect 0 %)
-                              rt/error  (handler r1))]]
-                    [#(apply i/eval %)
-                     [f2 {}
-                      (i/with-return c #(rt/receive collect 1 %))]]]))))]
+                   [(rt/task #(apply i/eval %)
+                             [f1 {} (rt/withcc c
+                                      rt/return #(rt/receive collect 0 %)
+                                      rt/error  (handler r1))])
+                    (rt/task #(apply i/eval %)
+                             [f2 {} (i/with-return c
+                                      #(rt/receive collect 1 %))])]))))]
       (looper (r/file-reader fname)))))
 
 (defn ev [s]
