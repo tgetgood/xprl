@@ -20,11 +20,6 @@
 
 ;;;;; Tasks
 
-(def JumpException
-  "Special exception to unroll stack in event loop."
-  (proxy [java.lang.RuntimeException]
-      ["If you're seeing this, that's a problem!"]))
-
 (defn steal! [system exec]
   ;; REVIEW: What to log here? Executors ought to have names.
   (t/event! ::work-steal {:level :trace})
@@ -39,8 +34,7 @@
     ITask
     (run! [_]
       (t/event! ::run {:level :trace :data {:fn f :meta meta :arg arg}})
-      (f arg)
-      (throw JumpException)))
+      (f arg)))
 
 (defn task
   ([f arg]
@@ -71,15 +65,15 @@
   [& body]
   `(try
      ~@body
+     true
      (catch RuntimeException e#
-       (if (identical? e# JumpException)
-         true
-         (do
-           (t/log! :error {:id ::executor-error :data (str e#)})
-           (t/error! {:level :debug :id ::executor-error}  e#)
-           (stop! *executor*)
-           (alter-var-root (var *e) (fn [_#] e#))
-           ::error)))))
+       ;; REVIEW: Is halting the correct thing to do here? Should we not make
+       ;; our best effort to keep going?
+       (t/log! :error {:id ::executor-error :data (str e#)})
+       (t/error! {:level :debug :id ::executor-error}  e#)
+       (stop! *executor*)
+       (alter-var-root #'clojure.core/*e (fn [_#] e#))
+       false)))
 
 (deftype Executor [^ConcurrentLinkedDeque queue
                    ^:unsynchronized-mutable next
@@ -96,8 +90,7 @@
         (if (= 2 (count tasks))
           (.add queue (second tasks))
           (.addAll queue (rest tasks)))))
-    (if running?
-      (throw JumpException)
+    (when-not running?
       (start! this)))
   (go! [this]
     (if-let [task (next-task this)]
