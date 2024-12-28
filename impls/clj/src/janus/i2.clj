@@ -11,7 +11,7 @@
 (defrecord Stateful [queue state body])
 
 (defn stateful [args env continuations]
-  (let [queue (atom clojure.lang.PersistentQueue/EMPTY)
+  (let [queue (java.util.concurrent.BlockingQueue. 8)
         state (atom nil)]
     (letfn [])
     #_(->Stateful

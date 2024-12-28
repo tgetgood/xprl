@@ -173,7 +173,8 @@ This is largely an aid to my own memory so bear with me.
   As covered in the previous section, whether or not an expression will ever be
   evaluated — that is whether a given expression is code or data — is expressed
   syntactically. Given =(f x)= the question of whether =x= will or will not be
-  evaluated doesn't depend on the *type* of =f=, but on its syntax.
+  evaluated doesn't depend on the *type* of =f=, but on its syntactic
+  representation.
 
   Syntax is topological. But it has no notion of time. The question of *whether*
   an expression will be evaluated is syntactic, but the question of *when* an

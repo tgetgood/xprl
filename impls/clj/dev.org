@@ -44,7 +44,7 @@
    complicated, but I guess I'll find out.
 ** [2024-11-26 Tue] Keep a little less data
    It turns out having everything but the form itself hidden until you want it
-   makes understanding what's going on a lot easier. Too much into isn't
+   makes understanding what's going on a lot easier. Too much info isn't
    helpful.
 
    But we still want to keep it. In fact I need to keep a lot more info, like a

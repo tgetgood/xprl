@@ -188,8 +188,7 @@
       (if (= v ::unbound)
         (do
           (event! ::eval.symbol.unbound (select-keys env [this]))
-          (rt/emit c rt/delay [this c])
-          #_(succeed c (ast/immediate this env)))
+          (rt/emit c rt/delay [this c]))
         (do
           (event! ::eval.symbol.dynamic (select-keys env [this]))
           ;; REVIEW: The value of every dynamic binding should be a context
@@ -261,7 +260,8 @@
     (event! ::apply.Mu {:head head :tail tail :dyn env})
     (letfn [(next [tail']
               (let [meta (inspect head)
-                    bind (merge (ast/destructure (:params meta) tail')
+                    bind (merge env
+                                (ast/destructure (:params meta) tail')
                                 ;; If a μ is named, then bind its name to it
                                 ;; in the env of the body when applying
                                 ;; arguments. This prevents circular links when
