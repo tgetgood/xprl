@@ -11,7 +11,7 @@
 (defrecord Stateful [queue state body])
 
 (defn stateful [args env continuations]
-  (let [queue (java.util.concurrent.BlockingQueue. 8)
+  (let [queue (java.util.concurrent.ArrayBlockingQueue. 8)
         state (atom nil)]
     (letfn [])
     #_(->Stateful
