@@ -27,20 +27,49 @@
   (t/log! :debug "Work queue empty. Nothing to do")
   nil)
 
+(def ^:dynamic *current-task* 'janus.runtime/uninitialised)
+
+(def watchers (atom []))
+
+(defn create-watcher! [id cb]
+  (swap! watchers conj [#{id} cb]))
+
+(defn add-watch! [[ws c] parent child]
+  (let [ws (if (contains? ws parent) (conj ws child) ws)]
+    [ws c]))
+
+(defn add-watchers! [ws parent child]
+  (swap! ws (partial into [] (map #(add-watch! % parent child)))))
+
+(defn remove-watch! [[ws cb] id]
+  (let [ws (disj ws id)]
+    (if (empty? ws)
+      (do (cb) nil)
+      [ws cb])))
+
+(defn clear-watchers! [ws id]
+  (swap! ws (partial into [] (comp
+                              (map #(remove-watch! % id))
+                              (remove nil)))))
+
 (defprotocol ITask
   (run! [this]))
 
-(defrecord Task [f arg meta]
+(defrecord Task [f arg id meta]
     ITask
     (run! [_]
-      (t/event! ::run {:level :trace :data {:fn f :meta meta :arg arg}})
-      (f arg)))
+      (t/event! ::run {:level :trace :data {:fn f :meta meta :arg arg :id id}})
+      (with-bindings {(var *current-task*) id}
+        (f arg))
+      (clear-watchers! watchers id)))
 
 (defn task
   ([f arg]
    (task f arg {}))
   ([f arg m]
-   (->Task f arg m)))
+   (let [id (gensym)]
+     (add-watchers! watchers *current-task* id)
+     (->Task f arg id m))))
 
 (declare ^:dynamic *executor*)
 
@@ -220,6 +249,17 @@
            :n        n
            :elements fill
            :next     next})))
+
+(defn unbound-collector
+  "Returns a channel which collects all events sent to it, calling `next` with
+  the aggregate at some point after the channel can no longer receive input
+  (because all tasks which have access to it have completed)."
+  [next]
+  (let [collector (atom [])
+        receive   (fn [msg] (swap! collector conj msg))
+        done      (fn [] (next @collector))]
+    (create-watcher! *current-task* done)
+    receive))
 
 (defn receive
   "Send the value `v` to the `i`th slot of collector c."

@@ -30,67 +30,61 @@
 (defn succeed [c v]
   (rt/emit c rt/return v))
 
-(def marker ::unbound)
+(defrecord Marker [id])
+
+(defn marker [] (->Marker (gensym)))
 
 ;;;;; Mu
 
-(defprotocol MuP
-  (register-delay! [this sym return-continuation])
-  (set-static! [this value] "For constant functions.")
-  (activate! [this env calling-continuations]))
+(defn activate-μ [μ env ccs]
+    (event! ::createμ.activation {:env env :ends (count (:triggers μ))})
+    (let [msgs (map (fn [[k ics]]
+                      [#(clojure.core/apply eval %)
+                       [k env (rt/withcc ccs rt/return (get ics rt/return))]])
+                    (:triggers μ))]
+      (event! ::createμ.activation.send msgs)
+      (clojure.core/apply rt/emit ccs msgs)) )
 
-(defprotocol Inspectable
-  (inspect [this]))
-
-(defn mustr [params body]
-  (str "(#μ " params " " body ")"))
-
-(deftype Mu [name
-             params
-             body
-             ^:volatile-mutable loose-ends
-             ^:volatile-mutable cached-value]
-  Object
-  (toString [_]
-    (str "(#μ " params " " body ")"))
-
-  Inspectable
-  (inspect [_]
-    {:params params :body body :name name
-     :loose-ends loose-ends :cached cached-value})
-
-  MuP
-  (set-static! [_ value]
-    (set! cached-value value)
-    (event! ::createμ.return.static value))
-  (register-delay! [_ sym rc]
-    (set! loose-ends (update loose-ends sym conj rc))
-    (event! ::createμ.delay {:symbol sym :loose-ends loose-ends}))
-  (activate! [_ env ccs]
-    (event! ::createμ.activation {:env env :ends (count loose-ends)})
-    (if (not (nil? cached-value))
-      (rt/emit ccs rt/return cached-value)
-      (let [msgs (mapcat (fn [[k vs]]
-                           (mapcat (fn [v]
-                                     [#(clojure.core/apply eval %)
-                                      [k env (assoc ccs rt/return v)]])
-                                   vs))
-                         loose-ends)]
-        (event! ::createμ.activation.send msgs)
-        (clojure.core/apply rt/emit ccs msgs)))))
-
-;; TODO: Each mu needs a unique delay channel and unbound markers need to be
-;; unique to each μ, otherwise when nested, the inner μ will capture the symbols
-;; of the outer one.
-(defn μ [name params body]
-  (->Mu name params body {} nil))
 
 (defn validate-μ [args]
   (condp = (count args)
     3 args
     2 [nil (first args) (second args)]))
 
+(defn with-capture [ccs trap]
+  (into {} (map (fn [[k _]]
+                  [k (fn [msg]
+                       (if (contains? trap k)
+                         (let [f @(get trap k)]
+                           (if (fn? f)
+                             (f msg)
+                             (throw
+                              (RuntimeException. "trying to emit before activation."))))
+                         (throw (RuntimeException. "unreachable??"))))]))
+        ccs))
+
 (defn createμ [_ tail dyn ccs]
+  (let [[name params body] (validate-μ tail)
+        mark               (marker)]
+    (letfn [(next [params']
+              (let [bind  (into {} (map (fn [k] [k mark]))
+                                (ast/bindings params))
+                    env'  (merge dyn bind (when name {name mark}))
+                    trap  (into {} (map (fn [[k v]] [k (atom nil)])) ccs)
+                    ;; TODO: Each mu needs a unique delay channel and unbound
+                    ;; markers need to be unique to each μ, otherwise when
+                    ;; nested, the inner μ will capture the symbols of the outer
+                    ;; one.
+                    delay (rt/unbound-collector
+                           (fn [delays]
+                             (rt/emit ccs
+                               rt/return (ast/μ name params' body trap delays))))]
+                (event! ::createμ.params params')
+                (reduce body env' (rt/withcc (with-capture ccs trap)
+                                    rt/delay delay))))])))
+
+
+#_(defn createμ [_ tail dyn ccs]
   (let [[name params body] (validate-μ tail)
         the-μ              (μ name params body)]
     (letfn [(delay [[sym ccs]]
@@ -185,7 +179,7 @@
   (eval [this env c]
     ;; (event! ::eval.symbol {:form this :dyn env :lex (:env (meta this))})
     (if-let [v (get env this)]
-      (if (= v ::unbound)
+      (if (instance? Marker v)
         (do
           (event! ::eval.symbol.unbound (select-keys env [this]))
           (rt/emit c rt/delay [this c]))
@@ -255,11 +249,11 @@
                 (apply head' tail env c)))]
       (reduce head env (with-return c next))))
 
-  Mu
+  janus.ast.Mu
   (apply [head tail env c]
     (event! ::apply.Mu {:head head :tail tail :dyn env})
     (letfn [(next [tail']
-              (let [meta (inspect head)
+              (let [meta (meta head)
                     bind (merge env
                                 (ast/destructure (:params meta) tail')
                                 ;; If a μ is named, then bind its name to it
@@ -269,7 +263,7 @@
                                 (when (:name meta)
                                   {(:name meta) head}))]
                 (event! ::apply.Mu.destructuring {:bindings bind})
-                (activate! head bind c)))]
+                (activate-μ head bind c)))]
       (reduce tail env (with-return c next))))
 
   janus.ast.PrimitiveMacro

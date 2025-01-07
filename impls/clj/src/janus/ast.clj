@@ -173,11 +173,21 @@
    (pp/write-out t)
    (format-pair (symbol "μ") [params body])))
 
+(defn mustr [params body]
+  (str "(#μ " params " " body ")"))
 
-;; (ps Mu)
+(defrecord Mu [name params body ccs triggers]
+  Object
+  (toString [_]
+    (str "(#μ " params " " body ")")))
 
-;; (defmethod pp/simple-dispatch Mu [{:keys [params body]}]
-;;   (ppmu (symbol "#μ") params body))
+(defn μ [name params body ccs triggers]
+  (->Mu name params body ccs triggers))
+
+(ps Mu)
+
+(defmethod pp/simple-dispatch Mu [{:keys [params body]}]
+  (ppmu (symbol "#μ") params body))
 
 (defn fname [f]
   (or (:name (meta f)) (str f)))
