@@ -6,6 +6,12 @@
             [taoensso.telemere :as t])
   (:import [java.util.concurrent ConcurrentLinkedDeque]))
 
+(defn event!
+  ([id] (event! id nil nil))
+  ([id data] (event! id data nil))
+  ([id data msg]
+   (t/event! id {:level :trace :data data :msg msg})))
+
 ;;;;; Standard keys
 
 ;; TODO: Qualify these keys.
@@ -22,35 +28,10 @@
 
 (defn steal! [system exec]
   ;; REVIEW: What to log here? Executors ought to have names.
-  (t/event! ::work-steal {:level :trace})
+  (event! ::work-steal)
   ;; TODO: steal work!
   (t/log! :debug "Work queue empty. Nothing to do")
   nil)
-
-(def ^:dynamic *current-task* 'janus.runtime/uninitialised)
-
-(def watchers (atom []))
-
-(defn create-watcher! [id cb]
-  (swap! watchers conj [#{id} cb]))
-
-(defn add-watch! [[ws c] parent child]
-  (let [ws (if (contains? ws parent) (conj ws child) ws)]
-    [ws c]))
-
-(defn add-watchers! [ws parent child]
-  (swap! ws (partial into [] (map #(add-watch! % parent child)))))
-
-(defn remove-watch! [[ws cb] id]
-  (let [ws (disj ws id)]
-    (if (empty? ws)
-      (do (cb) nil)
-      [ws cb])))
-
-(defn clear-watchers! [ws id]
-  (swap! ws (partial into [] (comp
-                              (map #(remove-watch! % id))
-                              (remove nil)))))
 
 (defprotocol ITask
   (run! [this]))
@@ -58,18 +39,22 @@
 (defrecord Task [f arg id meta]
     ITask
     (run! [_]
-      (t/event! ::run {:level :trace :data {:fn f :meta meta :arg arg :id id}})
-      (with-bindings {(var *current-task*) id}
-        (f arg))
-      (clear-watchers! watchers id)))
+      (event! ::run.task {:fn f :meta meta :arg arg :id id})
+      (f arg)))
 
 (defn task
   ([f arg]
    (task f arg {}))
   ([f arg m]
    (let [id (gensym)]
-     (add-watchers! watchers *current-task* id)
      (->Task f arg id m))))
+
+
+(defrecord BarrierTask [f meta]
+  ITask
+  (run! [_]
+    (event! ::run.barrier meta)
+    (f)))
 
 (declare ^:dynamic *executor*)
 
@@ -77,6 +62,7 @@
 
 (defprotocol Queue
   (push! [this tasks])
+  (insert! [this task] "Insert a single task but don't jump.")
   (go! [this]))
 
 (defprotocol Initable
@@ -110,17 +96,18 @@
 
   Queue
   (push! [this tasks]
-    (if next
-      (if (= 1 (count tasks))
-        (.add queue (first tasks))
-        (.addAll queue tasks))
-      (do
-        (set! next (first tasks))
-        (if (= 2 (count tasks))
-          (.add queue (second tasks))
-          (.addAll queue (rest tasks)))))
+    (when next
+      (insert! this next))
+
+    (set! next (first tasks))
+
+    (if (= 2 (count tasks))
+      (.add queue (second tasks))
+      (.addAll queue (rest tasks)))
     (when-not running?
       (start! this)))
+  (insert! [this task]
+    (.add queue task))
   (go! [this]
     (if-let [task (next-task this)]
       (when (check-jump (run! task))
@@ -160,6 +147,9 @@
 (def ^:dynamic *coordinator* nil)
 (def ^:dynamic *executor* (create-executor))
 
+(defn insert-barrier! [f meta]
+  (insert! *executor* (->BarrierTask f meta)))
+
 ;;;;; Emission
 
 (defn sanitise [k]
@@ -178,10 +168,11 @@
             "Message sent on unbound channel")))
 
 (defn parse-emission [c [k v]]
+  (event! ::parse-raw [k (fn? k) (ast/keyword? k) (contains? c k)])
   (cond
     ;; TODO: What kind of function?
     (fn? k) (do
-              (t/event! ::emit.fn {:level :trace :data {:fn k :args v}})
+              (event! ::emit.fn {:fn k :args v})
               (task k v (merge (meta k) {:ch :none})))
 
     (ast/keyword? k)
@@ -189,23 +180,18 @@
     (cond
       (contains? c k)
       (do
-        (t/event! ::emit.bound {:level :trace
-                                :data  {:ch-name k :ch (get c k) :msg v}})
+        (event! ::emit.bound {:ch-name k :ch (get c k) :msg v})
         (task (get c k) v (merge (dissoc (meta k) :lex) {:ch-name k})))
 
       (contains? c unbound)
       (do
-        (t/event! ::emit.unbound.caught {:level :trace
-                                         :data  {:ch-name k :msg v}})
+        (event! ::emit.unbound.caught {:ch-name k :msg v})
         (task (get c unbound) {:ch-name k :msg v}))
 
       ;; It isn't an error to send a message to nobody, even though that might
       ;; break the system if somebody needs that message.
       ;; REVIEW: What to do about that?
-      :else (t/event! ::emit.unbound.uncaught
-                      {:level :warn
-                       :data  {:ch-name k :msg v}
-                       :msg   "Unresolved channel"}))
+      :else (event! ::emit.unbound.uncaught {:ch-name k :msg v} "Unresolved channel"))
 
     :else (do
             (t/log! {:level :error
@@ -220,9 +206,9 @@
   continuation."
   {:style/indent 1}
   [c & kvs]
+  (event! ::emit-raw kvs)
   (let [tasks (map (partial parse-emission c) (partition 2 kvs))]
-    (t/event! ::emit {:level  :trace :data {:raw kvs :tasks tasks}})
-
+    (event! ::emit-tasks tasks)
     (push! *executor* tasks)))
 
 (defn withcc
@@ -255,16 +241,23 @@
   the aggregate at some point after the channel can no longer receive input
   (because all tasks which have access to it have completed)."
   [next]
-  (let [collector (atom [])
-        receive   (fn [msg] (swap! collector conj msg))
-        done      (fn [] (next @collector))]
-    (create-watcher! *current-task* done)
+  (let [name      (gensym "collector")
+        collector (atom [])
+        receive   (fn [msg]
+                    (event! ::collector.receive {:name name} msg)
+                    (swap! collector conj msg))
+        done      (fn []
+                    (let [delays @collector]
+                      (event! ::collector.done {:name name :coll delays})
+                      (next delays)))]
+    (event! ::collector.create {:name name})
+    (insert-barrier! done name)
     receive))
 
 (defn receive
   "Send the value `v` to the `i`th slot of collector c."
   [c i v]
-  (t/event! :collector/receive {:level :trace :data [i v]})
+  (event! ::v.collector.receive [i v])
   (swap! c
    (fn [{:keys [n unset elements] :as c}]
      (when-not (and (> n 0) (= (get elements i) unset))
@@ -274,5 +267,5 @@
          (update :elements assoc i v))))
   (when (= 0 (:n @c))
     (let [{:keys [next elements unset]} @c]
-      (t/event! :collector/join {:level :trace :data elements})
+      (event! ::v.collector.done elements)
       (emit next return elements))))
