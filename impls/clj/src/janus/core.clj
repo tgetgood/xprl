@@ -3,7 +3,7 @@
   (:require
    [janus.ast :as ast]
    [janus.builtins :refer [base-env]]
-   [janus.interpreter :as i]
+   [janus.i3 :as i]
    [janus.reader :as r]
    [janus.runtime :as rt]
    [janus.util :as util]
@@ -163,3 +163,5 @@
 
 (defn rt-filters! []
   (t/set-min-level! :event #{"janus.runtime"} :trace))
+
+(t/set-min-level! :error :debug)

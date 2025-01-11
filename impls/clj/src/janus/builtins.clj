@@ -109,10 +109,8 @@
    ;;
    ;; Note, however, that if a computation (form being evaluated) creates
    ;; channels either by calling (which creates return channels) or by passing
-   ;; functions (μs) to withcc, then those messages will still be sent.
-   ;;
-   ;; The idea is that the subcomputation can proceed uninhibited, but its
-   ;; external connections are subject to monitoring.
+   ;; functions (μs) to withcc, then those messages will still be sent. In other
+   ;; words, the autonomy of the internal subcomputation is respected.
    ;;
    ;; Autonomous from below, subordinate from above.
    ;;
@@ -120,6 +118,11 @@
    ;; collect emissions if desired, but remember that `into` doesn't return
    ;; until the subcomputation is finished, so it could deadlock if the
    ;; subcomputation requires a response from outside to continue.
+   ;;
+   ;; I haven't decided yet whether to allow passing channels. I think that's a
+   ;; bad idea, but I'm not 100% certain that we can make a useful language
+   ;; without. I suppose the smart thing to do would be to start without and see
+   ;; how far I can get.
    "capture" capture
    })
 

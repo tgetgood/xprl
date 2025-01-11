@@ -30,6 +30,9 @@
 (defn succeed [c v]
   (rt/emit c rt/return v))
 
+(defn emit-all [ccs tasks]
+  (clojure.core/apply rt/emit ccs tasks))
+
 (defrecord Marker [id])
 
 (defn marker [] (->Marker (gensym)))
@@ -37,13 +40,18 @@
 ;;;;; Mu
 
 (defn activate-μ [μ env ccs]
-    (event! ::createμ.activation {:env env :ends (count (:triggers μ))})
-    (let [msgs (map (fn [[k ics]]
-                      [#(clojure.core/apply eval %)
-                       [k env (rt/withcc ccs rt/return (get ics rt/return))]])
-                    (:triggers μ))]
-      (event! ::createμ.activation.send msgs)
-      (clojure.core/apply rt/emit ccs msgs)) )
+  (event! ::createμ.activation {:env env :ends (count (:syms μ))})
+  ;; REVIEW: Using an atom here makes the compiled μ non reentrant. A thread
+  ;; local binding would be better, but we might still have issues if we nest a
+  ;; μ inside of itself (like in a combinator).
+  (reset! (:ccs μ) (fn [k v]
+                     (event! ::indirect-emission [k v])
+                     (rt/emit ccs k v)))
+  (let [msgs (mapcat (fn [[sym ccs]]
+                       [#(clojure.core/apply reduce %) [(get env sym) {} ccs]])
+                     (:syms μ))]
+    (event! ::createμ.activation.send msgs)
+    (emit-all {} msgs)) )
 
 
 (defn validate-μ [args]
@@ -54,13 +62,10 @@
 (defn with-capture [ccs trap]
   (into {} (map (fn [[k _]]
                   [k (fn [msg]
-                       (if (contains? trap k)
-                         (let [f @(get trap k)]
-                           (if (fn? f)
-                             (f msg)
-                             (throw
-                              (RuntimeException. "trying to emit before activation."))))
-                         (throw (RuntimeException. "unreachable??"))))]))
+                       (event! ::captured-emission {:ch k :msg msg})
+                       (if (nil? @trap)
+                         (rt/emit ccs k msg)
+                         (@trap k msg)))]))
         ccs))
 
 (defn createμ [_ tail dyn ccs]
@@ -70,38 +75,22 @@
               (let [bind  (into {} (map (fn [k] [k mark]))
                                 (ast/bindings params))
                     env'  (merge dyn bind (when name {name mark}))
-                    trap  (into {} (map (fn [[k v]] [k (atom nil)])) ccs)
+                    trap  (atom nil)
                     ;; TODO: Each mu needs a unique delay channel and unbound
                     ;; markers need to be unique to each μ, otherwise when
                     ;; nested, the inner μ will capture the symbols of the outer
                     ;; one.
                     delay (rt/unbound-collector
                            (fn [delays]
-                             (rt/emit ccs
-                               rt/return (ast/μ name params' body trap delays))))]
+                             (succeed ccs (ast/μ name params' body trap delays))))]
                 (event! ::createμ.params params')
                 (reduce body env' (rt/withcc (with-capture ccs trap)
-                                    rt/delay delay))))])))
+                                    rt/delay (fn [[sym m c]]
+                                               (if (= m mark)
+                                                 (delay [sym c])
+                                                 (rt/emit ccs rt/delay [sym m c])))))))]
+      (reduce params dyn (rt/withcc ccs rt/return next)))))
 
-
-#_(defn createμ [_ tail dyn ccs]
-  (let [[name params body] (validate-μ tail)
-        the-μ              (μ name params body)]
-    (letfn [(delay [[sym ccs]]
-              (register-delay! the-μ sym (get ccs rt/return)))
-            (ret [value]
-              (set-static! the-μ value))
-            (next [params']
-              (let [bind (into {} (map (fn [k] [k marker]))
-                               (ast/bindings params))
-                    env' (merge dyn bind (when name {name marker}))]
-                (event! ::createμ.params params')
-                (reduce body env' (rt/withcc ccs rt/return ret rt/delay delay))))]
-      (event! ::createμ {:args tail :dyn dyn})
-      (rt/emit ccs
-        (fn [args] (clojure.core/apply reduce args))
-        [params dyn (rt/withcc ccs rt/return next rt/delay delay)]
-        rt/return the-μ))))
 
 (extend-protocol Reductive
   Object
@@ -127,7 +116,7 @@
                    {:name "reduce vector runner"})
           tasks (interleave (repeat runner) (map-indexed vector this))]
       (event! ::reduce.vector.tasks tasks)
-      (clojure.core/apply rt/emit c tasks)))
+      (emit-all c tasks)))
 
   clojure.lang.AMapEntry
   (reduced? [x] (and (reduced? (key x)) (reduced? (val x))))
@@ -182,7 +171,7 @@
       (if (instance? Marker v)
         (do
           (event! ::eval.symbol.unbound (select-keys env [this]))
-          (rt/emit c rt/delay [this c]))
+          (rt/emit c rt/delay [this v c]))
         (do
           (event! ::eval.symbol.dynamic (select-keys env [this]))
           ;; REVIEW: The value of every dynamic binding should be a context
@@ -253,15 +242,14 @@
   (apply [head tail env c]
     (event! ::apply.Mu {:head head :tail tail :dyn env})
     (letfn [(next [tail']
-              (let [meta (meta head)
-                    bind (merge env
-                                (ast/destructure (:params meta) tail')
+              (let [bind (merge env
+                                (ast/destructure (:params head) tail')
                                 ;; If a μ is named, then bind its name to it
                                 ;; in the env of the body when applying
                                 ;; arguments. This prevents circular links when
                                 ;; creating the μ in the first place.
-                                (when (:name meta)
-                                  {(:name meta) head}))]
+                                (when (:name head)
+                                  {(:name head) head}))]
                 (event! ::apply.Mu.destructuring {:bindings bind})
                 (activate-μ head bind c)))]
       (reduce tail env (with-return c next))))

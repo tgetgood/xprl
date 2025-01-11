@@ -2,7 +2,8 @@
   (:refer-clojure :exclude [reduced? symbol keyword keyword? destructure])
   (:require
    [clojure.pprint :as pp]
-   [clojure.string :as str])
+   [clojure.string :as str]
+   [taoensso.telemere :as t])
   (:import
    (java.io Writer)))
 
@@ -176,13 +177,13 @@
 (defn mustr [params body]
   (str "(#μ " params " " body ")"))
 
-(defrecord Mu [name params body ccs triggers]
+(defrecord Mu [name params body ccs syms]
   Object
   (toString [_]
     (str "(#μ " params " " body ")")))
 
-(defn μ [name params body ccs triggers]
-  (->Mu name params body ccs triggers))
+(defn μ [name params body ccs syms]
+  (->Mu name params body ccs syms))
 
 (ps Mu)
 
