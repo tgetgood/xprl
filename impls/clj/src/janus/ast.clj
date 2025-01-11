@@ -177,13 +177,13 @@
 (defn mustr [params body]
   (str "(#μ " params " " body ")"))
 
-(defrecord Mu [name params body ccs syms]
+(defrecord Mu [name params body]
   Object
   (toString [_]
     (str "(#μ " params " " body ")")))
 
-(defn μ [name params body ccs syms]
-  (->Mu name params body ccs syms))
+(defn μ [name params body]
+  (->Mu name params body))
 
 (ps Mu)
 

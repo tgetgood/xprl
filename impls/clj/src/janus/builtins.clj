@@ -1,6 +1,7 @@
 (ns janus.builtins
   (:require [janus.ast :as ast]
             [janus.interpreter :as i]
+            [janus.i3 :as i3]
             [janus.runtime :as rt]
             [janus.util :refer [fatal-error!]]
             [taoensso.telemere :as t]))
@@ -87,7 +88,7 @@
 
    ;; The grail of bootstrapping would be to implement μ in xprl, but I don't
    ;; have the tools to do that yet.
-   "μ"   i/createμ
+   "μ"   i3/createμ
 
    ;; "withcc" withcc
    "emit"   emit

@@ -21,7 +21,7 @@
 (def ^:dynamic *dyn*
   "Dynamic interpreter environment.
   N.B.: The language being interpreted is lexically scoped. Don't let the
-  implementation fool you. "
+  implementation fool you."
   {})
 
 (defn event! [type x])
@@ -48,8 +48,6 @@
 (defn apply [head tail]
   (event! :apply [head tail])
   (apply* head tail))
-
-(defrecord Unbound [cb])
 
 ;; Extend for Clojure types
 
@@ -96,11 +94,10 @@
   janus.ast.Symbol
   (eval* [s]
     (if-let [v (get *dyn* s)] ; s is a μ parameter
-      (if (instance? Unbound v)
-        ((:cb v) s) ; s has not been provided yet
-        (reduce v)) ; s is bound to a value
-      (if-let [v (-> s meta :lex (get s))]
-        (reduce v)))) ; s is bound lexically in the dev-time environment
+      (reduce v)
+      (if-let [v (-> s meta :lex (get s))] ; s is lexical
+        (reduce v)
+        (throw (RuntimeException. "unbound variable.")))))
 
   janus.ast.Pair
   (eval* [{:keys [head tail]}] ; (I (P x y)) => (A (I x) y)
@@ -132,5 +129,13 @@
   ;; Meta metacircularity protocol?
   ;; I don't think so, but it's a cute idea.
   (apply* [μ args]
-    )
-  )
+    (let [bind (ast/destructure (:params μ) (reduce args))
+          Δenv (if (= ::anon (:name μ)) bind (assoc bind (:name μ) μ))]
+      (with-bindings {(var *dyn*) (merge *dyn* Δenv)}
+        (reduce (:body μ))))))
+
+(defn createμ [args]
+  (cond
+    (= 2 (count args)) (createμ [::anon (first args) (second args)])
+    (= 3 (count args)) (let [[name params body] args]
+                         (ast/μ name (reduce params) body))))
