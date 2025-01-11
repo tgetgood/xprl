@@ -18,6 +18,12 @@
     true))
 
 
+(def ^:dynamic *dyn*
+  "Dynamic interpreter environment.
+  N.B.: The language being interpreted is lexically scoped. Don't let the
+  implementation fool you. "
+  {})
+
 (defn event! [type x])
 
 ;; Indirection to separate logging from logic
@@ -42,8 +48,6 @@
 (defn apply [head tail]
   (event! :apply [head tail])
   (apply* head tail))
-
-(def ^:dynamic *dyn* {})
 
 (defrecord Unbound [cb])
 
