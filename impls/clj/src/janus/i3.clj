@@ -47,6 +47,32 @@
 
 (defrecord Unbound [cb])
 
+;; Extend for Clojure types
+
+(defmacro extend-colls [types]
+  `(do ~@(into [] (map (fn [t#]
+                         `(extend ~t#
+                            Reduce
+                            {:reduce* (fn [xs#] (into (empty xs#) (map reduce) xs#))}
+                            Eval ; (I (L x y ...)) => (L (I x) (I y) ...)
+                            {:eval* (fn [xs#] (into (empty xs#) (map eval) xs#))})))
+               types)))
+
+(extend-colls
+ [clojure.lang.APersistentMap
+  clojure.lang.APersistentSet
+  clojure.lang.APersistentVector])
+
+(extend clojure.lang.AMapEntry
+  Reduce
+  {:reduce* (fn [e]
+              (clojure.lang.MapEntry. (reduce (key e)) (reduce (val e)))) }
+  Eval
+  {:eval* (fn [e]
+            (clojure.lang.MapEntry. (eval (key e)) (eval (val e))))})
+
+;; xprl logic
+
 (extend-protocol Reduce
   Object
   (reduce* [x] x)
@@ -57,27 +83,11 @@
 
   janus.ast.Application
   (reduce* [{:keys [head tail]}]
-    (apply (reduce head) tail))
-
-  clojure.lang.AMapEntry
-  (reduce* [e]
-    (clojure.lang.MapEntry. (reduce (key e)) (reduce (val e))))
-
-  clojure.lang.APersistentVector
-  (reduce* [xs]
-    (into (empty xs) (map reduce) xs)))
+    (apply (reduce head) tail)))
 
 (extend-protocol Eval
   Object
   (eval* [x] x)
-
-  clojure.lang.AMapEntry
-  (eval* [e]
-    (clojure.lang.MapEntry. (eval (key e)) (eval (val e))))
-
-  clojure.lang.APersistentVector
-  (eval* [xs] ; (I (L x y ...)) => (L (I x) (I y) ...)
-    (into (empty xs) (map eval) xs))
 
   janus.ast.Symbol
   (eval* [s]
