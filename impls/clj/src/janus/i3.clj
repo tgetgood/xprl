@@ -5,19 +5,6 @@
    [janus.runtime :as rt]
    [taoensso.telemere :as t]))
 
-(defn reduced? [x]
-  (condp instance? x
-    clojure.lang.PersistentVector (every? reduced x)
-    clojure.lang.AMapEntry        (and (reduced? (key x)) (reduced? (val x)))
-    clojure.lang.APersistentMap   (every? reduced? x)
-    clojure.lang.APersistentSet   (every? reduced? x)
-    janus.ast.Immediate           false
-    janus.ast.Application         false
-    janus.ast.Pair                (and (reduced? (:head x)) (reduced? (:tail x)))
-
-    true))
-
-
 (def ^:dynamic *dyn*
   "Dynamic interpreter environment.
   N.B.: The language being interpreted is lexically scoped. Don't let the
