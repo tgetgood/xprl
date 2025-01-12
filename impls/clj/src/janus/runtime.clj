@@ -46,8 +46,7 @@
   ([f arg]
    (task f arg {}))
   ([f arg m]
-   (let [id (gensym)]
-     (->Task f arg id m))))
+   (->Task f arg m)))
 
 
 (defrecord BarrierTask [f meta]
