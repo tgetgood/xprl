@@ -52,8 +52,14 @@
 
 ;;;;; Collections
 
+(defn map-entry
+  "Not a great name. Applies `f` to key and val of `e` and returns a new
+  clojure.lang.MapEntry."
+  [f e]
+  (clojure.lang.MapEntry. (f (key e)) (f (val e))))
+
 (defn reduce-collect! [coll xs dyn ccs]
-  (rt/enqueue!
+  (rt/push!
    (map-indexed
     (fn [i arg]
       (rt/task (fn [e] (reduce e dyn (with-return ccs #(coll i %)))) arg))
@@ -77,7 +83,8 @@
   (reduce* [x dyn ccs]
     (reduce-collect!
      (rt/ordered-collector 2
-       (fn [[k v]] (return ccs (with-meta (MapEntry. k v) (meta x)))))
+       (fn [[k v]] (return ccs
+                     (with-meta (clojure.lang.MapEntry. k v) (meta x)))))
      [(key x) (val x)] dyn ccs))
 
   clojure.lang.APersistentVector
@@ -89,7 +96,7 @@
   clojure.lang.APersistentMap
   (reduce* [m dyn ccs]
     (let [c (rt/unordered-collector {} #(return ccs (with-meta % (meta m))))]
-      (rt/enqueue!
+      (rt/push!
        (map #(rt/task (fn [e] (reduce e dyn (with-return ccs c))) %) m)))))
 
 (extend-protocol Eval
@@ -122,7 +129,7 @@
 
   clojure.lang.AMapEntry ; (I {k v}) => {(I k) (I v)}
   (eval* [x dyn ccs]
-    (reduce (MapEntry. (ast/immediate (key x)) (ast/immediate (val x))) dyn ccs))
+    (reduce (map-entry ast/immediate x) dyn ccs))
 
   clojure.lang.APersistentMap ; L can represent any iterable collection in fact
   (eval* [xs dyn ccs]

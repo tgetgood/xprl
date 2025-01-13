@@ -169,9 +169,9 @@
   `c` if `k` is a keyword. If `k` is a function it is assumed to *be* the
   continuation."
   {:style/indent 1}
-  [c & kvs]
+  [c kvs]
   (event! ::emit-raw kvs)
-  (let [tasks (map (partial parse-emission c) (partition 2 kvs))]
+  (let [tasks (map (partial parse-emission c) kvs)]
     (event! ::emit-tasks tasks)
     (push! tasks)))
 
