@@ -50,6 +50,15 @@
   (event! :apply [head tail] dyn ccs)
   (apply* head tail dyn ccs))
 
+;;;;; Collections
+
+(defn reduce-collect! [coll xs dyn ccs]
+  (rt/enqueue!
+   (map-indexed
+    (fn [i arg]
+      (rt/task (fn [] (reduce arg dyn (with-return ccs #(coll i %)))) []))
+    xs)))
+
 ;;;;; Interpreter core
 
 (extend-protocol Reduce
@@ -62,7 +71,26 @@
 
   janus.ast.Application
   (reduce* [{:keys [head tail]} dyn ccs]
-    (reduce head dyn (with-return ccs #(apply % tail dyn ccs)))))
+    (reduce head dyn (with-return ccs #(apply % tail dyn ccs))))
+
+  clojure.lang.AMapEntry
+  (reduce* [x dyn ccs]
+    (reduce-collect!
+     (rt/ordered-collector 2
+       (fn [[k v]] (return ccs (with-meta (MapEntry. k v) (meta x)))))
+     [(key x) (val x)] dyn ccs))
+
+  clojure.lang.APersistentVector
+  (reduce* [xs dyn ccs]
+    (reduce-collect!
+     (rt/ordered-collector (count xs) #(return ccs (with-meta % (meta xs))))
+     xs dyn ccs))
+
+  clojure.lang.APersistentMap
+  (reduce* [m dyn ccs]
+    (let [c (rt/unordered-collector {} #(return ccs (with-meta % (meta m))))]
+      (rt/enqueue!
+       (map #(rt/task (fn [e] (reduce e dyn (with-return ccs c))) %) m)))))
 
 (extend-protocol Eval
   Object
@@ -72,7 +100,7 @@
   (eval* [s dyn ccs]
     (if-let [v (get dyn s)] ; s is a μ parameter
       (reduce v {} ccs)
-      (if-let [v (-> s meta :lex (get s))] ; s is lexical
+      (if-let [v (-> s meta :lex (get s))] ; s is lexical from def
         (reduce v {} ccs)
         (unbound-error s))))
 
@@ -86,15 +114,27 @@
 
   janus.ast.Application
   (eval* [x dyn ccs] ; (I (A x y)) must be treated in applicative order.
-    (reduce x dyn (with-return ccs #(eval % dyn ccs)))))
+    (reduce x dyn (with-return ccs #(eval % dyn ccs))))
+
+  clojure.lang.APersistentVector ; (I (L x y ...)) => (L (I x) (I y) ...)
+  (eval* [xs dyn ccs]
+    (reduce (into [] (map ast/immediate) xs) dyn ccs))
+
+  clojure.lang.AMapEntry ; (I {k v}) => {(I k) (I v)}
+  (eval* [x dyn ccs]
+    (reduce (MapEntry. (ast/immediate (key x)) (ast/immediate (val x))) dyn ccs))
+
+  clojure.lang.APersistentMap ; L can represent any iterable collection in fact
+  (eval* [xs dyn ccs]
+    (reduce (into {} (map ast/immediate) xs) dyn ccs)))
 
 (extend-protocol Apply
   janus.ast.Application       ; (A (A x y) z) proceeds from inside out:
   (apply* [head tail dyn ccs] ; "Applicative on the left".
     (reduce head dyn (with-return ccs #(apply % tail dyn ccs))))
 
-  janus.ast.PrimitiveMacro ; pMac must invoke ccs or the computation will dissolve.
-  (apply* [mac tail dyn ccs]
+  janus.ast.PrimitiveMacro   ; a pMac must invoke ccs or the computation will
+  (apply* [mac tail dyn ccs] ; wither away.
     ((:f mac) mac tail dyn ccs)) ; We pass the macro itself in for its metadata.
 
   janus.ast.PrimitiveFunction
@@ -119,4 +159,6 @@
                          (reduce params dyn
                            (with-return ccs
                              #(return ccs
-                                (ast/μ name (reduce params) body)))))))
+                                (with-meta
+                                  (ast/μ name (reduce params) body)
+                                  (meta args))))))))
