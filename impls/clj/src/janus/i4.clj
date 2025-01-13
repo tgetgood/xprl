@@ -56,7 +56,7 @@
   (rt/enqueue!
    (map-indexed
     (fn [i arg]
-      (rt/task (fn [] (reduce arg dyn (with-return ccs #(coll i %)))) []))
+      (rt/task (fn [e] (reduce e dyn (with-return ccs #(coll i %)))) arg))
     xs)))
 
 ;;;;; Interpreter core

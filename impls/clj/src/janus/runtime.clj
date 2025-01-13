@@ -26,13 +26,6 @@
 
 ;;;;; Tasks
 
-(defn steal! [system exec]
-  ;; REVIEW: What to log here? Executors ought to have names.
-  (event! ::work-steal)
-  ;; TODO: steal work!
-  (t/log! :debug "Work queue empty. Nothing to do")
-  nil)
-
 (defprotocol ITask
   (run! [this]))
 
@@ -48,106 +41,83 @@
   ([f arg m]
    (->Task f arg m)))
 
-
 (defrecord BarrierTask [f meta]
   ITask
   (run! [_]
     (event! ::run.barrier meta)
     (f)))
 
-(declare ^:dynamic *executor*)
-
 ;;;;; Executor
 
-(defprotocol Queue
-  (push! [this tasks])
-  (insert! [this task] "Insert a single task but don't jump.")
-  (go! [this]))
-
-(defprotocol Initable
-  (start! [this])
-  (stop! [this])
-  (running? [this]))
-
-(defprotocol FnCache
-  (clear! [this])
-  (store! [this task])
-  (next-task [this]))
-
-(defmacro check-jump
-  {:style/indent 0}
+(defmacro check-run
+  "Catches and logs any execeptions that escape from running body. Stops
+  executor if anything is caught."
   [& body]
   `(try
      ~@body
-     true
      (catch RuntimeException e#
        ;; REVIEW: Is halting the correct thing to do here? Should we not make
        ;; our best effort to keep going?
-       (t/log! :error {:id ::executor-error :data (str e#)})
-       (t/error! {:level :debug :id ::executor-error}  e#)
        (stop! *executor*)
-       (alter-var-root #'clojure.core/*e (fn [_#] e#))
-       false)))
+       (t/error! {:id ::executor-error}  e#)
+       (alter-var-root #'clojure.core/*e (fn [_#] e#)))))
 
-(deftype Executor [^ConcurrentLinkedDeque queue
-                   ^:unsynchronized-mutable next
-                   ^:unsynchronized-mutable running?]
-
-  Queue
-  (push! [this tasks]
-    (when next
-      (insert! this next))
-
-    (set! next (first tasks))
-
-    (if (= 2 (count tasks))
-      (.add queue (second tasks))
-      (.addAll queue (rest tasks)))
-    (when-not running?
-      (start! this)))
-  (insert! [this task]
-    (.add queue task))
-  (go! [this]
-    (if-let [task (next-task this)]
-      (when (check-jump (run! task))
-        (recur))
-      (if-let [work (steal! nil this)]
-        (push! this work)
-        (stop! this))))
-
-  Initable
-  (start! [this]
-    (set! running? true)
-    (go! this))
-  (stop! [_]
-    (set! running? false))
-  (running? [_]
-    running?)
-
-  FnCache
-  (clear! [_]
-    (set! next nil))
-  (store! [_ task]
-    (set! next task))
-  (next-task [_]
-    (if next
-      (let [n' next]
-        (set! next nil)
-        n')
-      (.pollLast queue))))
+(defrecord Executor [^ConcurrentLinkedDeque queue state])
 
 (defn create-executor []
-  ;; REVIEW: ConcurrentLinkedDeque is obviously too much overhead for the main
-  ;; event loop of a real system. The design calls for singlethreaded dequeues
-  ;; with a steal operation that needs to be somewhat coordinated. We'll get
-  ;; there eventually.
-  (->Executor (ConcurrentLinkedDeque.) nil false))
+  (->Executor (ConcurrentLinkedDeque.) (atom {:running? false :sleeping? false})))
 
 (def ^:dynamic *coordinator* nil)
 (def ^:dynamic *executor* (create-executor))
 
+(defn pause! []
+  (swap! (:state *executor*) assoc :paused? true))
+
+(defn go! []
+  (let [{:keys [queue state]} *executor*])
+  (when (:running? @state)
+    (if-let [next (.pollLast queue)]
+      (do
+        (check-run (run! next))
+        (recur))
+      (do
+        ;; TODO: Steal work!
+        (pause!)))))
+
+(defn resume! []
+  (when (:paused? @(:state *executor*))
+    (swap! (:state *executor*) assoc :paused? false)
+    (go!)))
+
+(defn start! []
+  (when-not (:running? @(:state *executor*))
+    (swap! (:state *executor*) assoc :running? true)
+    (resume!)))
+
+(defn stop! []
+  (swap! (:state *executor*) assoc :running? false))
+
+(defn push!
+  "Add tasks to work stack of the current executor.
+  Does not start processing."
+  ([task]
+   (.add (:queue *executor*) task)
+   (resume!))
+  ([t1 t2]
+   (doto (:queue *executor*)
+     (.add t1)
+     (.add t2))
+   (resume!))
+  ([t1 t2 & more]
+   (doto (:queue *executor*)
+     (.add t1)
+     (.add t2)
+     (.addAll more))
+   (resume!)))
+
+
 (defn insert-barrier! [f meta]
-  (insert! *executor* (->BarrierTask f meta)))
+  (push! (->BarrierTask f meta)))
 
 ;;;;; Emission
 
@@ -219,29 +189,16 @@
 
 ;;;;; Collectors
 
-(defn collector
-  "Returns a collector which will collect `n` things and then call `next` with
-  the result."
-  [next n]
-  ;; TODO: This is an array collector, but a map collector should work as a drop
-  ;; in replacement. We just need to pass in the set of keys to be waited on.
-  ;;
-  ;; REVIEW: how ugly would it be to switch on whether `n` is an int or a
-  ;; collection?
-  (let [unset (gensym)
-        fill  (into [] (take n) (repeat unset))]
-    (atom {:unset    unset
-           :n        n
-           :elements fill
-           :next     next})))
+(defn double-set-error! [_ _ _]
+  (throw (RuntimeException. "!!!")))
 
-(defn unbound-collector
+(defn unordered-collector
   "Returns a channel which collects all events sent to it, calling `next` with
   the aggregate at some point after the channel can no longer receive input
   (because all tasks which have access to it have completed)."
-  [next]
-  (let [name      (gensym "collector")
-        collector (atom [])
+  [init next]
+  (let [name      (gensym "unordered-collector")
+        collector (atom init)
         receive   (fn [msg]
                     (event! ::collector.receive {:name name} msg)
                     (swap! collector conj msg))
@@ -253,18 +210,24 @@
     (insert-barrier! done name)
     receive))
 
-(defn receive
-  "Send the value `v` to the `i`th slot of collector c."
-  [c i v]
-  (event! ::v.collector.receive [i v])
-  (swap! c
-   (fn [{:keys [n unset elements] :as c}]
-     (when-not (and (> n 0) (= (get elements i) unset))
-       (t/error! (throw (RuntimeException.))))
-     (-> c
-         (update :n dec)
-         (update :elements assoc i v))))
-  (when (= 0 (:n @c))
-    (let [{:keys [next elements unset]} @c]
-      (event! ::v.collector.done elements)
-      (emit next return elements))))
+(defn ordered-collector
+  "Returns a collector which will collect `n` things and then call `next` with
+  the result."
+  {:style/indent 1}
+  [n next]
+  (let [name      (gensym "ordered-collector")
+        collector (atom {:n n :elements (into [] (take n) (repeat name))})]
+    (event! ::o.collector.create {:name name :size n})
+    (fn [i v]
+      (swap! collector
+             (fn [{:keys [elements n] :as c}]
+               (event! ::o.collector.receive {:name name :i i :v v :remaining n})
+               (when-not (and (> n 0) (= (get elements i) name))
+                 (double-set-error! elements i v))
+               (-> c
+                   (update :n dec)
+                   (update :elements assoc i v))))
+      (let [{:keys [n elements]} @collector]
+        (when (= 0 n)
+          (event! ::o.collector.done {:name name :coll elements})
+          (emit next return elements))))))
