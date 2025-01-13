@@ -71,6 +71,7 @@
 (def ^:dynamic *executor* (create-executor))
 
 (defn pause! []
+  (event! ::executor.pause)
   (swap! (:state *executor*) assoc :paused? true))
 
 (defn go! []
@@ -86,15 +87,18 @@
 
 (defn resume! []
   (when (:paused? @(:state *executor*))
+    (event! ::executor.resume)
     (swap! (:state *executor*) assoc :paused? false)
     (go!)))
 
 (defn start! []
   (when-not (:running? @(:state *executor*))
+    (event! ::executor.start)
     (swap! (:state *executor*) assoc :running? true)
     (resume!)))
 
 (defn stop! []
+  (event! ::executor.stop)
   (swap! (:state *executor*) assoc :running? false))
 
 (defn push!
@@ -115,26 +119,17 @@
      (.addAll more))
    (resume!)))
 
-
 (defn insert-barrier! [f meta]
   (push! (->BarrierTask f meta)))
 
 ;;;;; Emission
 
 (defn sanitise [k]
-  (when-not (ast/keyword? k)
-    (t/log! {:level :error :data [(type k) k]}
-            "Only xprl keywords can be used in cc maps.")
-    (throw (RuntimeException. "")))
+  (assert (ast/keyword? k) "Only xprl keywords can be used in cc maps.")
   k)
 
 (defn sanitise-keys [m]
   (into (empty m) (map (fn [[k v]] [(sanitise k) v])) m))
-
-(defn unbound-channel [c]
-  (fn [args]
-    (t/log! {:level :warn :data {:name c :args args}}
-            "Message sent on unbound channel")))
 
 (defn parse-emission [c [k v]]
   (event! ::parse-raw [k (fn? k) (ast/keyword? k) (contains? c k)])
@@ -178,7 +173,7 @@
   (event! ::emit-raw kvs)
   (let [tasks (map (partial parse-emission c) (partition 2 kvs))]
     (event! ::emit-tasks tasks)
-    (push! *executor* tasks)))
+    (push! tasks)))
 
 (defn withcc
   {:style/indent 1}
