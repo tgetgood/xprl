@@ -130,16 +130,14 @@
        (.write ^Writer *out* " . ")
        (pp/write-out tail)))))
 
-(defrecord Immediate [form env]
+(defrecord Immediate [form]
   Object
   (toString [_]
     (str "~" form)))
 
 (defn immediate
-  ([form] (immediate form {}))
-  ([form env]
-   (with-meta (->Immediate form env)
-     (meta form))))
+  [form]
+  (with-meta (->Immediate form) (meta form)))
 
 (ps Immediate)
 
@@ -148,16 +146,15 @@
   (.write ^Writer *out* "~")
   (pp/write-out (:form i)))
 
-(defrecord Application [head tail env]
+(defrecord Application [head tail]
   Object
   (toString [_]
     (str "#" (str (->Pair head tail)))))
 
 (defn application
-  ([head tail] (application head tail {}))
-  ([head tail env]
-   (with-meta (->Application head tail env)
-     (select-keys (meta head) [:file :string :line :col]))))
+  [head tail]
+  (with-meta (->Application head tail)
+    (select-keys (meta head) [:file :string :line :col])))
 
 (ps Application)
 
@@ -165,17 +162,6 @@
   ;; REVIEW: Is this advisable?
   (.write ^Writer *out* "#")
   (pp/simple-dispatch (->Pair head tail)))
-
-(defn ppmu [t params body]
-  ;; (pp/pprint-meta p)
-  (pp/pprint-logical-block
-   :prefix "(" :suffix ")"
-   ;; TODO: Dispatch on head of pair to format
-   (pp/write-out t)
-   (format-pair (symbol "μ") [params body])))
-
-(defn mustr [params body]
-  (str "(#μ " params " " body ")"))
 
 (defrecord Mu [name params body]
   Object
@@ -188,7 +174,10 @@
 (ps Mu)
 
 (defmethod pp/simple-dispatch Mu [{:keys [params body]}]
-  (ppmu (symbol "#μ") params body))
+  (pp/pprint-logical-block
+   :prefix "(" :suffix ")"
+   (pp/write-out (symbol "#μ"))
+   (format-pair (symbol "#μ") [params body])))
 
 (defn fname [f]
   (or (:name (meta f)) (str f)))

@@ -1,7 +1,6 @@
 (ns janus.builtins
   (:require [janus.ast :as ast]
-            [janus.interpreter :as i]
-            [janus.i3 :as i3]
+            [janus.i4 :as i]
             [janus.runtime :as rt]
             [janus.util :refer [fatal-error!]]
             [taoensso.telemere :as t]))
@@ -19,49 +18,36 @@
 
 (defn xprl-def [form args env c]
   (let [[name body defmeta] (validate-def c args)]
-    (letfn [(next [name']
-              (cond
-                (instance? janus.ast.Symbol name')
-                (letfn [(next [body']
-                          (let [def body']
-                            (i/event! ::def.top {:name name' :body body'})
-                            (rt/emit c
-                                     (ast/keyword "env")   {name' def}
-                                     (ast/keyword "return") name')))]
-                  (i/event! ::def.evalbody {:body body :name name'})
-                  (i/eval body env (i/with-return c next)))
-
-                (i/reduced? name')
-                (fatal-error! c name' "Can only bind Symbols in env.")
-
-                :else (do
-                        (i/event! ::def.delay {:form form :args args :env env
-                                               :name name'})
-                        (i/succeed c (ast/application form args env)))))]
-      (i/reduce name env (i/with-return c next)))))
+    (i/reduce name env
+      (i/with-return c
+        (fn [name']
+          (assert (instance? janus.ast.Symbol name') "Only Symbols can be names.")
+          (i/eval body env
+            (i/with-return c
+              (fn [body']
+                (let [def (with-meta body'
+                            (merge defmeta
+                                   (select-keys [:file :line :col] (meta form))))]
+                  ;; (i/event! ::def.top {:name name' :body body'})
+                  (rt/emit c [[(ast/keyword "env") {name' def}]
+                              [(ast/keyword "return") name']]))))))))))
 
 (defn emit [mac kvs env c]
-  (letfn [(next [v]
-            (i/event! ::emit.received v)
-            (apply rt/emit c v))]
-    (let [coll (rt/collector (i/with-return c next) (count kvs))
-          tasks
-          (into
-           []
+  (let [coll (rt/ordered-collector (count kvs)
+               #(rt/emit c (partition 2 %)))]
+    (rt/push!
+     (into []
            (comp
             (map-indexed
              (fn [i x]
                [(if (even? i)
                   ;; eval keys
-                  (fn [x] (i/eval x env (i/with-return
-                                          c #(rt/receive coll i %))))
+                  (fn [x] (i/eval x env (i/with-return c #(coll i %))))
                   ;; reduce values
-                  (fn [x] (i/reduce x env (i/with-return
-                                            c #(rt/receive coll i %)))))
+                  (fn [x] (i/reduce x env (i/with-return c #(coll i %)))))
                 x]))
             cat)
-           kvs)]
-      (apply rt/emit c tasks))))
+           kvs))))
 
 (defn capture [_ [form] dyn ccs]
   (let [ccs' (into {rt/unbound (fn [{:keys [ch-name msg]}]
@@ -74,7 +60,7 @@
 
 (defn select [_ [p t f] dyn ccs]
   (letfn [(next [p']
-            (i/event! ::select.p p')
+            ;; (i/event! ::select.p p')
             (case p'
               true (i/reduce t dyn ccs)
               false (i/reduce f dyn ccs)))]
@@ -88,7 +74,7 @@
 
    ;; The grail of bootstrapping would be to implement μ in xprl, but I don't
    ;; have the tools to do that yet.
-   "μ"   i3/createμ
+   "μ"   i/createμ
 
    ;; "withcc" withcc
    "emit"   emit

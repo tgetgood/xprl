@@ -29,10 +29,10 @@
 (defprotocol ITask
   (run! [this]))
 
-(defrecord Task [f arg id meta]
+(defrecord Task [f arg meta]
     ITask
     (run! [_]
-      (event! ::run.task {:fn f :meta meta :arg arg :id id})
+      (event! ::run.task {:fn f :meta meta :arg arg})
       (f arg)))
 
 (defn task
@@ -49,6 +49,18 @@
 
 ;;;;; Executor
 
+(defrecord Executor [^ConcurrentLinkedDeque queue running?])
+
+(defn create-executor []
+  (->Executor (ConcurrentLinkedDeque.) (atom false)))
+
+(def ^:dynamic *coordinator* nil)
+(def ^:dynamic *executor* (create-executor))
+
+(defn stop! []
+  (event! ::executor.stop)
+  (reset! (:running? *executor*) false))
+
 (defmacro check-run
   "Catches and logs any execeptions that escape from running body. Stops
   executor if anything is caught."
@@ -58,71 +70,58 @@
      (catch RuntimeException e#
        ;; REVIEW: Is halting the correct thing to do here? Should we not make
        ;; our best effort to keep going?
-       (stop! *executor*)
+       (stop!)
        (t/error! {:id ::executor-error}  e#)
        (alter-var-root #'clojure.core/*e (fn [_#] e#)))))
 
-(defrecord Executor [^ConcurrentLinkedDeque queue state])
-
-(defn create-executor []
-  (->Executor (ConcurrentLinkedDeque.) (atom {:running? false :sleeping? false})))
-
-(def ^:dynamic *coordinator* nil)
-(def ^:dynamic *executor* (create-executor))
-
-(defn pause! []
-  (event! ::executor.pause)
-  (swap! (:state *executor*) assoc :paused? true))
-
 (defn go! []
-  (let [{:keys [queue state]} *executor*])
-  (when (:running? @state)
-    (if-let [next (.pollLast queue)]
-      (do
-        (check-run (run! next))
-        (recur))
-      (do
-        ;; TODO: Steal work!
-        (pause!)))))
+  (let [{:keys [queue running?]} *executor*]
+    (when @running?
+      (if-let [next (.pollLast ^ConcurrentLinkedDeque queue)]
+        (do
+          (event! ::run next)
+          (check-run (run! next))
+          (recur))
+        (do
+          ;; TODO: Steal work!
+          (stop!))))))
 
 (defn resume! []
-  (when (:paused? @(:state *executor*))
+  (when-not @(:running? *executor*)
     (event! ::executor.resume)
-    (swap! (:state *executor*) assoc :paused? false)
+    (reset! (:running? *executor*) true)
     (go!)))
 
-(defn start! []
-  (when-not (:running? @(:state *executor*))
-    (event! ::executor.start)
-    (swap! (:state *executor*) assoc :running? true)
-    (resume!)))
+(defprotocol Exec
+  (push* [this queue]))
 
-(defn stop! []
-  (event! ::executor.stop)
-  (swap! (:state *executor*) assoc :running? false))
+(extend-protocol Exec
+  janus.runtime.Task
+  (push* [this queue]
+    (.add ^ConcurrentLinkedDeque queue this))
+
+  janus.runtime.BarrierTask
+  (push* [this queue]
+    (.add ^ConcurrentLinkedDeque queue this))
+
+  clojure.lang.IPersistentCollection
+  (push* [this queue]
+    (.addAll ^ConcurrentLinkedDeque queue this)))
 
 (defn push!
   "Add tasks to work stack of the current executor.
   Does not start processing."
-  ([task]
-   (.add (:queue *executor*) task)
-   (resume!))
-  ([t1 t2]
-   (doto (:queue *executor*)
-     (.add t1)
-     (.add t2))
-   (resume!))
-  ([t1 t2 & more]
-   (doto (:queue *executor*)
-     (.add t1)
-     (.add t2)
-     (.addAll more))
-   (resume!)))
+  [tasks]
+  (push* tasks (:queue *executor*))
+  (resume!))
 
 (defn insert-barrier! [f meta]
   (push! (->BarrierTask f meta)))
 
 ;;;;; Emission
+
+(defn continue [ccs [k msg]]
+  (push! (task (get ccs k) msg)))
 
 (defn sanitise [k]
   (assert (ast/keyword? k) "Only xprl keywords can be used in cc maps.")
@@ -225,4 +224,4 @@
       (let [{:keys [n elements]} @collector]
         (when (= 0 n)
           (event! ::o.collector.done {:name name :coll elements})
-          (emit next return elements))))))
+          (next elements))))))

@@ -3,11 +3,16 @@
   (:require
    [janus.ast :as ast]
    [janus.builtins :refer [base-env]]
-   [janus.i3 :as i]
+   [janus.i4 :as i]
    [janus.reader :as r]
    [janus.runtime :as rt]
-   [janus.util :as util]
    [taoensso.telemere :as t]))
+
+(defn form-log! [level form msg]
+  (t/log! {:level level
+           :data  (assoc (select-keys (meta form) [:string :file :line :col])
+                         :form form)}
+                msg))
 
 (def srcpath "../../src/")
 (def corexprl (str srcpath "core.xprl"))
@@ -18,12 +23,11 @@
 (def o (atom nil))
 
 (defn eval [form conts]
-  (rt/push! rt/*executor*
-            [(rt/task #(apply i/eval %) [form {} conts] {:name "eval"})]))
+  (rt/push! (rt/task #(i/eval % {} conts) form {:name "eval"})))
 
 (defn loadfile [env fname]
   ;; HACK: The executor doesn't clean up properly in the face of errors!
-  (rt/stop! rt/*executor*)
+  (rt/stop!)
 
   (let [conts {rt/env    #(swap! env merge %)
                rt/return #(throw (RuntimeException. "boom!"))
@@ -39,7 +43,7 @@
     (letfn [(looper [reader]
               (let [reader (r/read reader @env)
                     form   (:form reader)]
-                (util/form-log! :debug form "eval form")
+                (form-log! :debug form "eval form")
                 (if (= :eof form)
                   @env
                   (eval form (i/with-return conts
@@ -53,7 +57,7 @@
 (defn tset! [v]
   (alter-var-root (var *t) (fn [& args] v)))
 
-(defn ktest
+#_(defn ktest
   "Kludge testing. Takes a test file, reads and evaluates forms in pairs, and
   asserts the results to be equal. If not, halt testing and set *t to the lhs
   (after read but before eval)."
@@ -153,13 +157,13 @@
 
 (defn clear-filters! []
   (t/set-min-level! :warn)
-  (t/set-min-level! :janus.interpreter/trace :info)
+  (t/set-min-level! :janus.i4/trace :info)
   (t/set-min-level! :event #{"janus.runtime"} :info)
   (t/set-id-filter! "*")
   (t/set-ns-filter! "*"))
 
 (defn ev-filters! []
-  (t/set-min-level! :janus.interpreter/trace :trace))
+  (t/set-min-level! :janus.i4/trace :trace))
 
 (defn rt-filters! []
   (t/set-min-level! :event #{"janus.runtime"} :trace))

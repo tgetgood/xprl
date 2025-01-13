@@ -13,7 +13,8 @@
 
 (defn event! [type x dyn ccs]
   ;; FIXME: This should log different fields based on type and x.
-  (t/event! (keyword (.name *ns*) (str/join "." [(name type) (.getName (type x))]))
+  ;; Why is the type of x nil when x is a record from AST?
+  #_(t/event! (keyword (.name *ns*) (str/join "." [(name type) (.getName (type x))]))
             {:level :trace
              :kind  ::trace
              :dyn   dyn
@@ -22,7 +23,7 @@
 ;;;;; Helpers to simplify CPS transform
 
 (defn return {:style/indent 1} [ccs x]
-  (rt/emit ccs rt/return x))
+  (rt/continue ccs [rt/return x]))
 
 (defn with-return {:style/indent 1} [c next]
   (rt/withcc c rt/return next))
@@ -161,11 +162,9 @@
 (defn createμ [_ args dyn ccs]
   (cond
     ;; TODO: docstrings and metadata?
-    (= 2 (count args)) (createμ [::anon (first args) (second args)])
+    (= 2 (count args)) (createμ _ [::anon (first args) (second args)] dyn ccs)
     (= 3 (count args)) (let [[name params body] args]
                          (reduce params dyn
                            (with-return ccs
                              #(return ccs
-                                (with-meta
-                                  (ast/μ name (reduce params) body)
-                                  (meta args))))))))
+                                (with-meta (ast/μ name % body) (meta args))))))))
