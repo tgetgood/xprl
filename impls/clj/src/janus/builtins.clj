@@ -29,8 +29,8 @@
                             (merge defmeta
                                    (select-keys [:file :line :col] (meta form))))]
                   ;; (i/event! ::def.top {:name name' :body body'})
-                  (rt/emit c [[(ast/keyword "env") {name' def}]
-                              [(ast/keyword "return") name']]))))))))))
+                  (rt/emit c [[(ast/keyword "return") name']
+                              [(ast/keyword "env") {name' def}]]))))))))))
 
 (defn emit [mac kvs env c]
   (let [coll (rt/ordered-collector (count kvs)

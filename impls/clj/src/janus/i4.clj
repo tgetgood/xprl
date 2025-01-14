@@ -157,14 +157,18 @@
         (fn [args]
           (let [bind (ast/destructure (:params μ) args)
                 Δenv (if (= ::anon (:name μ)) bind (assoc bind (:name μ) μ))]
-            (reduce (:body μ) (merge dyn Δenv) ccs)))))))
+            (reduce (:body μ) (merge dyn (:dyn μ) Δenv) ccs)))))))
 
 (defn createμ [_ args dyn ccs]
   (cond
     ;; TODO: docstrings and metadata?
     (= 2 (count args)) (createμ _ [::anon (first args) (second args)] dyn ccs)
     (= 3 (count args)) (let [[name params body] args]
-                         (reduce params dyn
+                         (reduce name dyn
                            (with-return ccs
-                             #(return ccs
-                                (with-meta (ast/μ name % body) (meta args))))))))
+                             (fn [name]
+                               (reduce params dyn
+                                 (with-return ccs
+                                   #(return ccs
+                                      (with-meta (ast/μ name % body dyn)
+                                        (meta args)))))))))))
