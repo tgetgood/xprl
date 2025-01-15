@@ -2,10 +2,34 @@
   (:require
    [janus.ast :as ast]
    [janus.interpreter :as i]
-   [janus.interpreter-impl :refer [createμ with-return]]
    [janus.runtime :as rt]
-   [janus.util :refer [fatal-error!]]
    [taoensso.telemere :as t]))
+
+(defn base-emit
+  "Does essentially what `emit` does within xprl but called from outside.
+  Only necessary for builtins."
+  [c kvs]
+  (let [unbound-handler (get c rt/unbound)]
+    (loop [kvs kvs]
+      (when (seq kvs)
+        (let [[k v] (first kvs)]
+          (if-let [h (get c k)]
+            (rt/push! (rt/task h v))
+            (when unbound-handler
+              (rt/push!
+               (rt/task unbound-handler
+                        {(ast/keyword "ch-name") k (ast/keyword "msg") v})))))
+        (recur (rest kvs))))))
+
+(defn fatal-error! [c form ^String msg]
+  (t/log! {:level :error
+           :data  (assoc (select-keys (meta form) [:string :file :line :col])
+                         :form form)}
+                msg)
+  (when-let [h (get c rt/error)])
+  (base-emit c [rt/error {:form form :message msg}]))
+
+;;;;; def
 
 (defn validate-def [c form]
   (when-not (<= 2 (count form) 3)
@@ -21,22 +45,36 @@
 (defn xprl-def [form args env c]
   (let [[name body defmeta] (validate-def c args)]
     (i/reduce name env
-      (with-return c
+      (i/with-return c
         (fn [name']
           (assert (instance? janus.ast.Symbol name') "Only Symbols can be names.")
           (i/eval body env
-            (with-return c
+            (i/with-return c
               (fn [body']
                 (let [def (with-meta body'
                             (merge defmeta
                                    (select-keys [:file :line :col] (meta form))))]
                   ;; (i/event! ::def.top {:name name' :body body'})
-                  (rt/emit c [[(ast/keyword "return") name']
-                              [(ast/keyword "env") {name' def}]]))))))))))
+                  (base-emit c [[(ast/keyword "return") name']
+                                [(ast/keyword "env") {name' def}]]))))))))))
+
+;;;;; emit
+
+(defn prepare-emission [k v env c]
+  (let [callable (cond
+                   (ast/μ? k)       #(i/apply k % env c)
+                   (ast/keyword? k) (get c k (get c rt/unbound ::unresolved)))]
+    (if (= ::unresolved callable)
+      ;; unconnected channels are not an error, but that might be a problem...
+      (t/event! ::unresolved-channel {:level :warn :data {:ch-name k :msg v}})
+      (rt/task callable v))))
+
+(defn prepare-emissions [kvs env c]
+  (map (fn [[k v]] (prepare-emission k v env c)) kvs))
 
 (defn emit [mac kvs env c]
   (let [coll (rt/ordered-collector (count kvs)
-               #(rt/emit c (partition 2 %)))]
+               #(rt/push! (prepare-emissions (partition 2 %) env c)))]
     (rt/push!
      (into []
            (comp
@@ -45,16 +83,18 @@
                (rt/task
                 (fn [x]
                   ((if (even? i) i/eval i/reduce)
-                   x env (with-return c #(coll i %))))
+                   x env (i/with-return c #(coll i %))))
                 x))))
            kvs))))
 
+;;;; &c
+
 (defn capture [_ [form] dyn ccs]
   (let [ccs' (into {rt/unbound (fn [{:keys [ch-name msg]}]
-                                 (rt/emit ccs rt/return [ch-name msg]))}
+                                 (base-emit ccs [rt/return [ch-name msg]]))}
                    (map (fn [[k v]]
                           [k (fn [v]
-                               (rt/emit ccs rt/return [k v]))]))
+                               (base-emit ccs [rt/return [k v]]))]))
                    (dissoc ccs rt/unbound))]
     (i/eval form dyn ccs')))
 
@@ -64,7 +104,7 @@
             (case p'
               true (i/reduce t dyn ccs)
               false (i/reduce f dyn ccs)))]
-    (i/reduce p dyn (with-return ccs next))))
+    (i/reduce p dyn (i/with-return ccs next))))
 
 (def macros
   {
@@ -74,7 +114,7 @@
 
    ;; The grail of bootstrapping would be to implement μ in xprl, but I don't
    ;; have the tools to do that yet.
-   "μ"   createμ
+   "μ"   i/createμ
 
    ;; "withcc" withcc
    "emit"   emit
@@ -125,6 +165,7 @@
    "<*" <
    "=*" =
 
+   "count*" count
    "first*" first
    "rest*"  rest
    "nth*"   nth* ; Base 1 indexing

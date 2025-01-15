@@ -19,7 +19,7 @@
 
 (g f)                                1
 
-(fact 5)                             120
+(! 5)                                120
 
 ;; Scope test
 ;; Don't want dynamic scope to creep into the language just because we're using

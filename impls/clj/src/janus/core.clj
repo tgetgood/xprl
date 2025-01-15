@@ -57,7 +57,7 @@
 (defn tset! [v]
   (alter-var-root (var *t) (fn [& args] v)))
 
-#_(defn ktest
+(defn ktest
   "Kludge testing. Takes a test file, reads and evaluates forms in pairs, and
   asserts the results to be equal. If not, halt testing and set *t to the lhs
   (after read but before eval)."
@@ -97,21 +97,21 @@
                     f1      (:form r1)
                     r2      (r/read r1 @env)
                     f2      (:form r2)
-                    collect (rt/collector (comparator r1 r2) 2)]
+                    collect (rt/ordered-collector 2 (comparator r1 r2))]
                 (t/log! {:id   :ktest :level :debug
                          :data {:lhs r1 :rhs r2}}
                         "Running test:")
                 (if (or (= :eof f1) (= :eof f2))
                   (t/log! {:level :info :id :ktest} "All tests passed!")
                   (rt/push!
-                   rt/*executor*
                    [(rt/task #(apply i/eval %)
                              [f1 {} (rt/withcc c
-                                      rt/return #(rt/receive collect 0 %)
+                                      rt/return #(collect 0 %)
                                       rt/error  (handler r1))])
                     (rt/task #(apply i/eval %)
-                             [f2 {} (i/with-return c
-                                      #(rt/receive collect 1 %))])]))))]
+                             [f2 {} (rt/withcc c
+                                      rt/return #(collect 1 %)
+                                      rt/error (handler r2))])]))))]
       (looper (r/file-reader fname)))))
 
 (defn ev [s]

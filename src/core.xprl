@@ -24,6 +24,8 @@
 
 (def nth (wrap . nth*))
 
+(def count (wrap . count*))
+
 (def first (wrap . first*))
 (def rest (wrap . rest*))
 
@@ -60,4 +62,6 @@
     (* n (! (- n 1)))))
 
 (defn iterate [xs]
-  (emit :return ~(first xs) iterate ~(rest xs)))
+  (if (= (count xs) 1)
+    (first xs)
+    (emit iterate [~(rest xs)] :return ~(first xs))))

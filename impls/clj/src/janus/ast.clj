@@ -171,6 +171,9 @@
 (defn μ [name params body dyn]
   (->Mu name params body dyn))
 
+(defn μ? [x]
+  (instance? Mu x))
+
 (ps Mu)
 
 (defmethod pp/simple-dispatch Mu [{:keys [params body]}]
@@ -235,9 +238,10 @@
   (bindings [x] [x])
   (destructure [x y] {x y})
 
+  ;; TODO: dot operator [x y . tail]
   clojure.lang.PersistentVector
   (binding? [x] (every? binding? x))
-  (bindings [x] (into [] (comp (map bindings) cat) x))
+  (bindings [x] (into [] (comp (map bindings) cat ) x))
   (destructure [x y]
     (if (or (not (sequential? y)) (not= (count x) (count y)))
       nil
