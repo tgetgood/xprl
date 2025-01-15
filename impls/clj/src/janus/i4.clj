@@ -3,13 +3,14 @@
   (:require
    [clojure.string :as str]
    [janus.ast :as ast]
+   [janus.emission :as emit]
    [janus.runtime :as rt]
    [taoensso.telemere :as t]))
 
 (defn unbound-error [s]
   (t/log! :error {:data (assoc (select-keys (meta s) [:string :file :line :col])
                                :symbol s)
-                  :msg "Unbound symbol! Stopping."}))
+                  :msg "Unbound symbol!"}))
 
 (defn event! [type x dyn ccs]
   ;; FIXME: This should log different fields based on type and x.
@@ -22,11 +23,14 @@
 
 ;;;;; Helpers to simplify CPS transform
 
+(defn continue [ccs [k msg]]
+  (push! (task (get ccs k) msg)))
+
 (defn return {:style/indent 1} [ccs x]
-  (rt/continue ccs [rt/return x]))
+  (continue ccs [rt/return x]))
 
 (defn with-return {:style/indent 1} [c next]
-  (rt/withcc c rt/return next))
+  (emit/withcc c rt/return next))
 
 ;;;;; Indirection to separate telemetry from logic
 
