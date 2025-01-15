@@ -68,23 +68,22 @@
              rt/error #(t/event! :ktest {:data % :msg "bbom"})}]
     (letfn [(comparator [r1 r2]
               (let [[f1 f2] (map :form [r1 r2])]
-                {rt/return
-                 (fn [[v1 v2]]
-                   (if (= v1 v2)
-                     (do
-                       (t/log! {:id   :ktest :level :info
-                                :data {:expected [f1 f2]}}
-                               "Success!")
-                       (looper r2))
-                     (do
-                       (t/log! {:id   :ktest :level :error
-                                :data {:expected [f1 f2]
-                                       :results  [v1 v2]}}
-                               "Failure!")
-                       (tset!
-                        (with-meta f1
-                          (merge (meta f1)
-                                 {:value v1 :expected v2}))))))}))
+                (fn [[v1 v2]]
+                  (if (= v1 v2)
+                    (do
+                      (t/log! {:id   :ktest :level :info
+                               :data {:expected [f1 f2]}}
+                              "Success!")
+                      (looper r2))
+                    (do
+                      (t/log! {:id   :ktest :level :error
+                               :data {:expected [f1 f2]
+                                      :results  [v1 v2]}}
+                              "Failure!")
+                      (tset!
+                       (with-meta f1
+                         (merge (meta f1)
+                                {:value v1 :expected v2}))))))))
             (handler [init-form]
               (fn [{:keys [form message]}]
                 (t/log! {:id   :ktest :level :error
