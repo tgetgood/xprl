@@ -1,10 +1,11 @@
 (ns janus.builtins
-  (:require [janus.ast :as ast]
-            [janus.emission :as emit]
-            [janus.i4 :as i]
-            [janus.runtime :as rt]
-            [janus.util :refer [fatal-error!]]
-            [taoensso.telemere :as t]))
+  (:require
+   [janus.ast :as ast]
+   [janus.emission :as emit]
+   [janus.interpreter :as i]
+   [janus.runtime :as rt]
+   [janus.util :refer [fatal-error!]]
+   [taoensso.telemere :as t]))
 
 (defn validate-def [c form]
   (when-not (<= 2 (count form) 3)

@@ -1,271 +1,178 @@
 (ns janus.interpreter
-  (:refer-clojure :exclude [eval apply reduce reduced?])
-  (:require [clojure.pprint :as pp]
-            [clojure.walk :as walk]
-            [janus.ast :as ast]
-            [janus.runtime :as rt]
-            [janus.util :refer [fatal-error!]]
-            [taoensso.telemere :as t]))
+  (:refer-clojure :exclude [eval apply reduce])
+  (:require
+   [clojure.string :as str]
+   [janus.ast :as ast]
+   [janus.emission :as emit]
+   [janus.runtime :as rt]
+   [taoensso.telemere :as t]))
 
-(defprotocol Reductive
-  (reduced? [this])
-  (reduce [this env c]))
+(defn unbound-error [s]
+  (t/log! :error {:data (assoc (select-keys (meta s) [:string :file :line :col])
+                               :symbol s)
+                  :msg "Unbound symbol!"}))
 
-(defprotocol Evaluable
-  (eval [this env c]))
+(defn event! [type x dyn ccs]
+  ;; FIXME: This should log different fields based on type and x.
+  ;; Why is the type of x nil when x is a record from AST?
+  #_(t/event! (keyword (.name *ns*) (str/join "." [(name type) (.getName (type x))]))
+            {:level :trace
+             :kind  ::trace
+             :dyn   dyn
+             :form  x}))
 
-(defprotocol Applicable
-   (apply [this args env c]))
+;;;;; Helpers to simplify CPS transform
 
-;; FIXME: just find all calls to this
-(defn ni [] (throw (RuntimeException. "not implemented")))
+(defn continue [ccs [k msg]]
+  (push! (task (get ccs k) msg)))
+
+(defn return {:style/indent 1} [ccs x]
+  (continue ccs [rt/return x]))
 
 (defn with-return {:style/indent 1} [c next]
-  (rt/withcc c rt/return next))
+  (emit/withcc c rt/return next))
 
-(defn event!
-  [id m]
-  (t/event! id {:level :trace :data m :kind ::trace}))
+;;;;; Indirection to separate telemetry from logic
 
-(defn succeed [c v]
-  (rt/emit c rt/return v))
+(defprotocol Reduce
+  (reduce* [x dyn ccs]))
 
-(defn emit-all [ccs tasks]
-  (clojure.core/apply rt/emit ccs tasks))
+(defn reduce{:style/indent 2} [f dyn ccs]
+  (event! :reduce f dyn ccs)
+  (reduce* f dyn ccs))
 
-(defrecord Marker [id])
+(defprotocol Eval
+  (eval* [x dyn ccs]))
 
-(defn marker [] (->Marker (gensym)))
+(defn eval {:style/indent 2} [x dyn ccs]
+  (event! :eval x dyn ccs)
+  (eval* x dyn ccs))
 
-;;;;; Mu
+(defprotocol Apply
+  (apply* [head tail dyn ccs]))
 
-(defn activate-μ [μ env ccs]
-  (event! ::createμ.activation {:env env :ends (count (:syms μ))})
-  ;; REVIEW: Using an atom here makes the compiled μ non reentrant. A thread
-  ;; local binding would be better, but we might still have issues if we nest a
-  ;; μ inside of itself (like in a combinator).
-  (reset! (:ccs μ) (fn [k v]
-                     (event! ::indirect-emission [k v])
-                     (rt/emit ccs k v)))
-  (let [msgs (mapcat (fn [[sym ccs]]
-                       [#(clojure.core/apply reduce %) [(get env sym) {} ccs]])
-                     (:syms μ))]
-    (event! ::createμ.activation.send msgs)
-    (emit-all {} msgs)) )
+(defn apply {:style/indent 3} [head tail dyn ccs]
+  (event! :apply [head tail] dyn ccs)
+  (apply* head tail dyn ccs))
 
+;;;;; Collections
 
-(defn validate-μ [args]
-  (condp = (count args)
-    3 args
-    2 [nil (first args) (second args)]))
+(defn map-entry
+  "Not a great name. Applies `f` to key and val of `e` and returns a new
+  clojure.lang.MapEntry."
+  [f e]
+  (clojure.lang.MapEntry. (f (key e)) (f (val e))))
 
-(defn with-capture [ccs trap]
-  (into {} (map (fn [[k _]]
-                  [k (fn [msg]
-                       (event! ::captured-emission {:ch k :msg msg})
-                       (if (nil? @trap)
-                         (rt/emit ccs k msg)
-                         (@trap k msg)))]))
-        ccs))
+(defn reduce-collect! [coll xs dyn ccs]
+  (rt/push!
+   (map-indexed
+    (fn [i arg]
+      (rt/task (fn [e] (reduce e dyn (with-return ccs #(coll i %)))) arg))
+    xs)))
 
-(defn createμ [_ tail dyn ccs]
-  (let [[name params body] (validate-μ tail)
-        mark               (marker)]
-    (letfn [(next [params']
-              (let [bind  (into {} (map (fn [k] [k mark]))
-                                (ast/bindings params))
-                    env'  (merge dyn bind (when name {name mark}))
-                    trap  (atom nil)
-                    ;; TODO: Each mu needs a unique delay channel and unbound
-                    ;; markers need to be unique to each μ, otherwise when
-                    ;; nested, the inner μ will capture the symbols of the outer
-                    ;; one.
-                    delay (rt/unbound-collector
-                           (fn [delays]
-                             (succeed ccs (ast/μ name params' body trap delays))))]
-                (event! ::createμ.params params')
-                (reduce body env' (rt/withcc (with-capture ccs trap)
-                                    rt/delay (fn [[sym m c]]
-                                               (if (= m mark)
-                                                 (delay [sym c])
-                                                 (rt/emit ccs rt/delay [sym m c])))))))]
-      (reduce params dyn (rt/withcc ccs rt/return next)))))
+;;;;; Interpreter core
 
-
-(extend-protocol Reductive
+(extend-protocol Reduce
   Object
-  (reduced? [_] true)
-  (reduce [o env c]
-    (event! ::reduce.fallthrough {:form o :type (type o)})
-    (succeed c o))
+  (reduce* [x _ ccs] (return ccs x))
 
-  clojure.lang.APersistentVector
-  (reduced? [x] (every? reduced? x))
-  (reduce [this env c]
-    (event! ::reduce.vector {:form this :dyn env})
-    (let [next (fn [v]
-                 (succeed c (with-meta v
-                              (assoc (meta this) ::reduced? (reduced? v)))))
-          collector (rt/collector (with-return c next) (count this))
-          runner (with-meta
-                   (fn [[i x]]
-                     (event! :reduce.vector.runner {:i i :x x})
-                     (reduce x env
-                             (with-return c
-                               (fn [v] (rt/receive collector i v)))))
-                   {:name "reduce vector runner"})
-          tasks (interleave (repeat runner) (map-indexed vector this))]
-      (event! ::reduce.vector.tasks tasks)
-      (emit-all c tasks)))
+  janus.ast.Immediate
+  (reduce* [{:keys [form]} dyn ccs]
+    (eval form dyn ccs))
+
+  janus.ast.Application
+  (reduce* [{:keys [head tail]} dyn ccs]
+    (reduce head dyn (with-return ccs #(apply % tail dyn ccs))))
 
   clojure.lang.AMapEntry
-  (reduced? [x] (and (reduced? (key x)) (reduced? (val x))))
-  (reduce [this env c] (ni))
-
-  clojure.lang.APersistentMap
-  (reduced? [x] (every? reduced? x))
-  (reduce [this env c] (ni))
-
-  clojure.lang.APersistentSet
-  (reduced? [x] (every? reduced? x))
-  (reduce [this env c] (ni))
-
-  janus.ast.Immediate
-  (reduced? [_] false)
-  (reduce [x dyn c]
-    (let [env' (merge (:env x) dyn)]
-      (event! ::reduce.Immediate {:form x :env (:env x) :dyn dyn :merged env'})
-      (eval (:form x) env' c)))
-
-  janus.ast.Application
-  (reduced? [_] false)
-  (reduce [{:keys [head tail env] :as x} dyn c]
-    ;; An application carries bindings with it from the context of its
-    ;; definition, but those can be overridden by bindings in the context in
-    ;; which is finds itself embedded. This is basically classic dynamic scope.
-    (let [env' (merge env dyn)]
-      (event! ::reduce.Application {:head head :tail tail :env env :dyn dyn})
-      (reduce head env' (with-return c #(apply % tail env' c)))))
-
-  janus.ast.Pair
-  (reduced? [x] (and (reduced? (:head x)) (reduced? (:tail x))))
-  (reduce [x env c]
-    (event! ::reduce.Pair {:form x :dyn env})
-    (succeed c x)))
-
-(extend-protocol Evaluable
-  Object
-  (eval [o env c]
-    (event! :eval/fallthrough {:form o :type (type o)})
-    (succeed c o))
+  (reduce* [x dyn ccs]
+    (reduce-collect!
+     (rt/ordered-collector 2
+       (fn [[k v]] (return ccs
+                     (with-meta (clojure.lang.MapEntry. k v) (meta x)))))
+     [(key x) (val x)] dyn ccs))
 
   clojure.lang.APersistentVector
-  (eval [this env c]
-    (event! :eval/Vector {:form this :dyn env})
-    (reduce (mapv #(ast/immediate % env) this) env c))
+  (reduce* [xs dyn ccs]
+    (reduce-collect!
+     (rt/ordered-collector (count xs) #(return ccs (with-meta % (meta xs))))
+     xs dyn ccs))
+
+  clojure.lang.APersistentMap
+  (reduce* [m dyn ccs]
+    (let [c (rt/unordered-collector {} #(return ccs (with-meta % (meta m))))]
+      (rt/push!
+       (map #(rt/task (fn [e] (reduce e dyn (with-return ccs c))) %) m)))))
+
+(extend-protocol Eval
+  Object
+  (eval* [x dyn ccs] (return ccs x))
 
   janus.ast.Symbol
-  (eval [this env c]
-    ;; (event! ::eval.symbol {:form this :dyn env :lex (:env (meta this))})
-    (if-let [v (get env this)]
-      (if (instance? Marker v)
-        (do
-          (event! ::eval.symbol.unbound (select-keys env [this]))
-          (rt/emit c rt/delay [this v c]))
-        (do
-          (event! ::eval.symbol.dynamic (select-keys env [this]))
-          ;; REVIEW: The value of every dynamic binding should be a context
-          ;; switch, so the old dyn env is irrelevant after lookup.
-          (reduce v {} c)))
-      ;; What has two backs and carries its meaning on each?
-      (if-let [v (-> this meta :lex (get this))]
-        (do
-          (event! ::eval.symbol.lexical (-> this meta :lex (select-keys [this])))
-          ;; REVIEW: When we step into a lexically bound form, then our dynamic
-          ;; env is no longer relevant. That's because "lexical env" in this
-          ;; context means things that were defined in the namespace in which
-          ;; the form currently being evaluated is defined. That is: lexically
-          ;; bound values must have been fully defined at a point strictly prior
-          ;; to the point at which evaluation of the current form commenced.
-          ;; Thus nothing in our current dynamic env can possibly apply to
-          ;; anything in our lexical env.
-          ;;
-          ;; TODO: Clean that up and put it in the documentation.
-          (reduce v {} c))
-        (fatal-error! c this "unbound symbol"))))
+  (eval* [s dyn ccs]
+    (if-let [v (get dyn s)] ; s is a μ parameter
+      (reduce v {} ccs)
+      (if-let [v (-> s meta :lex (get s))] ; s is lexical from def
+        (reduce v {} ccs)
+        (unbound-error s))))
 
   janus.ast.Pair
-  (eval [{:keys [head tail] :as this} env c]
-    (event! ::eval.Pair {:form this :dyn env})
-    (reduce (ast/application (ast/immediate head env) tail env) env c))
+  (eval* [{:keys [head tail]} dyn ccs] ; (I (P x y)) => (A (I x) y)
+    (eval head dyn (with-return ccs #(apply % tail dyn ccs))))
 
   janus.ast.Immediate
-  (eval [{:keys [form env] :as this} dyn c]
-    (let [env' (merge env dyn)]
-      (event! ::eval.Immediate {:form form :env env :dyn dyn})
-      (letfn [(next [form]
-                (if (instance? janus.ast.Immediate form)
-                  (throw (RuntimeException. "unreachable??"))
-                  #_(succeed c (ast/immediate this env'))
-                  (eval form env' c)))]
-        (eval form env' (with-return c next)))))
+  (eval* [{:keys [form]} dyn ccs]
+    (eval form dyn (with-return ccs #(eval % dyn ccs))))
 
   janus.ast.Application
-  (eval [form dyn c]
-    (let [env' (merge (:env form) dyn)]
-      (event! ::eval.Application {:form form :env env'})
-      (letfn [(next [form]
-                (if (instance? janus.ast.Application form)
-                  (throw (RuntimeException. "unreachable??"))
-                  #_(succeed c (ast/immediate form env'))
-                  (eval form env' c)))]
-        (reduce form env' (with-return c next))))))
+  (eval* [x dyn ccs] ; (I (A x y)) must be treated in applicative order.
+    (reduce x dyn (with-return ccs #(eval % dyn ccs))))
 
-(extend-protocol Applicable
-  janus.ast.Immediate
-  ;; Immediates cannot be applied; we must backtrack and wait until the
-  ;; immediate can be evaled.
-  (apply [head tail env c]
-    (event! ::apply.Immediate {:form [head tail]})
-    (succeed c (ast/application head tail env)))
+  clojure.lang.APersistentVector ; (I (L x y ...)) => (L (I x) (I y) ...)
+  (eval* [xs dyn ccs]
+    (reduce (into [] (map ast/immediate) xs) dyn ccs))
 
-  janus.ast.Application
-  (apply [head tail env c]
-    (event! ::apply.Application {:data [head tail]})
-    (letfn [(next [head']
-              (if (instance? janus.ast.Application head)
-                (succeed c (ast/application head' tail env))
-                (apply head' tail env c)))]
-      (reduce head env (with-return c next))))
+  clojure.lang.AMapEntry ; (I {k v}) => {(I k) (I v)}
+  (eval* [x dyn ccs]
+    (reduce (map-entry ast/immediate x) dyn ccs))
 
-  janus.ast.Mu
-  (apply [head tail env c]
-    (event! ::apply.Mu {:head head :tail tail :dyn env})
-    (letfn [(next [tail']
-              (let [bind (merge env
-                                (ast/destructure (:params head) tail')
-                                ;; If a μ is named, then bind its name to it
-                                ;; in the env of the body when applying
-                                ;; arguments. This prevents circular links when
-                                ;; creating the μ in the first place.
-                                (when (:name head)
-                                  {(:name head) head}))]
-                (event! ::apply.Mu.destructuring {:bindings bind})
-                (activate-μ head bind c)))]
-      (reduce tail env (with-return c next))))
+  clojure.lang.APersistentMap ; L can represent any iterable collection in fact
+  (eval* [xs dyn ccs]
+    (reduce (into {} (map ast/immediate) xs) dyn ccs)))
 
-  janus.ast.PrimitiveMacro
-  (apply [head tail env c]
-    (event! ::apply.Macro [head tail (dissoc (meta tail) :lex)])
-    (letfn [(next [v] (succeed c v))]
-      ((:f head) head tail env (with-return c next))))
+(extend-protocol Apply
+  janus.ast.Application       ; (A (A x y) z) proceeds from inside out:
+  (apply* [head tail dyn ccs] ; "Applicative on the left".
+    (reduce head dyn (with-return ccs #(apply % tail dyn ccs))))
+
+  janus.ast.PrimitiveMacro   ; a pMac must invoke ccs or the computation will
+  (apply* [mac tail dyn ccs] ; wither away.
+    ((:f mac) mac tail dyn ccs)) ; We pass the macro itself in for its metadata.
 
   janus.ast.PrimitiveFunction
-  (apply [head tail env c]
-    (event! ::apply.Fn {:form [head tail] :dyn env})
-    (letfn [(next [tail']
-              (event! ::apply.Fn.tail {:form tail'})
-              (succeed c (if (reduced? tail')
-                           (clojure.core/apply (:f head) tail')
-                           (ast/application head tail' env))))]
-      (reduce tail env (with-return c next)))))
+  (apply* [f args dyn ccs]
+    (reduce args dyn
+      (with-return ccs #(return ccs (clojure.core/apply (:f f) %)))))
+
+  janus.ast.Mu
+  (apply* [μ args dyn ccs]
+    (reduce args dyn
+      (with-return ccs
+        (fn [args]
+          (let [bind (ast/destructure (:params μ) args)
+                Δenv (if (= ::anon (:name μ)) bind (assoc bind (:name μ) μ))]
+            (reduce (:body μ) (merge dyn (:dyn μ) Δenv) ccs)))))))
+
+(defn createμ [_ args dyn ccs]
+  (cond
+    ;; TODO: docstrings and metadata?
+    (= 2 (count args)) (createμ _ [::anon (first args) (second args)] dyn ccs)
+    (= 3 (count args)) (let [[name params body] args]
+                         (reduce name dyn
+                           (with-return ccs
+                             (fn [name]
+                               (reduce params dyn
+                                 (with-return ccs
+                                   #(return ccs
+                                      (with-meta (ast/μ name % body dyn)
+                                        (meta args)))))))))))

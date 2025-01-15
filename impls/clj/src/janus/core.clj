@@ -3,7 +3,7 @@
   (:require
    [janus.ast :as ast]
    [janus.builtins :refer [base-env]]
-   [janus.i4 :as i]
+   [janus.interpreter :as i]
    [janus.reader :as r]
    [janus.runtime :as rt]
    [taoensso.telemere :as t]))
@@ -151,13 +151,13 @@
 
 (defn clear-filters! []
   (t/set-min-level! :warn)
-  (t/set-min-level! :janus.i4/trace :info)
+  (t/set-min-level! :janus.interpreter/trace :info)
   (t/set-min-level! :event #{"janus.runtime"} :info)
   (t/set-id-filter! "*")
   (t/set-ns-filter! "*"))
 
 (defn ev-filters! []
-  (t/set-min-level! :janus.i4/trace :trace))
+  (t/set-min-level! :janus.interpreter/trace :trace))
 
 (defn rt-filters! []
   (t/set-min-level! :event #{"janus.runtime"} :trace))
