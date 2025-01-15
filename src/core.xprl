@@ -24,6 +24,9 @@
 
 (def nth (wrap . nth*))
 
+(def first (wrap . first*))
+(def rest (wrap . rest*))
+
 (def + (wrap . +*))
 (def - (wrap . -*))
 (def * (wrap . **))
@@ -51,31 +54,10 @@
 
 (def filter (fn [p] (fn [x] (when (p x) x))))
 
-(def Y
-  (fn [f]
-     ((fn [x] (f (x x))) (fn [x] (f (x x))))))
-
-(def fact1
-  (fn [recur]
-    (fn [n]
-      (if (= n 0)
-        1
-        (* n (recur (- n 1)))))))
-
-(def fact (Y fact1))
-
 (defn ! [n]
   (if (= n 0)
     1
     (* n (! (- n 1)))))
 
-#_(def iterator
-  (fn [recur]
-    (fn [xs]
-      ;; Something like this, but we have no recursion yet...
-      ;; FIXME: This is trying to send messages (emit) during intial reduction
-      ;; before the above fns have been passed values.
-      (withcc {:recur recur}
-              (emit :return (first xs) :recur (rest xs))))))
-
-;; (def iterate (Y iterator))
+(defn iterate [xs]
+  (emit :return ~(first xs) iterate ~(rest xs)))
