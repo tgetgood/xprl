@@ -149,12 +149,6 @@
       (when (not= f :eof)
         (recur (re env))))))
 
-(defn Y [] (ev "(fn [f]
-     ((fn [x] (f (x x))) (fn [x] (f (x x)))))"))
-
-(defn t []
-  (ev "((fn [x] (+ x 1)) 1)"))
-
 (defn clear-filters! []
   (t/set-min-level! :warn)
   (t/set-min-level! :janus.i4/trace :info)

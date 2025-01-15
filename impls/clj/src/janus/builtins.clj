@@ -1,5 +1,6 @@
 (ns janus.builtins
   (:require [janus.ast :as ast]
+            [janus.emission :as emit]
             [janus.i4 :as i]
             [janus.runtime :as rt]
             [janus.util :refer [fatal-error!]]
@@ -29,32 +30,30 @@
                             (merge defmeta
                                    (select-keys [:file :line :col] (meta form))))]
                   ;; (i/event! ::def.top {:name name' :body body'})
-                  (rt/emit c [[(ast/keyword "return") name']
+                  (emit/emit c [[(ast/keyword "return") name']
                               [(ast/keyword "env") {name' def}]]))))))))))
 
 (defn emit [mac kvs env c]
   (let [coll (rt/ordered-collector (count kvs)
-               #(rt/emit c (partition 2 %)))]
+               #(emit/emit c (partition 2 %)))]
     (rt/push!
      (into []
            (comp
             (map-indexed
              (fn [i x]
-               [(if (even? i)
-                  ;; eval keys
-                  (fn [x] (i/eval x env (i/with-return c #(coll i %))))
-                  ;; reduce values
-                  (fn [x] (i/reduce x env (i/with-return c #(coll i %)))))
-                x]))
-            cat)
+               (rt/task
+                (fn [x]
+                  ((if (even? i) i/eval i/reduce)
+                   x env (i/with-return c #(coll i %))))
+                x))))
            kvs))))
 
 (defn capture [_ [form] dyn ccs]
   (let [ccs' (into {rt/unbound (fn [{:keys [ch-name msg]}]
-                                 (rt/emit ccs rt/return [ch-name msg]))}
+                                 (emit/emit ccs rt/return [ch-name msg]))}
                    (map (fn [[k v]]
                           [k (fn [v]
-                               (rt/emit ccs rt/return [k v]))]))
+                               (emit/emit ccs rt/return [k v]))]))
                    (dissoc ccs rt/unbound))]
     (i/eval form dyn ccs')))
 
@@ -125,7 +124,9 @@
    "<*" <
    "=*" =
 
-   "nth*" nth* ; Base 1 indexing
+   "first*" first
+   "rest*"  rest
+   "nth*"   nth* ; Base 1 indexing
    })
 
 (defn tagged [f]
