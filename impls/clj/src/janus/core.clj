@@ -46,10 +46,10 @@
                 (form-log! :debug form "eval form")
                 (if (= :eof form)
                   @env
-                  (eval form (i/with-return conts
-                               (fn [res]
-                                 (println res)
-                                 (looper reader)))))))]
+                  (eval form (rt/withcc conts
+                               rt/return (fn [res]
+                                           (println res)
+                                           (looper reader)))))))]
       (looper (r/file-reader fname)))))
 
 (def ^:dynamic *t nil)

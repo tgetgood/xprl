@@ -1,8 +1,8 @@
 (ns janus.builtins
   (:require
    [janus.ast :as ast]
-   [janus.emission :as emit]
    [janus.interpreter :as i]
+   [janus.interpreter-impl :refer [createμ with-return]]
    [janus.runtime :as rt]
    [janus.util :refer [fatal-error!]]
    [taoensso.telemere :as t]))
@@ -21,22 +21,22 @@
 (defn xprl-def [form args env c]
   (let [[name body defmeta] (validate-def c args)]
     (i/reduce name env
-      (i/with-return c
+      (with-return c
         (fn [name']
           (assert (instance? janus.ast.Symbol name') "Only Symbols can be names.")
           (i/eval body env
-            (i/with-return c
+            (with-return c
               (fn [body']
                 (let [def (with-meta body'
                             (merge defmeta
                                    (select-keys [:file :line :col] (meta form))))]
                   ;; (i/event! ::def.top {:name name' :body body'})
-                  (emit/emit c [[(ast/keyword "return") name']
+                  (rt/emit c [[(ast/keyword "return") name']
                               [(ast/keyword "env") {name' def}]]))))))))))
 
 (defn emit [mac kvs env c]
   (let [coll (rt/ordered-collector (count kvs)
-               #(emit/emit c (partition 2 %)))]
+               #(rt/emit c (partition 2 %)))]
     (rt/push!
      (into []
            (comp
@@ -45,16 +45,16 @@
                (rt/task
                 (fn [x]
                   ((if (even? i) i/eval i/reduce)
-                   x env (i/with-return c #(coll i %))))
+                   x env (with-return c #(coll i %))))
                 x))))
            kvs))))
 
 (defn capture [_ [form] dyn ccs]
   (let [ccs' (into {rt/unbound (fn [{:keys [ch-name msg]}]
-                                 (emit/emit ccs rt/return [ch-name msg]))}
+                                 (rt/emit ccs rt/return [ch-name msg]))}
                    (map (fn [[k v]]
                           [k (fn [v]
-                               (emit/emit ccs rt/return [k v]))]))
+                               (rt/emit ccs rt/return [k v]))]))
                    (dissoc ccs rt/unbound))]
     (i/eval form dyn ccs')))
 
@@ -64,7 +64,7 @@
             (case p'
               true (i/reduce t dyn ccs)
               false (i/reduce f dyn ccs)))]
-    (i/reduce p dyn (i/with-return ccs next))))
+    (i/reduce p dyn (with-return ccs next))))
 
 (def macros
   {
@@ -74,7 +74,7 @@
 
    ;; The grail of bootstrapping would be to implement μ in xprl, but I don't
    ;; have the tools to do that yet.
-   "μ"   i/createμ
+   "μ"   createμ
 
    ;; "withcc" withcc
    "emit"   emit
