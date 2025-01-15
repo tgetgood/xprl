@@ -1,34 +1,5 @@
 * Todo list
   The big outstanding items. Most of it is tooling.
-** Better handling of dynamic environments
-   Currently we manage the dynamic environment (arguments passed to μs) using
-   metadata on the AST. This requires walking the AST when we load code referred
-   to by a symbol. Unsurprisingly this is slow. But it's not *that* slow. I can
-   live with it for the moment.
-
-   The plan is to switch to a compiler once the language is more fleshed out
-   anyway.
-** Bootstrapped repl
-   Julia's repl is pretty slick in the terminal, but the emacs integration is
-   primitive, slow, and not very fun to use (term-mode sucks up all key presses
-   which makes it basically impossible to bind new shortcuts).
-
-   So we need something else. nrepl/cidre is the standard by which I judge
-   interactivity.
-
-   So why not just use nrepl? Well I still need to run julia code a lot, so I'm
-   not sure if that will work, but it's worth looking into.
-** statefuls
-   Along with the whole transduction setup
-** bit blobs
-   for interop and bootstrapping
-** executors
-   schedulers and work stealing
-** Namespaces
-** Layered architecture
-   Take the basic idea direct from vulkan. Rewrite the interpreter so that all
-   functions can be indirected and move all non-critical logic out of the main
-   implementation.
 * Observations
 ** [2024-11-30 Sat] Atemporality and Messaging
    One assumption that I've been making about message passing is that if a μ
@@ -64,3 +35,83 @@
    So I think I'm going to classify the current behaviour as a bug. Eager
    interpretation is almost always the right thing to do, but not with emit, and
    likely not with other primitive macros.
+** [2025-01-15 Wed 13:31] Term plans long and short
+   The ultimate goal is to bootstrap the language so that it runs directly on
+   hardware without dependencies. This is ludicrously ambitious, but hardly
+   impossible. I've always wanted to write a compiler to verilog... but let's
+   table that.
+
+   Thus the penultimate goal is to produce a frontend on llvm. This will provide
+   machine independence and decent out of the box optimisations. I say decent
+   because I'm not follow what would be considered "good practice" by those who
+   implement C like languages, so I expect many optimisations will be useless,
+   or possibly even destructive.
+
+   But the antepenultimate goal is to prove that all of the language constructs
+   work as I expect using the interpreter written in clojure. I need a lot more
+   xprl code, a lot more features (list to come later) and lots more — and more
+   sophisticated — tests.
+
+   A lot of my problems last month involved mingling these three steps. I was
+   writing an interpreter that sometimes tried to compile or optimise. That made
+   the interpreter hard to understand, which made getting all of the features
+   right very difficult.
+
+   A few days ago I started writing an absolutely minimal interpreter. It's 100
+   lines of code and is feature complete (as an interpreter, the language is far
+   from complete). This is much better base to expand upon.
+
+   Now for the features we're still missing:
+
+   - statefuls
+     I've never been happy that these are necessary, but they are. Well I can't
+     prove that, but I can't prove the opposite either, and my gut says they're
+     required.
+   - transduction
+     I need to have a fairly complete and well tested library of transducers
+     before I dive into work stealing, because I'm not sure how to go about
+     ensuring streams don't get reordered when work is stolen.
+   - namespaces
+     More generally I need the dev time static references of xyzzy. That was the
+     whole idea here to begin with and then it grew to be so much more.
+   - work stealing
+     There are lots of possibilities, some complicated, some slow, none
+     obviously what I want.
+   - bits
+     I obviously can't write machine code if I can't work natively with binary
+     blobs, or at least arrays of words. But really I'll need to be able to
+     define C style structs and arrays and build the persistent data
+     structures I want from them.
+     Indeed they should be C compatible since FFI is a big part of the longer
+     term plan.
+
+   Questions:
+
+   Do I want to bootstrap the clojure interpreter?
+
+   That would minimise the work of porting, but it's a big endeavour. There's a
+   good chance I'll start to do it just because it's interesting and then keep
+   at it whether it makes sense or not. How much sense does any of this make,
+   anyway?
+
+   Do I want a compiled language?
+
+   I like the idea of something like hotspot that interprets immediately and
+   compiles behind the scenes when it finds bits that are called a lot. We could
+   go much farther than java I think since we know so much more about the
+   runtime dynamics (or is it just that the dynamics are simpler?).
+
+   What are the most important debugging tools to work on?
+
+   The prematurely optimising compiler that is no more had one advantage: When
+   you viewed a μ you saw its actual innards, as opposed to the source code from
+   which it is derived, but none of the local bindings. I should try and get
+   that back, if only when tracing evals.
+
+   inspection as per the julia impl would also be useful.
+
+   What about a full blown debugger? Step up and down through the interpreter
+   stages and follow messages if you wish. I'm not sure how that would work, but
+   it's something I might well need.
+
+   A better test suite. That one's a no brainer.
