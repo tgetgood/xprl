@@ -1,6 +1,7 @@
 (ns janus.interpreter
   (:refer-clojure :exclude [eval apply reduce])
   (:require
+   [clojure.string :as str]
    [janus.ast :as ast]
    [janus.runtime :as rt]
    [taoensso.telemere :as t]))
@@ -13,11 +14,11 @@
 (defn event! [type x dyn ccs]
   ;; FIXME: This should log different fields based on type and x.
   ;; Why is the type of x nil when x is a record from AST?
-  #_(t/event! (keyword (.name *ns*) (str/join "." [(name type) (.getName (type x))]))
+  (t/event! (keyword (.name *ns*) (str/join "." (name type)))
             {:level :trace
              :kind  ::trace
-             :dyn   dyn
-             :form  x}))
+             :data  {:dyn  dyn
+                     :form x}}))
 
 ;;;;; Helpers to simplify CPS transform
 
