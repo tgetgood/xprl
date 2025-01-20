@@ -14,7 +14,7 @@
 (defn event! [type x dyn ccs]
   ;; FIXME: This should log different fields based on type and x.
   ;; Why is the type of x nil when x is a record from AST?
-  (t/event! (keyword (.name *ns*) (str/join "." (name type)))
+  (t/event! ::???
             {:level :trace
              :kind  ::trace
              :data  {:dyn  dyn
@@ -36,7 +36,7 @@
 (defprotocol Reduce
   (reduce* [x dyn ccs]))
 
-(defn reduce{:style/indent 2} [f dyn ccs]
+(defn reduce {:style/indent 2} [f dyn ccs]
   (event! :reduce f dyn ccs)
   (reduce* f dyn ccs))
 
@@ -62,12 +62,13 @@
   [f e]
   (clojure.lang.MapEntry. (f (key e)) (f (val e))))
 
-(defn reduce-collect! [coll xs dyn ccs]
-  (rt/push!
-   (map-indexed
-    (fn [i arg]
-      (rt/task (fn [e] (reduce e dyn (with-return ccs #(coll i %)))) arg))
-    xs)))
+(defn reduce-coll [acc xs dyn ccs]
+  (if (empty? xs)
+    (return ccs acc)
+    (reduce (first xs) dyn
+      (with-return ccs
+        (fn [x]
+          (reduce-coll (conj acc x) (rest xs) dyn ccs))))))
 
 ;;;;; Interpreter core
 
@@ -85,21 +86,16 @@
 
   clojure.lang.AMapEntry
   (reduce* [x dyn ccs]
-    (reduce-collect!
-     (rt/ordered-collector 2
-       (fn [[k v]] (return ccs
-                     (with-meta (clojure.lang.MapEntry. k v) (meta x)))))
-     [(key x) (val x)] dyn ccs))
+    (reduce-coll [] [(key x) (val x)] dyn ccs))
 
   clojure.lang.APersistentVector
   (reduce* [xs dyn ccs]
-    (reduce-collect!
-     (rt/ordered-collector (count xs) #(return ccs (with-meta % (meta xs))))
-     xs dyn ccs))
+    (reduce-coll [] xs dyn ccs))
 
   clojure.lang.APersistentMap
   (reduce* [m dyn ccs]
-    (let [c (rt/unordered-collector {} #(return ccs (with-meta % (meta m))))]
+    (reduce-coll {} m dyn ccs)
+    #_(let [c (rt/unordered-collector {} #(return ccs (with-meta % (meta m))))]
       (rt/push!
        (map #(rt/task (fn [e] (reduce e dyn (with-return ccs c))) %) m)))))
 
