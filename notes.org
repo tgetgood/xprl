@@ -1,5 +1,39 @@
 * Todo list
-  The big outstanding items. Most of it is tooling.
+  Thoughts about what's still missing from the language. Not sorted by priority.
+  Not always actionable.
+** Overloading of functions
+   Right now a function has a fixed signature. Well if you're willing to call
+   the destructuring bind a signature.
+
+   At the very least we need to be able to define fns with multiple arities, but
+   in general I'd like to be able to define fns with different destructuring
+   patterns and use a matching algorithm to pick the correct one. You'll need to
+   check them at dev time to ensure there's no ambiguity.
+
+   The next logical step would be to add types and end up with something like
+   julia's clos inspired polymorphism, but with more topology to it because the
+   types can be embedded in different structures. A vector of vectors and a
+   vector of maps are different in a way akin to homotopy types, but I don't
+   have a good formalism yet.
+
+   It's been my plan to implement polymorphism as a macro, but I'm a long way
+   from being able to make that workable.
+** Pull based channels
+   Right now channels are just named continuations. They really aren't channels
+   at all. At some point they will need to become proper channels which strongly
+   decouple the sender from the receiver. How else is a controller to replace
+   the channels going into/out of a subcomputation?
+
+   Beyond that, I'm starting to think that the executor is backwards. It should
+   be an eager operation like a print or an into which "pulls" computation out
+   of a channel. By default nothing happens until something downstream demands
+   an answer. This in opposition to the current behaviour where every defined
+   task simply runs as soon as it has enough information to do so.
+
+   Of course I have no idea how that is going to play along with multiple and
+   optional emission. It's entirely possible that a poorly written logger could
+   force everything to be eager. But seems like a possibility in any language.
+   What safeguards can we have?
 * Observations
 ** [2024-11-30 Sat] Atemporality and Messaging
    One assumption that I've been making about message passing is that if a μ

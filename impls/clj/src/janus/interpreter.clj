@@ -171,3 +171,7 @@
                                    #(return ccs
                                       (with-meta (ast/μ name % body dyn)
                                         (meta args)))))))))))
+
+(defn createσ [_ args dyn ccs]
+  (let [[init flush-fn next-fn] args]
+    ))

@@ -148,6 +148,7 @@
       (when (not= f :eof)
         (recur (re env))))))
 
+
 (defn clear-filters! []
   (t/set-min-level! :warn)
   (t/set-min-level! :janus.interpreter/trace :info)

@@ -22,6 +22,16 @@
         (μ ~name args
            ~((μ ~params ~~body) . ~~args)))))
 
+(def if
+  (μ [pred t f]
+     ~~(select ~~pred ~t ~f)))
+
+(def when
+  (μ [pred then]
+     ~(if ~pred ~then (emit))))
+
+;;;;; Wrappers around non-evaluating primitives
+
 (def nth (wrap . nth*))
 
 (def count (wrap . count*))
@@ -38,30 +48,38 @@
 (def < (wrap . <*))
 (def = (wrap . =*))
 
-;; Below, `select` is non-branching like the ?: or ifelse ternary operators,
-;; except that it doesn't evaluate any of its arguments and the first must be a
-;; literal boolean. The name is taken from the llvm instruction.
+(def mod (wrap . mod*))
 
-(def if
-  (μ [pred t f]
-     ~~(select ~~pred ~t ~f)))
+;;;;; The start of a language library.
 
-(def when
-  (μ [pred then]
-     ~(if ~pred ~then (emit))))
+(defn even? [x]
+  (= 0 (mod x 2)))
 
-(def inc (fn [x] (+ x 1)))
+(defn odd? [x]
+  (= 1 (mod x 2)))
 
-(def map (fn [f] (fn [x] (f x))))
+(defn inc [x]
+  (+ x 1))
 
-(def filter (fn [p] (fn [x] (when (p x) x))))
+(defn map [f x]
+  (f x))
+
+(defn filter [p x]
+  (when (p x) x))
 
 (defn ! [n]
   (if (= n 0)
     1
     (* n (! (- n 1)))))
 
-(defn iterate [xs]
+(defn iterate* xs
   (if (= (count xs) 1)
     (first xs)
-    (emit iterate [~(rest xs)] :return ~(first xs))))
+    (emit iterate* ~(rest xs) :return ~(first xs))))
+
+(defn iterate [xs]
+  (iterate* . xs))
+
+(defn range [from to]
+  (when (< from to)
+    (emit range [~(inc from) to] :return ~from)))

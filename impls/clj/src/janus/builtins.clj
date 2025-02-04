@@ -164,6 +164,7 @@
    ">*" >
    "<*" <
    "=*" =
+   "mod*" mod
 
    "count*" count
    "first*" first
