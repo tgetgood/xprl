@@ -25,21 +25,24 @@
     {:name "Unbound channel handler"}))
 
 ;;;;; Tasks
+;; Tasks are just functions of no args with possible metadata.
+;; REVIEW: Why not just use functions?
+;; Because of barrier tasks. But do we really need those?
 
 (defprotocol ITask
   (run! [this]))
 
-(defrecord Task [f arg meta]
+(defrecord Task [f meta]
     ITask
     (run! [_]
-      (event! ::run.task {:fn f :meta meta :arg arg})
-      (f arg)))
+      (event! ::run.task {:fn f :meta meta})
+      (f)))
 
 (defn task
-  ([f arg]
-   (task f arg {}))
-  ([f arg m]
-   (->Task f arg m)))
+  ([f]
+   (task f {}))
+  ([f m]
+   (->Task f m)))
 
 (defrecord BarrierTask [f meta]
   ITask
@@ -178,3 +181,72 @@
    (merge c (sanitise-keys m)))
   ([c k v & kvs]
    (withcc c (apply hash-map k v kvs))))
+
+;;;;; Channels
+;;
+;; Channels are part of the runtime, but not part of the language itself. I'm
+;; conflicted about making first class access to channels a part of the
+;; language. Manual putting is certainly a bad idea, but the ability to "reify"
+;; a channel as a lazy seq that parks when trying to read past the end could be
+;; useful.
+;;
+;; These are going to be a huge amount of overhead for returning a value. I need
+;; a datastructure that can use a single storage cell in the overwhelming
+;; majority of cases and only upgrade to a queue when necessary.
+;;
+;;;;;
+
+(defprotocol IChannel
+  (<! [ch cont])
+  (>! [ch val cont]))
+
+(defrecord GenericChannel [puts takes]
+  IChannel
+  (>! [_ val cont]
+    (if-let [match (.poll takes)]
+      (push! [(task cont) (task (fn [] ((:cont match) val)))])
+      (.add puts {:val val :cont cont})))
+
+  ;; taking a value from a channel comes with a continuation to be invoked with
+  ;; the value when it is received.
+  (<! [_ cont]
+    (if-let [match (.poll puts)]
+      (push! [(task (fn [] (cont (:val match)))) (task (:cont match))])
+      (.add takes {:cont cont}))))
+
+(defn channel []
+  (->GenericChannel (ConcurrentLinkedDeque.) (ConcurrentLinkedDeque.)))
+
+;; FIXME: There are so many ways to get this wrong. Just stick to the slow and
+;; correct version until performance is actually a problem.
+
+#_(defrecord ReturnChannel [state]
+  ITask
+  (>! [ch val cont]
+  (let [chv @ch]
+    (if (write-ready? chv)
+      (if (compare-and-set! ch chv nil)
+        (push! [(task post) (task (fn [] (-> chv :take :cont val)))])
+        (recur ch val cont))
+      (let [chv' {:put {:val val :cont cont}}]
+        (if (compare-and-set! ch chv chv')
+          nil ; parked.
+          ;; concurrent mutation should not happen, but I want everything to be
+          ;; threadsafe at this point in case I change my mind.
+          (recur ch val cont))))))
+
+(<! [ch cont]
+  (let [chv @ch]
+    (if (read-ready? chv)
+      (if (compare-and-set! ch chv nil)
+        (push! [(task (fn [] (cont (-> chv :put :val))))
+                (task (-> chv :put :cont))])
+        (recur ch cont))
+      (if (compare-and-set! ch chv {}))))
+  ))
+
+#_(defn retch []
+  (->ReturnChannel (atom nil)))
+
+;; putting a value on a channel comes with a continuation of no parameters to be
+;; scheduled when the value is received
