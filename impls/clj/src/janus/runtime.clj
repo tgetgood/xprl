@@ -200,6 +200,14 @@
   (<! [ch cont])
   (>! [ch val cont]))
 
+;; FIXME: If a take and a put happen concurrently, there's a chance they'll both
+;; be enqueued and execution will stall.
+;;
+;; I can't think of how to solve this without locks. We should only need to lock
+;; if the poll fails. Unfortunately that's by far the more common case.
+;;
+;; I hope to be able to compile these away, but if wishes were fishes...
+
 (defrecord GenericChannel [puts takes]
   IChannel
   (>! [_ val cont]
@@ -216,6 +224,12 @@
 
 (defn channel []
   (->GenericChannel (ConcurrentLinkedDeque.) (ConcurrentLinkedDeque.)))
+
+(defrecord SafeChannel [state]
+  IChannel
+  (>! [_ val cont]
+    (let [{:keys [puts takes]} @state]
+      )))
 
 ;; FIXME: There are so many ways to get this wrong. Just stick to the slow and
 ;; correct version until performance is actually a problem.
