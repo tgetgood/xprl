@@ -156,6 +156,9 @@
 (defn nth* [c i]
   (nth c (dec i)))
 
+;; REVIEW: new question: do primitive fns see channels at all. I don't see how
+;; they can. No, they obviously can't. But do they get called for each value in
+;; their input channels? I think they have to be.
 (def fns
   {"+*" +
    "**" *

@@ -22,14 +22,22 @@
 
 ;;;;; Helpers to simplify CPS transform
 
-(defn continue [ccs [k msg]]
-  (rt/push! (rt/task (get ccs k) msg)))
+(defn continue [ccs k msg]
+  (rt/>! (get ccs k) msg))
 
 (defn return {:style/indent 1} [ccs x]
-  (continue ccs [rt/return x]))
+  (continue ccs rt/return x))
 
-(defn with-return {:style/indent 1} [c next]
-  (rt/withcc c rt/return next))
+(defn with-return
+  "Returns a new cable replacing the return channel with a new channel which
+  continues via next.
+  N.B.: This assumes that only one return value will come over the channel."
+  ;; REVIEW: I think that's a fair assumption, but keep it in mind.
+  {:style/indent 1}
+  [c next ]
+  (let [ret (rt/chan)]
+    (rt/<! ret next) ; continue with next when we have a value
+    (rt/withcc c rt/return ret))) ; divert return values to ret
 
 ;;;;; Indirection to separate telemetry from logic
 
@@ -94,10 +102,7 @@
 
   clojure.lang.APersistentMap
   (reduce* [m dyn ccs]
-    (reduce-coll {} m dyn ccs)
-    #_(let [c (rt/unordered-collector {} #(return ccs (with-meta % (meta m))))]
-      (rt/push!
-       (map #(rt/task (fn [e] (reduce e dyn (with-return ccs c))) %) m)))))
+    (reduce-coll {} m dyn ccs)))
 
 (extend-protocol Eval
   Object
