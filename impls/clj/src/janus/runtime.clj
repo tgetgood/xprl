@@ -197,70 +197,39 @@
 ;;;;;
 
 (defprotocol IChannel
-  (<! [ch cont])
-  (>! [ch val cont]))
+  (close! [ch] "close the channel")
+  (on-close! [ch cb] "react to a closing channel")
+  (<! [ch cont] "take a value from a channel")
+  (>! [ch val cont] "put a value on the channel"))
 
-;; FIXME: If a take and a put happen concurrently, there's a chance they'll both
-;; be enqueued and execution will stall.
+;; Channels can have multiple writers, but only a single reader. This channel
+;; type assumes that that single reader parks if it can't take and never tries
+;; to take multiple values concurrently with itself.
 ;;
-;; I can't think of how to solve this without locks. We should only need to lock
-;; if the poll fails. Unfortunately that's by far the more common case.
-;;
-;; I hope to be able to compile these away, but if wishes were fishes...
-
-(defrecord GenericChannel [puts takes]
+;; I don't think it's possible for a single process to try and take while
+;; parked. The assertion here is mostly to prevent multiple readers, though it
+;; won't catch them in general. I need to statically check network
+;; constructions.
+(defrecord SingleReaderChannel [^ConcurrentLinkedDeque puts take close]
   IChannel
   (>! [_ val cont]
-    (if-let [match (.poll takes)]
-      (push! [(task cont) (task (fn [] ((:cont match) val)))])
+    (if-let [take-cont @take]
+      (if (compare-and-set! take take-cont nil)
+        (push! [(task (fn [] (take-cont val))) (task cont)])
+        (assert false "multiple read error."))
       (.add puts {:val val :cont cont})))
 
-  ;; taking a value from a channel comes with a continuation to be invoked with
-  ;; the value when it is received.
-  (<! [_ cont]
-    (if-let [match (.poll puts)]
-      (push! [(task (fn [] (cont (:val match)))) (task (:cont match))])
-      (.add takes {:cont cont}))))
+  (<! [_ take-cont]
+    (let [stored @take]
+      (if-let [{:keys [val cont]} (.poll puts)]
+        (push! [(task (fn [] (take-cont val))) (task cont)])
+        (if-not (nil? stored)
+          (assert false "multiple reader error")
+          (if (compare-and-set! take nil take-cont)
+            nil
+            (assert false "concurrent read error.")))))))
 
-(defn channel []
-  (->GenericChannel (ConcurrentLinkedDeque.) (ConcurrentLinkedDeque.)))
-
-(defrecord SafeChannel [state]
-  IChannel
-  (>! [_ val cont]
-    (let [{:keys [puts takes]} @state]
-      )))
-
-;; FIXME: There are so many ways to get this wrong. Just stick to the slow and
-;; correct version until performance is actually a problem.
-
-#_(defrecord ReturnChannel [state]
-  ITask
-  (>! [ch val cont]
-  (let [chv @ch]
-    (if (write-ready? chv)
-      (if (compare-and-set! ch chv nil)
-        (push! [(task post) (task (fn [] (-> chv :take :cont val)))])
-        (recur ch val cont))
-      (let [chv' {:put {:val val :cont cont}}]
-        (if (compare-and-set! ch chv chv')
-          nil ; parked.
-          ;; concurrent mutation should not happen, but I want everything to be
-          ;; threadsafe at this point in case I change my mind.
-          (recur ch val cont))))))
-
-(<! [ch cont]
-  (let [chv @ch]
-    (if (read-ready? chv)
-      (if (compare-and-set! ch chv nil)
-        (push! [(task (fn [] (cont (-> chv :put :val))))
-                (task (-> chv :put :cont))])
-        (recur ch cont))
-      (if (compare-and-set! ch chv {}))))
-  ))
-
-#_(defn retch []
-  (->ReturnChannel (atom nil)))
-
-;; putting a value on a channel comes with a continuation of no parameters to be
-;; scheduled when the value is received
+(defn chan []
+  (->SingleReaderChannel (ConcurrentLinkedDeque.)
+                         (atom nil)
+                         (atom {:closed? false :cbs []})))
