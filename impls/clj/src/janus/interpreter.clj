@@ -14,11 +14,13 @@
 (defn event! [type x dyn ccs]
   ;; FIXME: This should log different fields based on type and x.
   ;; Why is the type of x nil when x is a record from AST?
-  (t/event! ::???
-            {:level :trace
-             :kind  ::trace
-             :data  {:dyn  dyn
-                     :form x}}))
+  (let [tt (type x)]
+    (t/event! ::???
+              {:level :trace
+               :kind  ::trace
+               :data  {:dyn  dyn
+                       :type tt
+                       :form x}})))
 
 ;;;;; Helpers to simplify CPS transform
 
@@ -29,12 +31,10 @@
   (continue ccs rt/return x))
 
 (defn with-return
-  "Returns a new cable replacing the return channel with a new channel which
-  continues via next.
-  N.B.: This assumes that only one return value will come over the channel."
-  ;; REVIEW: I think that's a fair assumption, but keep it in mind.
+  "Creates a new channel, wires `next` onto it as its continuation, and returns
+  a new cable with the new continuation set as the return wire."
   {:style/indent 1}
-  [c next ]
+  [c next]
   (let [ret (rt/chan)]
     (rt/<! ret next) ; continue with next when we have a value
     (rt/withcc c rt/return ret))) ; divert return values to ret
