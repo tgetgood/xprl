@@ -210,9 +210,24 @@
 ;; parked. The assertion here is mostly to prevent multiple readers, though it
 ;; won't catch them in general. I need to statically check network
 ;; constructions.
-(defrecord SingleReaderChannel [^ConcurrentLinkedDeque puts take close]
+(defrecord SingleReaderChannel [^ConcurrentLinkedDeque puts take cbs closed?]
   IChannel
+  (close! [_]
+    (reset! closed? true)
+    (let [tasks (into (if (nil? @take)
+                        []
+                        ;; Pending reads receive nil when a channel closes.
+                        ;; This solves the coordination problem when we can't
+                        ;; listen on multiple channels simultaneously.
+                        [(task (fn [] (@take nil)))])
+                      (map task)
+                      @cbs)]
+      (push! tasks)))
+  (on-close! [_ cb]
+    (assert (not @closed?))
+    (swap! cbs conj cb))
   (>! [_ val cont]
+    (assert (not @closed?))
     (if-let [take-cont @take]
       (if (compare-and-set! take take-cont nil)
         (push! [(task (fn [] (take-cont val))) (task cont)])
@@ -221,15 +236,51 @@
 
   (<! [_ take-cont]
     (let [stored @take]
+      (when-not (nil? stored)
+         (assert false "multiple reader error"))
       (if-let [{:keys [val cont]} (.poll puts)]
         (push! [(task (fn [] (take-cont val))) (task cont)])
-        (if-not (nil? stored)
-          (assert false "multiple reader error")
-          (if (compare-and-set! take nil take-cont)
-            nil
-            (assert false "concurrent read error.")))))))
+        (if (compare-and-set! take nil take-cont)
+          nil
+          (assert false "concurrent read error."))))))
 
 (defn chan []
   (->SingleReaderChannel (ConcurrentLinkedDeque.)
                          (atom nil)
-                         (atom {:closed? false :cbs []})))
+                         (atom [])
+                         (atom false)))
+
+
+(defn into-ch [ch vals]
+  (when (seq vals)
+    (>! ch (first vals) (fn [] (into-ch ch (rest vals))))))
+
+(defn wire
+  ;; REVIEW: I don't think this will work with standard `into` because of the
+  ;; top level continuation behaviour, but I might be wrong. It would be a lot
+  ;; more elegant to use the built in machinery.
+  "Returns a new channels which emits the outputs of the transducer `xf` applied
+  to the values emitted by `ch`."
+  [xf ch]
+  (let [out (chan)]
+    (letfn [(transfer [xf]
+              (<! ch (fn [v]
+                       (if (nil? v)
+                         (close! out)
+                         (do
+                           (into-ch out (xf' [] v))
+                           ;; pass xf' back in case it has internal state.
+                           ;; I don't think it should, but let's be safe.
+                           (transfer xf'))))))]
+      (transfer (xf conj)))
+    out))
+
+(defn split
+  "Returns `n` channels each of which receive all values emitted by `ch`."
+  [ch n]
+  (let [outs (loop [n n o []]
+               (if (< 0 n)
+                 (recur (dec n) (conj o (chan)))
+                 o))]
+    (<! ch (fn [v]
+             (dorun )))))

@@ -85,8 +85,8 @@
   (reduce* [x _ ccs] (return ccs x))
 
   janus.ast.Immediate
-  (reduce* [{:keys [form]} dyn ccs]
-    (eval form dyn ccs))
+  (reduce* [x dyn ccs]
+    (eval (rt/wire (map :form) x) dyn ccs))
 
   janus.ast.Application
   (reduce* [{:keys [head tail]} dyn ccs]
