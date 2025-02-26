@@ -1,9 +1,0 @@
-name = "Xprl"
-uuid = "78325d71-b7ee-4eb7-a944-72b98c47b048"
-authors = ["Thomas Getgood <thomas@macroexpanse.com>"]
-version = "0.1.0"
-
-[deps]
-BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
-DataStructures = "5b4e18e7-32b5-4e80-a6f6-a40e821bb4ab"
-Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"

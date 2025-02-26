@@ -18,46 +18,30 @@
   Instead, let's focus on a set of things that I don't think should be as hard
   as they are in practice, and a set of assumptions that need to be questioned.
 * Implementations
-  The julia implementation is the original prototype, but is no longer being
-  updated. I'll keep it around as a reference for awhile yet.
+  The julia implementation was the original prototype, but is no longer being
+  updated and I've removed it from the head of the repo. It's available in the
+  history if wanted for reference.
 
   The clojure implementation is far from complete, but the act of reimplementing
   it in a different paradigm has forced me to clarify a number of things and the
   clojure implementation is better in most ways.
+
+  The interpreter is really just a way to get my ideas clear before committing
+  fully to the effort of generating assembly. But to be clear, this is intended
+  to be a language that compiles to native code, via an llvm front end initially
+  with the posibility of moving to native later on.
 * Usage
   This is still very early. There's no editor support, basically no tooling. All
   we have is a some data structures, an interpreter, and a repl. To run the repl:
-** Clojure
-   From the clj dir ("impls/clj/"), run
-   #+BEGIN_SRC sh
-     clojure -Arepl -X
-   #+END_SRC
 
-   or call =janus.core/repl= from your editor. Note: nrepl in emacs handles
-   =read= by taking stdin from the minibuffer. This is a little weird, but not
-   unusable.
-** Julia
-   #+BEGIN_SRC julia
-     # First time project setup
-     import Pkg
-     Pkg.activate("./") # Assumes you're running the repl from jl project root.
-     Pkg.instantiate()
+  From the clj dir ("impl/"), run
+  #+BEGIN_SRC sh
+    clojure -Arepl -X
+  #+END_SRC
 
-     # Optional, takes a while but speeds up subsequent runs
-     Pkg.precompile()
-
-     # Run a demo
-     include("src/core.jl")
-   #+END_SRC
-
-   Once the project has been instantiated, you can run the repl from a terminal
-   in the root directory with
-
-   #+BEGIN_SRC sh
-     julia --project=. src/core.jl
-   #+END_SRC
-
-   Have fun. Or try to without rlwrap...
+  or call =janus.core/repl= from your editor. Note: nrepl in emacs handles
+  =read= by taking stdin from the minibuffer. This is a little weird, but not
+  unusable.
 * Docs
   For a primer on the language (in progress) See docs/langauge.org.
 
