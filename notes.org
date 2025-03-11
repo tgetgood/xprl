@@ -77,9 +77,9 @@
 
    Thus the penultimate goal is to produce a frontend on llvm. This will provide
    machine independence and decent out of the box optimisations. I say decent
-   because I'm not follow what would be considered "good practice" by those who
-   implement C like languages, so I expect many optimisations will be useless,
-   or possibly even destructive.
+   because I'm not following what would be considered "good practice" by those
+   who implement C like languages, so I expect many optimisations will be
+   useless, or possibly even destructive.
 
    But the antepenultimate goal is to prove that all of the language constructs
    work as I expect using the interpreter written in clojure. I need a lot more
