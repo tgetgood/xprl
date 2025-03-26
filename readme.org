@@ -40,7 +40,7 @@ An experiment in programming languages.
   =read= by taking stdin from the minibuffer. This is a little weird, but not
   unusable.
 * Docs
-  For a primer on the language (in progress) See docs/langauge.org.
+  For a primer on the language (in progress) See docs/language.org.
 
   For a bit of justification, in spite of the above diatribe, see
   docs/aesthetics.org. That doc is a mosaic of years of my own notes. It's
