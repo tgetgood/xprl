@@ -1,4 +1,4 @@
-#_(ns janus.core
+#_(ns core
   (:require [primitives#abc123 as base]))
 
 ;; This is essentially all `def` is, but bootstrapping an interpreter that has
