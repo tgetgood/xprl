@@ -56,8 +56,8 @@
 
 (def xkeys
   {:return (ast/keyword "return")
-   :error (ast/keyword "error")
-   :env (ast/keyword "env")})
+   :error  (ast/keyword "error")
+   :env    (ast/keyword "env")})
 
 (defn with-return [ccs cont]
   (assoc ccs (xkeys :return) cont))
@@ -302,12 +302,12 @@
 
 (t/set-min-level! ::trace :info)
 
-(def testenv (atom base-env))
+(def env (atom base-env))
 
 (defn ev [s]
-  (eval (:form (r/read (r/string-reader s) @testenv)) (empty-env)
+  (eval (:form (r/read (r/string-reader s) @env)) (empty-env)
     {(xkeys :return)  println
-     (xkeys :env)     #(swap! testenv assoc (first %) (second %))
+     (xkeys :env)     #(swap! env assoc (first %) (second %))
      (xkeys :unbound) (fn [x] (println "Unbound!" x))
      (xkeys :error)   (fn [e] (println {:msg   "top level error"
                                         :error e}))}))
