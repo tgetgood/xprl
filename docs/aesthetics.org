@@ -669,6 +669,9 @@ It's a big project. Be patient. Even I'm not holding my breath.
    message, you need to keep a body of native speakers — or contextual natives —
    around. I don't know how long that can be possible.
 ** Perspective: Linguistic Archaeology
+   "Nothing beside remains. Round the decay of that collosal wreck, boundless
+   and bare, the lone and level sands stretch far away." — Shelly
+
 *** Example of losing context
     Sets, lists, maps (set theoretic functions) are very basic and seem like
     they will never go away. If that's not a universal basis on which to build a
@@ -759,10 +762,13 @@ It's a big project. Be patient. Even I'm not holding my breath.
     to do with one another. In fact one end, or the other (or both?) might not
     assign any meaning at all.
 
-    So Barthes put it too strong: the author isn't dead, they're just another
+    So Barthes put it too harshly: the author isn't dead, they're just another
     reader (of their own message).
 *** Theory
     Data is the medium in which computation can occur.
+
+    But I can't define data and don't want to beg the question, so I'll try to
+    avoid that term.
 
     A message which causes an interpreter to do something is code. That
     something might be a side effect, or it might be a computation.
@@ -781,7 +787,16 @@ It's a big project. Be patient. Even I'm not holding my breath.
     sense in which unicode chars are literal data, but equally a sense in which
     they are code. This is a point for further consideration elsewhere.
 
-    For now, let's just consider literal data as a subset of (digital) data.
+    For now, let's just consider literal data as a subset of all possible
+    messages.
+
+    The subset of possible messages depends on the perceptive capabilities of
+    the interpreter. In the case of a modern digital machine it is the set of
+    all possible binary blobs of finite length. In the case of living organisms
+    it is  much richer. Possibly only on the surface.
+
+    Such a subset can only exist with respect to a given interpreter. The
+    interpreter in question will often be implicit in what follows.
 
     Notably, since literal data passes through an interpreter without causing it
     to do anything in particular, literal data is not code, and so the
@@ -790,7 +805,7 @@ It's a big project. Be patient. Even I'm not holding my breath.
     (Literal) Data is purely syntactic. Semantics are external to it.
 
     The fact of the existence of literal data says something about a shared
-    structure between the data and the interpreter which emits it unchanged.
+    structure between the message and the interpreter which emits it unchanged.
 
     Note that the meaning that the producer of code assigns to it does not
     necessarily have anything to do with the meaning assigned to it by a given
