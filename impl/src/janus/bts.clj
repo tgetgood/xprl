@@ -3,7 +3,7 @@
   (:refer-clojure :exclude [eval apply reduce reduced? delay])
   (:require
    [janus.ast :as ast]
-   [janus.runtime :as rt])))
+   [janus.runtime :as rt]))
 
 (defprotocol Reduce
   (reduce* [x dyn]))
