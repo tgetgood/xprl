@@ -1,0 +1,53 @@
+;; Isn't it crazy that `def` itself isn't built in?
+(emit :env [def ~(μ x ~(emit :env [~(nth* ~x 1) ~~(nth* ~x 2)] :return ~(nth* ~x 1)))]
+      :return def)
+
+;; REVIEW: This initial def cannot accept metadata like docstrings, file line &
+;; col numbers, etc. So we'll need to use it to write a better one eventually.
+
+
+(def defμ
+  (μ x
+     ~(def ~(nth* ~x 1)
+        (μ ~(nth* ~x 1) ~(nth* ~x 2) ~~(nth* ~x 3)))))
+
+(defμ fn* x
+  (μ args
+     ~((μ ~(nth* ~x 1) ~~(nth* ~x 2)) . ~~args)))
+
+(defμ if x
+  ~(select ~~(nth* ~x 1) ~(nth* ~x 2) ~(nth* ~x 3)))
+
+(defμ cond body
+  (if ~(nth* ~body 1) ~(nth* ~body 2) ~(cond ~(rest (rest body)))))
+
+(defμ when x
+  (if ~(nth* ~x 1) ~(nth* ~x 2) (emit)))
+
+;; Primitive elevation
+
+(def wrap
+  ;; "Wraps a μ or primitive that takes only literal values in a function that
+  ;; evals its arguments."
+  (μ f
+     ~(μ args
+         ~(~f . ~~args))))
+
+(def nth (wrap . nth*))
+
+(def count (wrap . count*))
+
+(def first (wrap . first*))
+(def rest (wrap . rest*))
+
+(def + (wrap . +*))
+(def - (wrap . -*))
+(def * (wrap . **))
+(def / (wrap . /*))
+
+(def > (wrap . >*))
+(def < (wrap . <*))
+(def = (wrap . =*))
+
+(def inc
+  (fn* x (+ 1 (nth x 1))))
