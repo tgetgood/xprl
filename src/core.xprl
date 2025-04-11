@@ -61,25 +61,7 @@
 (defn inc [x]
   (+ x 1))
 
-(defn map [f x]
-  (f x))
-
-(defn filter [p x]
-  (when (p x) x))
-
 (defn ! [n]
   (if (= n 0)
     1
     (* n (! (- n 1)))))
-
-(defn iterate* xs
-  (if (= (count xs) 1)
-    (first xs)
-    (emit iterate* ~(rest xs) :return ~(first xs))))
-
-(defn iterate [xs]
-  (iterate* . xs))
-
-(defn range [from to]
-  (when (< from to)
-    (emit range [~(inc from) to] :return ~from)))
