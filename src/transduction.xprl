@@ -1,0 +1,108 @@
+(defn map [f]
+  (ν inner [xs] ccs
+     (seq ; seq means wait for each process to finish before launching the next
+      ;; f is a μ & (first xs) is a value
+      (connect f (first xs) ccs)
+      ;; inner is a ν and (rest xs) is a stream
+      ;; This use of recursion is odd since we're making a new process from the
+      ;; same template as this one which will exist as a subprocess of this one,
+      ;; but it's necessary.
+      ;; We may have a stack overflow problem though because we need, in theory,
+      ;; to keep track of the whole tree of active processes. In reality though
+      ;; this case doesn't require tracking anything.
+      ;;
+      ;; If we think of `seq` as traditional sequential composition of basic
+      ;; blocks, then we've just reinvented the loop.
+      (connect inner (rest xs) ccs))))
+
+(defn map [f]
+  (ν [xs] ccs
+     (when (first xs)
+       (seq
+        (connect f (first xs) ccs)
+        (connect (map f) (rest xs) ccs)))))
+
+(defn comp [f g]
+  (ν [x] ccs
+     (let [inner (chan)]
+       (conc
+        (connect f x (assoc ccs :return inner))
+        (connect g inner ccs)))))
+
+(defn filter [p]
+  (map (fn [x] (when (p x) x))))
+
+(defn accumulate [rf init]
+  (ν [xs] ccs
+     ;; a read on a last-chan always returns the last thing written. They are atomic.
+     ;; Semantically it is just (last (chan)), but is builtin to make life easier.
+     (let [state (last-chan init)]
+       (seq
+        ;; Using a state channel to pass output back to yourself is a common
+        ;; pattern.
+        ;; Here we reduce into the state channel without returning anything.
+        (connect (map (fn [[state x]] (emit :state (rf state x))))
+                 (combine state xs)
+                 (assoc ccs :state state))
+        ;; After the stream `xs` is exhausted, we return the head of the
+        ;; accumulation's state stream.
+        ;; REVIEW: I'd like to just write `(first state)` here, but νs return
+        ;; their `:return` stream, not a value.
+        ;; Importantly, `connect`, `seq`, and `conc` don't return anything. That
+        ;; is to say that they don't emit messages.
+        ;; (emit (:return ccs) (first state)) might be more appropriate if that
+        ;; were not the case.
+        ;; But is that any better than (connect identity ...)?
+        (connect identity (first state) ccs)))))
+
+(defn into [coll]
+  (fn [xs]
+    ;; Use `first` to get back to "fn space" from stream space.
+    (first ((accumulate conj coll) in))))
+
+(defn scan [f init]
+  (ν [xs] ccs
+     (let [state (last-chan init)]
+       (connect (map (fn [[state x]]
+                       (let [next (f state x)]
+                         (emit :state next :return next))))
+                (combine state xs)
+                (assoc ccs :state state)))))
+
+(defn into2 [coll]
+  (fn [xs]
+    (last ((scan conj coll) xs))))
+
+;; The scan method is more elegant in a way, but noisier since it sends twice as
+;; many messages to accomplish the same thing.
+
+
+(defn iterate [x] x)
+;; We no longer need iterate since anything which responds to first/rest can be
+;; used in place of a stream.
+;; We probably will still want more advanced iteration like chunking and work
+;; splitting but that's another day's problem.
+
+(defn partition [n]
+  (ν [xs] ccs
+     ;; This is such a common pattern, I probably want a special construct for
+     ;; it.
+     ;; I used to call that (nonextant) construct σ, but I'm starting to exceed
+     ;; my budget of greek letters.
+     (let [state (last-ch [])]
+       (seq
+        ;; Emit partitioned elements as you go.
+        (connect (map (fn [[state x]]
+                        (let [s' (conj state x)]
+                          (if (= n (count s'))
+                            (emit :return s' :state [])
+                            (emit :state s')))))
+                 (combine state xs)
+                 (assoc ccs :state state))
+        ;; Flush the state, if any, once `xs` is exhausted.
+        (connect (fn [state]
+                   (when-not (empty? state) state))
+                 ;; N.B.: We can't map over `state` since a last-ch will not
+                 ;; close of its own accord.
+                 (first state)
+                 ccs)))))
