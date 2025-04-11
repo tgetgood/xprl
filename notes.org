@@ -25,10 +25,10 @@
    the channels going into/out of a subcomputation?
 
    Beyond that, I'm starting to think that the executor is backwards. It should
-   be an eager operation like a print or an into which "pulls" computation out
-   of a channel. By default nothing happens until something downstream demands
-   an answer. This in opposition to the current behaviour where every defined
-   task simply runs as soon as it has enough information to do so.
+   be an operation like a print or an into which "pulls" computation out of a
+   channel. By default nothing happens until something downstream demands an
+   answer. This in opposition to the current behaviour where every defined task
+   simply runs as soon as it has enough information to do so.
 
    Of course I have no idea how that is going to play along with multiple and
    optional emission. It's entirely possible that a poorly written logger could
@@ -77,9 +77,9 @@
 
    Thus the penultimate goal is to produce a frontend on llvm. This will provide
    machine independence and decent out of the box optimisations. I say decent
-   because I'm not follow what would be considered "good practice" by those who
-   implement C like languages, so I expect many optimisations will be useless,
-   or possibly even destructive.
+   because I'm not following what would be considered "good practice" by those
+   who implement C like languages, so I expect many optimisations will be
+   useless, or possibly even destructive.
 
    But the antepenultimate goal is to prove that all of the language constructs
    work as I expect using the interpreter written in clojure. I need a lot more
@@ -93,7 +93,7 @@
 
    A few days ago I started writing an absolutely minimal interpreter. It's 100
    lines of code and is feature complete (as an interpreter, the language is far
-   from complete). This is much better base to expand upon.
+   from complete). This is a much better base to expand upon.
 
    Now for the features we're still missing:
 
