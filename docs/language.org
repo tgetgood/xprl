@@ -299,7 +299,7 @@ This is largely an aid to my own memory so bear with me.
       If ~X means ~Z then use of X stands for use of Z.
 
       The special case Z=X makes this a noop.
-   6) ~V <=> V whenever V is a literal value
+   6) ~V <=> V whenever V is a literal (scalar) value
    7) ~[X Y ...] <=> [~X ~Y ...]
       Similar rules apply to maps and sets in the obvious fashion.
 
@@ -325,49 +325,6 @@ This is largely an aid to my own memory so bear with me.
    rules to find a "maximally reduced normal form" which can then be translated
    into lower level code. But that's for another day.
 * The Environment
-  When reflecting on code at runtime, as when debugging or working in a repl,
-  you see sexps containing symbols. Each symbol is either statically defined by
-  the lexical context at dev time, in which case it's tagged with a pointer to
-  its referrant. Otherwise it's a local variable, that is a value bound by =let=
-  or passing arguments to an operator, in which case it is tagged with a
-  reference to the binding form. This is intended to make shadowing obvious.
-
-  To the runtime, however, there are no symbols, only values. Values known but
-  not yet operated upon and values as yet unknown.
-
-  That needs a better explanation...
-
-
-* Channels and Streams
-  In this language channels and streams are two sides of the same phenomenon.
-
-  A channel is a black box to which messages are sent. They take the place of
-  addresses in actor languages or objects in OO languages. In a sense they are
-  write only, but they never actually change.
-
-  A stream is a lazy, potentially unbounded, sequential data structure. A stream
-  is a value, but it might not yet be known. Reading the first element off of a
-  stream will return it if it is known right now, or it will park and wait for a
-  value if it isn't. Calling =rest= on a stream returns the stream consisting of
-  all but the first element and never parks.
-
-  The relationship is trivial: every channel has a corresponding stream. Writes
-  to the channel realise the next element of the stream. Thus calling =first= on
-  a stream is equivalent to taking from a channel in CSP, except that it will
-  only park once; further calls will just return the known value.
-
-  Sending a message to a channel where no one is reading the corresponding
-  stream will also park. This provides backpressure on emissions and lets the
-  runtime know that all messages sent from a given μ have been received before
-  cleaning up and moving on.
-
-  A stream is a pseudo value. It can be passed as an argument, but it cannot be
-  emitted, hence cannot be returned.
-
-  A channel/stream pair can be created explicitly within a ν. When passed as a
-  value, the stream part is passed, when passed in a continuation map, the
-  channel part is passed. This is confusing to explain, but syntactically it's
-  quite natural.
 * The Continuation Map and Emission
   One of the bigger differences between this language and standard lisp (or any
   von neumann style language with which I'm familiar) is that there is no single
@@ -379,8 +336,11 @@ This is largely an aid to my own memory so bear with me.
   in batches from tail position. The continuation map is akin to Erlang's
   "address book", but it's aggressively local and indirected. You can't send
   messages to named things, you send messages on named channels (whose name you
-  choose), and something above you in the call graph binds those names to actual
-  channels.
+  choose), and something above you in the call graph binds those names to μs.
+
+  You can also send messages to functions directly, but since functions are
+  pure, this isn't like sending messages to actors, it's more like setting up a
+  subcomputation.
 
   The underlying theory comes from what Koestler called holarchy which is the
   idea that each unit is autonomous from its own point of view: it can set up
@@ -403,7 +363,7 @@ This is largely an aid to my own memory so bear with me.
 
   So if you want to add logging to a program, you can't just stick in a
   statement and have a side effect coming from nowhere. But you can intercept a
-  batch of messages and add one more message to be sent to a logging channel.
+  batch of messages and add one more message to be sent to a logging queue.
 
   So we can still perform side effects, but those side effects must exist as
   pure data (messages) sent to the things that actually bang on the world. Those
@@ -414,8 +374,6 @@ This is largely an aid to my own memory so bear with me.
   language. Rather it is maintained by the runtime (interpreter presently) and
   can be modified by calling primitive macros. I don't want to write code in cps
   if I can avoid it.
-  - comment [2025-03-31 Mon 10:38]
-    the above isn't quite true any longer with νs
 
   When a batch of messages are emitted, they are all delivered (logically
   speaking) concurrently. If there's enough spare compute, they'll be delivered
@@ -442,118 +400,10 @@ This is largely an aid to my own memory so bear with me.
   So if you want a consistent view, put messages in a queue and process them in
   serial. It's not that hard.
 
-  Now it's time to talk about our next special construct: ν.
-* ν
-  The above discussion of emission assumes that a μ is only ever called once.
-  From a point of view internal to the μ, this is true, but from the point of
-  view of the caller, it might not be.
+  Now it's time to talk about our next special construct. The Stateful.
+* Statefuls
+  The name needs some work.
 
-  From a syntactic transform point of view, the application of arguments (a
-  value) to a μ is replaced by the first value emitted by that μ to its return
-  channel.
-
-  A μ can emit multiple values to its return channel, but if invoked in the
-  standard (f x) fashion, all but the first return value will be dropped into
-  the void.
-
-  A program is a network of value->value operators (μs) connected by channels
-  into an arbitrary graph. The next question that you should ask is "how do we
-  manipulate that graph?".
-
-  The answer is a construct that I'm calling ν because it's the next letter
-  after μ. These names are all tentative.
-
-  A ν takes a value (which will generally contain one or more streams) and
-  receives its continuation map bound to the second argument to ν.
-
-  The syntactic interpretation of the application of a value to a ν is that the
-  application is replaced by the *return stream* of the ν. The ν explicitly
-  manages its own return channel, which lets us manipulate the message passing
-  topology of the program directly.
-
-  When an application of a μ to an argument is invoked, it is considered
-  "finished" when all messages emitted have been *received*. Just ensuring that
-  they are queued for delivery is insufficient, since we want to be able to
-  sequence one thing after another. Requiring receipt also has the effect of
-  applying backpressure on a network.
-
-  When an application of a ν to an argument is invoked, it is considered
-  finished when all subcomputations are finished.
-
-  A ν cannot itself emit anything. Instead it defines a computation graph and
-  the μs within that graph emit values.
-
-  Thus the return stream of the ν must be passed in the continuation map to some
-  μ is the ν is to produce anything for its caller.
-
-  In order for a ν to create a computation graph, it needs to be able to invoke
-  multiple things. Remember we don't have a =do= or =progn= expression.
-
-  Thus we have three special operators which only make sense within within the
-  body of a ν, these are =seq=, =conc=, and =connect=.
-
-  =connect=, as the name implies, connects an operator (ν or μ) to input and a
-  continuation map.
-
-  =seq= takes an arbitrary number of connected operators and ensures that each
-  runs after the previous has finished.
-
-  =conc= takes an arbitrary number of connected operators and sets them to run
-  concurrently.
-
-  =conc= and =seq= can be nested. A =seq= is finised when its last operator is
-  finished and a =conc= is finished when all of its operators are finished.
-
-  Examples (finally):
-
-  #+BEGIN_SRC clojure
-    (defn map [f]
-      (ν [xs] ccs
-         (when (first xs)
-           (seq
-            (connect f (first xs) ccs)
-            (connect (map f) (rest xs) ccs)))))
-
-    (defn comp [f g]
-      (ν [xs] ccs
-         (let [inner (chan)]
-           (conc
-            (connect f xs (assoc ccs :return inner))
-            (connect g inner ccs)))))
-  #+END_SRC
-
-  (map f) applies f to the first element of a stream and then applies (map f) to
-  the rest of the stream. map is stateless, so this works just fine. We could
-  also name the inner ν and use recursion but that isn't necessary here.
-
-  The steps in map are =seq= because both processes are connected to the same
-  return channel and we want to ensure that [x1 x2 ...] -> [(f x1) (f x2) ...],
-  i.e. that order is preserved.
-
-  Because it's stateless, =map= is a prime contender for parallelism. However,
-  whether that is useful or not depends not just on the data being processed
-  (compute per element vs overhead of distribution) but also on what happens
-  downstream since if we're folding with a non associative operator we're just
-  going to have to buffer everything while the fold catches up.
-
-  In the case of =comp=, we compose operators concurrently because the inner
-  channel connecting f to go provides a data dependency. g will park on reading
-  (first inner) until f has emitted a value, but if =xs= is a stream and =f=
-  transduces it onto inner, then f and g can operate in parallel at different
-  steps of the computation.
-
-  This approach is automatic pipeline parallelism. It will only actually happen
-  in parallel if a work step is expensive or cpus are sitting idle so f or g are
-  stolen by another executor, this should reduce overhead in practice. But that
-  needs empirical confirmation.
-
-  Since a ν returns its return stream, ((comp (map f) (map g)) xs) is equivalent
-  to ((map g) ((map f) xs)), as it should be.
-
-  This is a little ugly though because if f and g are μs, then (g (f x)) is
-  (first ((comp f g) x)). Really comp should be the same type as g for this to
-  work out. I haven't decided how to do that yet.
-* Stateful computation
   Sometimes a computation needs to retain state across messages. Given that we
   have no mechanism by which to assign or mutate, how do we accomplish it?
 
@@ -566,43 +416,10 @@ This is largely an aid to my own memory so bear with me.
 
   Sadly you can't.
 
-  This, ultimately, was the deciding factor in introducing the ν. Here's how we
-  can create a stateful accumulator using ν:
+  Thus, as far as I can tell — and I may be wrong, I hope I'm wrong, but I don't
+  think I'm wrong — we need a special construct to represent a stateful
+  accumulator.
 
-  #+BEGIN_SRC clojure
-    (defn accumulate [rf init]
-      (ν [xs] ccs
-         ;; a read on a last-chan always returns the last thing written. They are atomic.
-         ;; Semantically it is just (last (chan)), but is builtin to make life easier.
-         (let [state (last-chan init)]
-           (seq
-            ;; Using a state channel to pass output back to yourself is a common
-            ;; pattern.
-            ;; Here we reduce into the state channel without returning anything.
-            (connect (map (fn [[state x]] (emit :state (rf state x))))
-                     (combine state xs)
-                     (assoc ccs :state state))
-            ;; After the stream `xs` is exhausted, we return the head of the
-            ;; accumulation's state stream.
-            (connect identity (first state) ccs)))))
-
-    (defn into [coll]
-      (fn [xs]
-        ;; Use `first` to get back to "fn space" from stream space.
-        (first ((accumulate conj coll) in))))
-
-    ((into []) ((comp (map inc) (filter even?)) [1 2 3 4 5]))
-    ; => [2 4 6]
-  #+END_SRC
-
-  =accumulate= here returns a stream which will only ever realise one value. To
-  make a practical API, we define =into= which has the behavious you would expect.
-
-  The api is still pretty ugly in that we need so many extra parens. Once we
-  have function overloading, that can be fixed easily. Is currying the answer? I
-  don't think so. It will get ugly when we start calling functions with non
-  sequential arguments: (f . {...}) for example. Plus we'd need to curry from
-  right to left and there will likely be ambiguity to deal with.
 * Outline
   Sections to be written.
 ** History, Environment, and Context
@@ -643,10 +460,10 @@ This is largely an aid to my own memory so bear with me.
    durable storage if you don't need it in ram (and you don't, mostly) but don't
    throw it away.
 
-   Some sort of compression will be required eventually. Kafka has a decent
-   model for this. But it's critical that we only squash linear sequences and
-   don't remove branching from the network, otherwise we'll lose recombination
-   down the line.
+   Some sort of compression will required eventually. Kafka has a decent model
+   for this. But it's critical that we only squash linear sequences and don't
+   remove branching from the network, otherwise we'll lose recombination down
+   the line.
 
    There's utility in keeping the history of every keystroke in your editor.
    That utility becomes a liability when publishing. The published history of
@@ -664,7 +481,7 @@ This is largely an aid to my own memory so bear with me.
    Mathematically these nested compressions form a fractal. Fractals make for
    natural compression algorithms, and the readers of your work will only ever
    need to download a tiny fraction of changes you've made to a blank page over
-   your writing career.
+   your writing carreer.
 
    If it isn't obvious, my thinking was skewed by Ted Nelson's work decades ago.
    I don't have direct attributions at hand, but there's more than a little
@@ -751,8 +568,8 @@ This is largely an aid to my own memory so bear with me.
    some future date.
 
    Plus there are a lot of cool things you can do with mesh shaders and ray
-   tracers. They aren't just for graphics any more than pixel shaders are. Maybe
-   a little bit more.
+   tracers. They aren't just for graphics any more than rasterisers are. Maybe a
+   little bit more.
 ** Compiler
 ** FFI / Distributed Execution
    These aren't normally the same thing, but they both boil down to talking to
@@ -817,9 +634,9 @@ This is largely an aid to my own memory so bear with me.
 
     I contend that being more machine friendly at a low level allows you to be
     more human friendly at a high level. This is mostly because the majority of
-    programming language bullshit is about making it easier for the developers
-    of the compiler/editor/whatever, and if their job is already easy, they have
-    fewer excuses.
+    programming language bullshit is about making it easier to for the
+    developers of the compiler/editor/whatever, and if their job is already
+    easy, they have fewer excuses.
 
     So instead I'm focusing on a traditional language with a (mostly)
     traditional AST, interpreter, and compiler. From that AST we can define
@@ -830,7 +647,7 @@ This is largely an aid to my own memory so bear with me.
     code. Or vice versa. Or just stick to whichever you prefer.
 
     Graphical languages always have a layer of warts between the rubber and the
-    road and I don't want that. or is it like studded tires?
+    road and I don't want that.
 *** Fractal Structure
     FBP has an explicitly fractal structure, so if you see a graph of
     components, you can zoom in on any piece and see a nested graph of
@@ -841,7 +658,7 @@ This is largely an aid to my own memory so bear with me.
 
     I'm not sure how to encourage it in the current iteration of this language.
 
-    Any set of functions corresponds to what fbp would call the input ports of a
+    Any set of functions corresponds to fbp would call the input ports of a
     network. The rest of the network is implicit in the call graph, but that's
     easy enough to follow along and layout on demand.
 
@@ -863,13 +680,13 @@ This is largely an aid to my own memory so bear with me.
     The idea that a network is a whole unto itself in the sense that given
     inputs it does its thing and can't be intereferred with, but simultaneously
     subordinate in the sense that it doesn't control — and doesn't know —
-    whence comes its input or whither goes its output, so that its place in the
+    whither comes its input or whence goes its output, so that its place in the
     larger program is ordained from above, is implicit in what I've read of FBP,
     but never stated as such. Just taken for granted.
 
     I think — but don't know — that making this explicit by encouraging every
     subnetwork to believe itself to be the entire system will greatly
-    facilitate the composition of systems.
+    fascilitate the composition of systems.
 
     Somewhat hyperbolically, I want a language whose todomvc is kubernetes.
 
