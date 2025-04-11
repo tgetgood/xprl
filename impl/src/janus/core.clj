@@ -14,7 +14,7 @@
                          :form form)}
                 msg))
 
-(def srcpath "../../src/")
+(def srcpath "../src/")
 (def corexprl (str srcpath "core.xprl"))
 (def testxprl (str srcpath "test.xprl"))
 
@@ -116,8 +116,9 @@
 (defn ev [s]
   (eval (:form (r/read (r/string-reader s) @env))
         {rt/return  #(reset! o %)
+         rt/env     #(swap! env merge %)
          rt/unbound (fn [x] (println "Unbound!" x))
-         rt/error (fn [e] (t/error! e))})
+         rt/error   (fn [e] (t/error! e))})
   ;; @o
   )
 

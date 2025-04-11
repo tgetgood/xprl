@@ -1,17 +1,22 @@
 #_(ns janus.core
   (:require [primitives#abc123 as base]))
 
-;; (emit :env {def ~(μ [name body]
-;;                     (emit :env {name ~body}))})
+(emit :env [def ~(μ [name val] ~(emit :env {~name ~~val} :return ~name))]
+      :return def)
 
 (def wrap
-  "Wraps a μ or primitive that takes only literal values in a function that
-  evals its arguments."
+  ;; "Wraps a μ or primitive that takes only literal values in a function that
+  ;; evals its arguments."
   (μ f
      ~(μ args
          ~(~f . ~~args))))
 
-(def fn
+(def defμ
+  (μ [name params body]
+     ~(def ~name
+        (μ ~name ~params ~~body))))
+
+(defμ fn
   (μ [params body]
      ~(μ args
          ~((μ ~params ~~body) . ~~args))))
@@ -26,9 +31,8 @@
   (μ [pred t f]
      ~~(select ~~pred ~t ~f)))
 
-(def when
-  (μ [pred then]
-     ~(if ~pred ~then (emit))))
+(defμ when [pred then]
+  (if ~pred ~then (emit)))
 
 ;;;;; Wrappers around non-evaluating primitives
 

@@ -74,7 +74,7 @@
 
 (defn emit [mac kvs env c]
   (let [coll (rt/ordered-collector (count kvs)
-               #(rt/push! (prepare-emissions (partition 2 %) env c)))]
+               #(rt/push! (prepare-emissions (reverse (partition 2 %)) env c)))]
     (rt/push!
      (into []
            (comp
