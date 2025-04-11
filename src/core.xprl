@@ -16,10 +16,14 @@
      ~(def ~name
         (μ ~name ~params ~~body))))
 
-(defμ fn
+(def fn
   (μ [params body]
      ~(μ args
          ~((μ ~params ~~body) . ~~args))))
+
+(defμ broken-fn [params body]
+  (μ args
+     ~((μ ~params ~~body) . ~~args)))
 
 (def defn
   (μ [name params body]
