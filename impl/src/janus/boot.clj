@@ -21,7 +21,32 @@
             {:level :trace
              :kind  ::trace
              :data  data}))
-;; protocols
+
+;;;;; Runtime
+;;
+;; I wanted to avoid having a runtime, but the work stack is integral to the
+;; language semantics. I still hope to avoid executors and work stealing in the
+;; bootstrap impl, but we'll see where pragmatism takes us.
+
+;; A task cannot be scheduled until it is ready to run.
+;;
+;; This is a black box: we throw the task over the fence and are assured that it
+;; will eventually run, but we have no indication of when.
+(defn schedule [task])
+
+;;;;; Channels & Streams
+;;
+;; Getting this right is the crux
+
+;; Should return a pair of (channel, stream)
+(defn channel [])
+
+;; special channel whose stream will only ever be called with `(last st)`, so we
+;; can skip a bunch of logic and ensure that writes always happen immediately
+;; and thus we can ensure read-after-write semantics.
+(defn last-ch [])
+
+;;;;; protocols
 
 (defprotocol Reduce
   (reduce* [x dyn ccs]))
@@ -113,6 +138,8 @@
 (defn resolve [s dyn ccs]
   (event! :resolve {:sym s :dyn dyn :lex (lex s)})
   (cond
+    ;; TODO: reactive μ
+    ;; dyn-lookup will return a stream, just read from it.
     (dyn-bound? s dyn) (return ccs (dyn-lookup s dyn))
     (lex-bound? s)     (return ccs (lex-lookup s))
     true               (unbound-error s dyn ccs)))
@@ -203,6 +230,25 @@
 
   janus.ast.Mu
   (apply* [μ args dyn ccs]
+    ;; TODO: reactive μ
+    ;; If we pass a stream in for the param of a μ and bind the respective
+    ;; channel to the "compiled object μ" then application of args to a μ
+    ;; reduces to simply putting a message on that channel.
+    ;;
+    ;; Questions:
+    ;;
+    ;; 1) Do we still need to track local bindings in a μ or will the nesting of
+    ;; streams "just work"?
+    ;;
+    ;; 2) Given that a "compiled μ" will be an implicit graph of continuations,
+    ;; how do we maintain reflectivity for inspection and debugging?
+    ;;
+    ;; 3) Will the code be renterable? When the same compiled μ is called in
+    ;; different contexts, it must react in different ways (i.e. it must emit to
+    ;; a different continuation bundle). How do we orchestrate that?
+    ;;
+    ;; 4) Is is possible to do this without an event loop based runtime? (I
+    ;; don't think so, but I could be wrong).
     (reduce args dyn (with-return ccs
                        #(reduce (body μ) (extend dyn μ %) ccs)))))
 
@@ -219,9 +265,12 @@
                                (reduce params dyn
                                  (with-return ccs
                                    (fn [params]
-                                     (return ccs
-                                       (with-meta (ast/μ name params body dyn)
-                                         (meta args))))))))))))
+                                     (reduce body dyn
+                                       (with-return ccs
+                                         (fn [body]
+                                           (return ccs
+                                             (with-meta (ast/μ name params body dyn)
+                                               (meta args)))))))))))))))
 
 (defn createν [args dyn ccs]
   (throw (RuntimeException. "unimplemented")))

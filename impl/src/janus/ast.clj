@@ -223,6 +223,11 @@
      (pp/write-out name)
      (pp/write-out f))))
 
+(defrecord Nu [name params body]
+  Object
+  (toString [_]
+    (str "(#ν " params " " body ")")))
+
 ;;;;; Destructuring
 
 (defprotocol Destructurable
