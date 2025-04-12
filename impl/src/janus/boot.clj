@@ -265,12 +265,9 @@
                                (reduce params dyn
                                  (with-return ccs
                                    (fn [params]
-                                     (reduce body dyn
-                                       (with-return ccs
-                                         (fn [body]
-                                           (return ccs
-                                             (with-meta (ast/μ name params body dyn)
-                                               (meta args)))))))))))))))
+                                     (return ccs
+                                       (with-meta (ast/μ name params body dyn)
+                                         (meta args))))))))))))
 
 (defn createν [args dyn ccs]
   (throw (RuntimeException. "unimplemented")))
@@ -392,3 +389,6 @@
                         (println res)
                         (looper reader)))))))]
       (looper (r/file-reader fname)))))
+
+(defn inspect [n]
+  (-> @env (get (ast/symbol n)) ast/inspect))
