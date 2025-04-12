@@ -1,7 +1,7 @@
 #_(ns janus.core
   (:require [primitives#abc123 as base]))
 
-(emit :env [def ~(μ [name val] ~(emit :env {~name ~~val} :return ~name))]
+(emit :env [def ~(μ [name val] ~(emit :env [~name ~~val] :return ~name))]
       :return def)
 
 (def wrap

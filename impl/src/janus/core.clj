@@ -29,7 +29,7 @@
   ;; HACK: The executor doesn't clean up properly in the face of errors!
   (rt/stop!)
 
-  (let [conts {rt/env    #(swap! env merge %)
+  (let [conts {rt/env    (fn [[k v]] (swap! env assoc k v))
                rt/return #(throw (RuntimeException. "boom!"))
                rt/error  (fn [{:keys [form message]}]
                            (t/log! {:id   :fileloader :level :error
@@ -64,7 +64,7 @@
   [env fname]
   ;; Don't modify outside environment.
   (let [env (atom (if (instance? clojure.lang.IDeref env) @env env))
-        c   {rt/env   #(swap! env merge %)
+        c   {rt/env   (fn [[k v]] (swap! env assoc k v))
              rt/error #(t/event! :ktest {:data % :msg "bbom"})}]
     (letfn [(comparator [r1 r2]
               (let [[f1 f2] (map :form [r1 r2])]
@@ -116,7 +116,7 @@
 (defn ev [s]
   (eval (:form (r/read (r/string-reader s) @env))
         {rt/return  #(reset! o %)
-         rt/env     #(swap! env merge %)
+         rt/env     (fn [[k v]] (swap! env assoc k v))
          rt/unbound (fn [x] (println "Unbound!" x))
          rt/error   (fn [e] (t/error! e))})
   ;; @o
