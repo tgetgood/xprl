@@ -358,9 +358,6 @@
      (xkeys :error)   (fn [e] (println {:msg   "top level error"
                                         :error e}))}))
 
-;; FIXME: Simple example of broken wrap.
-(ev "((wrap . +*) 1 2)")
-
 (defn form-log! [level form msg]
   (t/log! {:level level
            :data  (assoc (select-keys (meta form) [:string :file :line :col])
@@ -390,5 +387,5 @@
                         (looper reader)))))))]
       (looper (r/file-reader fname)))))
 
-(defn inspect [n]
-  (-> @env (get (ast/symbol n)) ast/inspect))
+(defmacro inspect [n]
+  `(-> @env (get (ast/symbol ~(name n))) ast/inspect))

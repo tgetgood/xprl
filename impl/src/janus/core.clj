@@ -16,6 +16,7 @@
 
 (def srcpath "../src/")
 (def corexprl (str srcpath "core.xprl"))
+(def bootxprl (str srcpath "boot.xprl"))
 (def testxprl (str srcpath "test.xprl"))
 
 (def env (atom base-env))
