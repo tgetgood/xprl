@@ -251,3 +251,76 @@
   (binding? [_] false)
   (bindings [_] [])
   (destructure [xs ys] nil))
+
+;;;;; Inspection
+
+(defn spacer [^Writer w level]
+  (dorun (map #(.write w ^String %) (take level (repeat "| ")))))
+
+(defprotocol Inspectable
+  (insp [form w level]))
+
+(extend-protocol Inspectable
+  Object
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "V[")
+    (.write w (str form))
+    (.write w "]\n"))
+
+  Pair
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "P\n")
+    (insp (:head form) w (inc level))
+    (insp (:tail form) w (inc level)))
+
+  Immediate
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "I\n")
+    (insp (:form form) w (inc level)))
+
+  Symbol
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "S[")
+    (.write w (str form))
+    (.write w "]\n"))
+
+  Application
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "A\n")
+    (insp (:head form) w (inc level))
+    (insp (:tail form) w (inc level)))
+
+  clojure.lang.PersistentVector
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "L\n")
+    (dorun (map #(insp % w (inc level)) form)))
+
+  PrimitiveFunction
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "pFn[")
+    (.write w (str (:name (meta form))))
+    (.write w "]\n"))
+
+  PrimitiveMacro
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "pMac[")
+    (.write w (str (:name (meta form))))
+    (.write w "]\n"))
+
+  Mu
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "μ\n")
+    (insp (:params form) w level)
+    (insp (:body form) w level)))
+
+(defn inspect [x]
+  (insp x *out* 0))
