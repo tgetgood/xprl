@@ -20,6 +20,7 @@
      (when (first xs)
        (seq
         (connect f (first xs) ccs)
+        ;; REVIEW: will this cause the compiler to loop forever?
         (connect (map f) (rest xs) ccs)))))
 
 (defn comp [f g]
