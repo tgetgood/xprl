@@ -5,7 +5,6 @@
 ;; REVIEW: This initial def cannot accept metadata like docstrings, file line &
 ;; col numbers, etc. So we'll need to use it to write a better one eventually.
 
-
 (def defμ
   (μ x
      ~(def ~(nth* ~x 1)
@@ -16,7 +15,7 @@
      ~((μ ~(nth* ~x 1) ~~(nth* ~x 2)) . ~~args)))
 
 (defμ if x
-  ~(select ~~(nth* ~x 1) ~(nth* ~x 2) ~(nth* ~x 3)))
+  (select ~~(nth* ~x 1) ~(nth* ~x 2) ~(nth* ~x 3)))
 
 (defμ cond body
   (if ~(nth* ~body 1) ~(nth* ~body 2) ~(cond ~(rest (rest body)))))
