@@ -6,21 +6,21 @@
 ;; col numbers, etc. So we'll need to use it to write a better one eventually.
 
 (def defμ
-  (μ x
-     ~(def ~(nth* ~x 1)
-        (μ ~(nth* ~x 1) ~(nth* ~x 2) ~~(nth* ~x 3)))))
+  (μ x1
+     ~(def ~(nth* ~x1 1)
+        (μ ~(nth* ~x1 1) ~(nth* ~x1 2) ~~(nth* ~x1 3)))))
 
-(defμ fn x
+(defμ fn x2
   (μ args
-     ~((μ ~(nth* ~x 1) ~~(nth* ~x 2)) . ~~args)))
+     ~((μ ~(nth* ~x2 1) ~~(nth* ~x2 2)) . ~~args)))
 
 (def fn2
   (μ x
      ~(μ args
          ~((μ ~(nth* ~x 1) ~~(nth* ~x 2)) . ~~args))))
 
-(defμ if x
-  (select ~~(nth* ~x 1) ~(nth* ~x 2) ~(nth* ~x 3)))
+(defμ if x3
+  (select ~~(nth* ~x3 1) ~(nth* ~x3 2) ~(nth* ~x3 3)))
 
 (defμ cond body
   (if ~(nth* ~body 1) ~(nth* ~body 2) ~(cond ~(rest (rest body)))))
