@@ -8,7 +8,9 @@
 
   This ns is intended to be fully self contained except for the reader and ast
   structs. If not for those, this would be a completely new implementation."
-  (:refer-clojure :exclude [reduce eval apply extend resolve])
+  (:refer-clojure :exclude [reduce eval apply extend resolve run!])
+  (:import
+   (java.util.concurrent ConcurrentLinkedDeque))
   (:require
    [janus.ast :as ast]
    [janus.reader :as r]
@@ -28,11 +30,24 @@
 ;; language semantics. I still hope to avoid executors and work stealing in the
 ;; bootstrap impl, but we'll see where pragmatism takes us.
 
+;; Just use a mutable stack to get up and running. Plus it's threadsafe.
+(def stack (ConcurrentLinkedDeque.))
+
 ;; A task cannot be scheduled until it is ready to run.
 ;;
 ;; This is a black box: we throw the task over the fence and are assured that it
 ;; will eventually run, but we have no indication of when.
-(defn schedule [task])
+(defn schedule [task]
+  (.add stack task))
+
+(defn run-task [[f args :as task]]
+  (println task)
+  (clojure.core/apply f args))
+
+(defn run! []
+  (when-let [task (.pop stack)]
+    (run-task task)
+    (recur)))
 
 ;;;;; Channels & Streams
 ;;
@@ -88,10 +103,10 @@
   (assoc ccs (xkeys :return) cont))
 
 (defn return {:style/indent 1} [ccs v]
-  ((get ccs (xkeys :return)) v))
+  (schedule [(get ccs (xkeys :return)) v]))
 
 (defn error [ccs e]
-  ((get ccs (xkeys :error)) e))
+  (schedule [(get ccs (xkeys :error)) e]))
 
 (defn call [f args dyn ccs]
   (try
@@ -165,16 +180,13 @@
 
 ;;;;; Interpreter
 
-;; REVIEW: This sequentially traverses the vector, whereas reduction should be
-;; concurrent. But that's a problem for down the line.
-;;
-;; I hope I'm not simplifying too much to recover.
-(defn walk-vector [f xs acc dyn ccs]
+(defn reduce-coll [acc xs dyn ccs]
   (if (empty? xs)
     (return ccs acc)
-    (f (first xs) dyn
+    (reduce (first xs) dyn
       (with-return ccs
-        #(walk-vector f (rest xs) (conj acc %) dyn ccs)))))
+        (fn [x]
+          (reduce-coll (conj acc x) (rest xs) dyn ccs))))))
 
 (extend-protocol Reduce
   Object
@@ -186,7 +198,7 @@
 
   clojure.lang.PersistentVector
   (reduce* [xs dyn ccs]
-    (walk-vector reduce xs [] dyn ccs))
+    (reduce-coll [] xs dyn ccs))
 
   janus.ast.Application
   (reduce* [x dyn ccs]
@@ -208,9 +220,9 @@
   (eval* [x dyn ccs]
     (reduce x dyn (with-return ccs #(eval % dyn ccs))))
 
-  clojure.lang.PersistentVector
+  clojure.lang.PersistentVector ; (I (L x y ...)) => (L (I x) (I y) ...)
   (eval* [xs dyn ccs]
-    (walk-vector eval xs [] dyn ccs))
+    (reduce (into [] (map ast/immediate) xs) dyn ccs))
 
   janus.ast.Symbol
   (eval* [s dyn ccs]
@@ -345,19 +357,23 @@
 ;;;;; repl
 
 (def srcpath "../src/")
-(def corexprl (str srcpath "boot.xprl"))
+(def bootxprl (str srcpath "boot.xprl"))
 
 (t/set-min-level! ::trace :info)
 
 (def env (atom base-env))
 
+(defn go! [form ccs]
+  (schedule [eval [form (empty-env) ccs]])
+  (run!))
+
 (defn ev [s]
-  (eval (:form (r/read (r/string-reader s) @env)) (empty-env)
-    {(xkeys :return)  println
-     (xkeys :env)     #(swap! env assoc (first %) (second %))
-     (xkeys :unbound) (fn [x] (println "Unbound!" x))
-     (xkeys :error)   (fn [e] (println {:msg   "top level error"
-                                        :error e}))}))
+  (go! (:form (r/read (r/string-reader s) @env))
+       {(xkeys :return)  println
+        (xkeys :env)     #(swap! env assoc (first %) (second %))
+        (xkeys :unbound) (fn [x] (println "Unbound!" x))
+        (xkeys :error)   (fn [e] (println {:msg   "top level error"
+                                           :error e}))}))
 
 (defn form-log! [level form msg]
   (t/log! {:level level
@@ -381,11 +397,10 @@
                 (form-log! :debug form "eval form")
                 (if (= :eof form)
                   @envatom
-                  (eval form (empty-env)
-                    (with-return conts
-                      (fn [res]
-                        (println res)
-                        (looper reader)))))))]
+                  (go! form (with-return conts
+                              (fn [res]
+                                (println res)
+                                (looper reader)))))))]
       (looper (r/file-reader fname)))))
 
 (defmacro inspect [n]
