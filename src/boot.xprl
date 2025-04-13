@@ -10,9 +10,14 @@
      ~(def ~(nth* ~x 1)
         (μ ~(nth* ~x 1) ~(nth* ~x 2) ~~(nth* ~x 3)))))
 
-(defμ fn* x
+(defμ fn x
   (μ args
      ~((μ ~(nth* ~x 1) ~~(nth* ~x 2)) . ~~args)))
+
+(def fn2
+  (μ x
+     ~(μ args
+         ~((μ ~(nth* ~x 1) ~~(nth* ~x 2)) . ~~args))))
 
 (defμ if x
   (select ~~(nth* ~x 1) ~(nth* ~x 2) ~(nth* ~x 3)))
@@ -49,4 +54,4 @@
 (def = (wrap . =*))
 
 (def inc
-  (fn* x (+ 1 (nth x 1))))
+  (fn x (+ 1 (nth x 1))))
