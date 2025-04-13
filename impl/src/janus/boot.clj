@@ -40,9 +40,8 @@
 (defn schedule [task]
   (.add stack task))
 
-(defn run-task [[f args :as task]]
-  (println task)
-  (clojure.core/apply f args))
+(defn run-task [[f arg]]
+  (f arg))
 
 (defn run! []
   (when-let [task (.pop stack)]
@@ -305,7 +304,7 @@
               ;; remove all guarantees of delivery order.
               (do
                 (event! :emit {ch msg})
-                ((get ccs ch) msg)
+                (schedule [(get ccs ch) msg])
                 (when (< 2 (count args))
                   (emit (drop 2 args) dyn ccs))))))))))
 
@@ -364,7 +363,7 @@
 (def env (atom base-env))
 
 (defn go! [form ccs]
-  (schedule [eval [form (empty-env) ccs]])
+  (schedule [(fn [_] (eval form (empty-env) ccs)) nil])
   (run!))
 
 (defn ev [s]
