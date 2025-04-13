@@ -43,8 +43,14 @@
 (defn run-task [[f arg]]
   (f arg))
 
+(defn next-task []
+  (try
+    (.pop stack)
+    (catch java.util.NoSuchElementException e
+      (println "---"))))
+
 (defn run! []
-  (when-let [task (.pop stack)]
+  (when-let [task (next-task)]
     (run-task task)
     (recur)))
 
@@ -387,20 +393,17 @@
                                  (t/log! {:id   :fileloader :level :error
                                           :data (dissoc x :msg)}
                                          (:msg x)))}]
-    ;; HACK: This repl will not work if we enable multiple executors and work
-    ;; stealing. This is because it depends on the order in which emitted
-    ;; message are received.
-    (letfn [(looper [reader]
-              (let [reader (r/read reader @envatom)
+    (loop [reader (r/file-reader fname)]
+      (let [reader (r/read reader @envatom)
                     form   (:form reader)]
                 (form-log! :debug form "eval form")
                 (if (= :eof form)
                   @envatom
-                  (go! form (with-return conts
-                              (fn [res]
-                                (println res)
-                                (looper reader)))))))]
-      (looper (r/file-reader fname)))))
+                  (do
+                    (go! form (with-return conts
+                                (fn [res]
+                                  (println res))))
+                    (recur reader)))))))
 
 (defmacro inspect [n]
   `(-> @env (get (ast/symbol ~(name n))) ast/inspect))
