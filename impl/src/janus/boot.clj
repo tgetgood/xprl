@@ -97,7 +97,8 @@
   (try
     (event! :call {:f f :args args :dyn dyn})
     (return ccs (clojure.core/apply (:f f) args))
-    (catch Throwable e (error ccs e))))
+    (catch Throwable e (error ccs {:msg "Call error"
+                                   :ex e}))))
 
 (defn maccall [f args dyn ccs]
   (event! :call {:macro f :args args :dyn dyn})
