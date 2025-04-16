@@ -157,7 +157,8 @@
   (lex s))
 
 (defn resolve [s dyn ccs]
-  (event! :resolve {:sym s :dyn dyn :lex (lex s)})
+  (event! :resolve {:sym s :dyn (dyn-lookup s dyn) :lex (lex s)})
+  ;; (println s (dyn-lookup s dyn) (lex-lookup s))
   (cond
     ;; TODO: reactive μ
     ;; dyn-lookup will return a stream, just read from it.
