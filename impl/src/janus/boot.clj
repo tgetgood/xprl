@@ -40,26 +40,14 @@
 (defn schedule [task]
   (.add stack task))
 
-(defn run-task [[f args :as task]]
-  (println task)
-  (clojure.core/apply f args))
+(defn run-task [[f arg]]
+  (event! :task {:f f :arg arg})
+  (f arg))
 
 (defn run! []
   (when-let [task (.pop stack)]
     (run-task task)
     (recur)))
-
-;;;;; Channels & Streams
-;;
-;; Getting this right is the crux
-
-;; Should return a pair of (channel, stream)
-(defn channel [])
-
-;; special channel whose stream will only ever be called with `(last st)`, so we
-;; can skip a bunch of logic and ensure that writes always happen immediately
-;; and thus we can ensure read-after-write semantics.
-(defn last-ch [])
 
 ;;;;; protocols
 
@@ -364,7 +352,7 @@
 (def env (atom base-env))
 
 (defn go! [form ccs]
-  (schedule [eval [form (empty-env) ccs]])
+  (schedule [#(clojure.core/apply eval %) [form (empty-env) ccs]])
   (run!))
 
 (defn ev [s]
