@@ -372,9 +372,11 @@
   (schedule [(fn [_] (eval form (empty-env) ccs)) nil])
   (run!))
 
+(def out (atom nil))
+
 (defn ev [s]
   (go! (:form (r/read (r/string-reader s) @env))
-       {(xkeys :return)  println
+       {(xkeys :return)  #(do (reset! out %) (println %))
         (xkeys :env)     #(swap! env assoc (first %) (second %))
         (xkeys :unbound) (fn [x] (println "Unbound!" x))
         (xkeys :error)   (fn [e] (println {:msg   "top level error"
@@ -400,9 +402,7 @@
                 (if (= :eof form)
                   @envatom
                   (do
-                    (go! form (with-return conts
-                                (fn [res]
-                                  (println res))))
+                    (go! form (with-return conts println))
                     (recur reader)))))))
 
 (defmacro inspect [n]
