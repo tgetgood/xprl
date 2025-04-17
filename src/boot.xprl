@@ -1,4 +1,6 @@
 ;; Isn't it crazy that `def` itself isn't built in?
+;; But then if the `:env` channel isn't hooked up correctly, you can't define
+;; `def` at all, which is a pretty hardcore form of sandboxing...
 (emit :env [def ~(μ x ~(emit :env [~(nth* ~x 1) ~~(nth* ~x 2)] :return ~(nth* ~x 1)))]
       :return def)
 

@@ -142,6 +142,7 @@
 (defn deliver! [{:keys [msg cb]} offset reads subscriptions]
   ;; REVIEW: I'm using loops to emphasize the imperative nature of this
   ;; mechanism. It's pretty ugly, but maybe it should be...
+  (event! :deliver! {:msg msg})
   (loop [subs subscriptions]
     (when (seq subs)
       (let [[k v] (first subs)]
@@ -150,7 +151,7 @@
   (when (= offset (key reads))
     (loop [reads (val reads)]
       (when (seq reads)
-        (first reads) msg
+        ((first reads) msg)
         (recur (rest reads)))))
   (cb))
 
@@ -177,6 +178,7 @@
   (flush! ch))
 
 (defn send! [ch msg cb]
+  (event! :send!) {:msg msg}
   (swap! ch update :pending-writes conj {:msg msg :cb cb})
   (flush! ch))
 
@@ -221,8 +223,9 @@
 (defn dyn-bound? [s dyn]
   (contains? dyn s))
 
-(defn dyn-lookup [s dyn]
-  (get dyn s))
+(defn dyn-lookup [s dyn ccs]
+  (println (keys (get dyn s)))
+  (stream-first (get dyn s) ccs))
 
 (defn lex-bound? [s]
   (not (nil? (lex s))))
@@ -231,23 +234,22 @@
   (lex s))
 
 (defn resolve [s dyn ccs]
-  (event! :resolve {:sym s :dyn (dyn-lookup s dyn) :lex (lex s)})
+  (event! :resolve {:sym s :dyn dyn :lex (lex s)})
   ;; (println s (dyn-lookup s dyn) (lex-lookup s))
   (cond
     ;; TODO: reactive μ
     ;; dyn-lookup will return a stream, just read from it.
-    (dyn-bound? s dyn) (return ccs (dyn-lookup s dyn))
+    (dyn-bound? s dyn) (dyn-lookup s dyn ccs)
     (lex-bound? s)     (return ccs (lex-lookup s))
     true               (unbound-error s dyn ccs)))
 
 (defn bind [s v]
   {s v})
 
-(defn extend [dyn μ ext]
-  (event! :extend {:env dyn :extention (bind (params μ) ext) :μenv (μenv μ)})
+(defn extend [dyn μ param stream]
+  (event! :extend {:env dyn :extention param})
   (merge dyn
-         (μenv μ)
-         (bind (params μ) ext)
+         {param stream}
          ;; If μ is named, put its name in the env we call it with. This is a
          ;; bit of a kludge to get recursion without combinators or similar
          ;; complexities.
@@ -342,8 +344,8 @@
     ;;
     ;; 4) Is is possible to do this without an event loop based runtime? (I
     ;; don't think so, but I could be wrong).
-    (reduce args dyn (with-return ccs
-                       #(reduce (body μ) (extend dyn μ %) ccs)))))
+    (stream-first (:out μ) ccs)
+    (reduce args dyn (with-return ccs #(send! (:in (:dyn μ)) %)))))
 
 ;;;;; Builtins
 
@@ -351,16 +353,27 @@
   (cond
     ;; TODO: docstrings and metadata?
     (= 2 (count args)) (createμ [::anon (first args) (second args)] dyn ccs)
-    (= 3 (count args)) (let [[name params body] args]
+    (= 3 (count args)) (let [[name params body] args
+                             [inch argstream]   (chan)
+                             [outch ostream]    (chan)]
                          (reduce name dyn
                            (with-return ccs
                              (fn [name]
                                (reduce params dyn
                                  (with-return ccs
                                    (fn [params]
-                                     (return ccs
-                                       (with-meta (ast/μ name params body dyn)
-                                         (meta args))))))))))))
+                                     (event! :createμ [name params body])
+                                     (let [μ (with-meta (ast/μ name params body
+                                                               {:in inch
+                                                                :out ostream})
+                                               (meta args))]
+                                       ;; Here we split into two processes. It's
+                                       ;; important we "return" first because
+                                       ;; that gets scheduled and allows the
+                                       ;; body reduction to go on concurrently.
+                                       (return ccs μ)
+                                       (reduce body (extend dyn μ params argstream)
+                                         (assoc ccs (xkeys :return) outch))))))))))))
 
 (defn createν [args dyn ccs]
   (throw (RuntimeException. "unimplemented")))
@@ -444,7 +457,7 @@
 (def env (atom base-env))
 
 (defn go! [form ccs]
-  (schedule [(fn [_] (eval form (empty-env) ccs)) nil])
+  (schedule [(fn [_] (eval form (empty-env) ccs)) []])
   (run!))
 
 (def out (atom nil))
