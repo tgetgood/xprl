@@ -1,5 +1,7 @@
 (ns janus.b2
   (:refer-clojure :exclude [reduce eval apply extend resolve run!])
+  (:import
+   (java.util.concurrent ConcurrentLinkedDeque))
   (:require
    [janus.ast :as ast]
    [janus.reader :as r]))
@@ -29,6 +31,46 @@
 (defn id [x] (:id x))
 (defn params [x] (:params x))
 (defn body [x] (:body x))
+
+;;;;; Runtime
+
+(def stack (ConcurrentLinkedDeque.))
+
+;; A task cannot be scheduled until it is ready to run.
+;;
+;; This is a black box: we throw the task over the fence and are assured that it
+;; will eventually run, but we have no indication of when.
+(defn schedule [task]
+  (.add stack task))
+
+(defn run-task [[f arg]]
+  ;; (event! :task {:f f :arg arg})
+  (f arg))
+
+(defn next-task []
+  (try
+    (.pop stack)
+    (catch java.util.NoSuchElementException e
+      (println "---"))))
+
+(defn run! []
+  (when-let [task (next-task)]
+    (run-task task)
+    (recur)))
+
+(def xkeys
+  {:return (ast/keyword "return")
+   :error  (ast/keyword "error")
+   :env    (ast/keyword "env")})
+
+(defn with-return [ccs cont]
+  (assoc ccs (xkeys :return) cont))
+
+(defn return {:style/indent 1} [ccs v]
+  (schedule [(get ccs (xkeys :return)) v]))
+
+(defn error [ccs e]
+  (schedule [(get ccs (xkeys :error)) e]))
 
 ;;;;; Env
 
@@ -165,15 +207,26 @@
 (extend-protocol Exec
   janus.ast.Application
   (exec [x ccs]
-    (exapply (head x) (tail x) ccs)))
+    (exapply (head x) (tail x) ccs))
+
+  janus.ast.Emission
+  (exec [x ccs]
+    (loop [kvs (:kvs x)]
+      (when (seq kvs)
+        (let [ch (get ccs (first kvs))]
+          ;; TODO: There should be a special channel for these and a warning, not a panic.
+          (assert (not (nil? ch)) "Sending on unbound channel!")
+          (ch (second kvs)))
+        (recur (drop 2 kvs))))))
 
 (extend-protocol ExecApply
   janus.ast.PrimitiveFunction
   (exapply [head tail ccs]
-    (clojure.core/apply (:f head) tail)))
+    (return ccs (clojure.core/apply (:f head) tail))))
 
-(defn execute [x]
-  (exec x {}))
+(defn execute [x ccs]
+  (println x (keys ccs))
+  (exec x ccs))
 
 ;;;;; Builtins
 
@@ -240,17 +293,28 @@
 (def out (atom nil))
 
 (defn ev [s]
-  (eval (:form (r/read (r/string-reader s) @env)) {}))
+  (execute
+   (eval (:form (r/read (r/string-reader s) @env)) (empty-env))
+   {(xkeys :return)  #(do (reset! out %) (println %))
+    (xkeys :env)     #(swap! env assoc (first %) (second %))
+    ;; (xkeys :unbound) (fn [x] (println "Unbound!" x))
+    (xkeys :error)   (fn [e] (println {:msg   "top level error"
+                                       :error e}))}))
 
 (defn loadfile [envatom fname]
-  (loop [reader (r/file-reader fname)]
-    (let [reader (r/read reader @envatom)
-          form   (:form reader)]
-      (if (= :eof form)
-        @envatom
-        (do
-          (eval form {})
-          (recur reader))))))
+  (let [conts {(xkeys :env)    #(swap! envatom assoc (first %) (second %))
+               ;; FIXME: This should log a warning. It's not a fatal error
+               (xkeys :return) #(throw (RuntimeException. "return to top level!"))
+               (xkeys :error)  (fn [x]
+                                 (println "Error: " x))}]
+    (loop [reader (r/file-reader fname)]
+      (let [reader (r/read reader @envatom)
+            form   (:form reader)]
+        (if (= :eof form)
+          @envatom
+          (do
+            (exec (eval form (empty-env)) (with-return conts println))
+            (recur reader)))))))
 
 (defmacro inspect [n]
   `(-> @env (get (ast/symbol ~(name n))) ast/inspect))
