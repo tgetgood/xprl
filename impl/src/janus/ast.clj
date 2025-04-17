@@ -1,5 +1,5 @@
 (ns janus.ast
-  (:refer-clojure :exclude [reduced? symbol keyword keyword? destructure])
+  (:refer-clojure :exclude [reduced? symbol keyword keyword? destructure delay])
   (:require
    [clojure.pprint :as pp]
    [clojure.string :as str]
@@ -228,6 +228,21 @@
   (toString [_]
     (str "(#ν " params " " body ")")))
 
+(defrecord Delay [sym ref depth])
+
+(defn delay [s r d]
+  (Delay. s r d))
+
+(defrecord Emission [kvs])
+
+(defn emission [kvs]
+  (Emission. kvs))
+
+(defrecord Recursion [id]
+  )
+
+(defn recursion [id]
+  (Recursion. id))
 ;;;;; Destructuring
 
 (defprotocol Destructurable
@@ -310,22 +325,32 @@
   (insp [form ^Writer w level]
     (spacer w level)
     (.write w "pFn[")
-    (.write w (str (:name (meta form))))
+    (.write w (str (:name (meta (:f form)))))
     (.write w "]\n"))
 
   PrimitiveMacro
   (insp [form ^Writer w level]
     (spacer w level)
     (.write w "pMac[")
-    (.write w (str (:name (meta form))))
+    (.write w (str (:name (meta (:f form)))))
     (.write w "]\n"))
 
   Mu
   (insp [form ^Writer w level]
     (spacer w level)
-    (.write w "μ\n")
+    (.write w "μ[")
+    (.write w (str (:name form)))
+    (.write w "]\n")
     (insp (:params form) w level)
-    (insp (:body form) w level)))
+    (insp (:body form) w level))
+
+  Delay
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "D[")
+    (.write w (str (:sym form) "," (:ref form) "," (:depth form)))
+    (.write w "]\n")))
+
 
 (defn inspect [x]
   (insp x *out* 0))
