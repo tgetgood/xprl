@@ -349,7 +349,17 @@
     (spacer w level)
     (.write w "D[")
     (.write w (str (:sym form) "," (:ref form) "," (:depth form)))
-    (.write w "]\n")))
+    (.write w "]\n"))
+
+  Emission
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "E\n")
+    (loop [kvs (:kvs form)]
+      (when (seq kvs)
+        (insp (first kvs) w (inc level))
+        (insp (second kvs) w (inc level))
+        (recur (drop 2 kvs))))))
 
 
 (defn inspect [x]

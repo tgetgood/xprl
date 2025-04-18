@@ -1,8 +1,9 @@
 (ns janus.b2
-  (:refer-clojure :exclude [reduce eval apply extend resolve run!])
+  (:refer-clojure :exclude [reduce eval apply extend resolve run! reduced?])
   (:import
    (java.util.concurrent ConcurrentLinkedDeque))
   (:require
+   [clojure.string :as str]
    [janus.ast :as ast]
    [janus.reader :as r]))
 
@@ -138,6 +139,10 @@
         (ev-chain (second r) dyn (dec (:depth x)))
         x)))
 
+  janus.ast.Emission
+  (reduce [x dyn]
+    (ast/emission (reduce (:kvs x) dyn)))
+
   janus.ast.Immediate
   (reduce [x dyn]
     (eval (form x) dyn))
@@ -185,15 +190,23 @@
   (eval [s dyn]
     (resolve s dyn)))
 
+(defn reduced? [x]
+  (cond
+    (vector? x) (every? reduced? x)
+    true (not (str/starts-with? (str (type x)) "class janus.ast"))))
+
+
 (extend-protocol Apply
   Object
   (apply [head tail dyn] ; reduce the arguments before calling the primitive
     ;; (println "A" head tail dyn)
     (ast/application (reduce head dyn) (reduce tail dyn)))
 
-  ;; janus.ast.Application ; (A (A x y) z) proceeds from inside out:
-  ;; (apply [head tail dyn]
-  ;;   (apply (reduce head dyn) tail dyn))
+  (apply [head tail dyn]
+    (let [tail (reduce tail dyn)]
+      (if (reduced? tail)
+        (call head tail)
+        (ast/application head tail))))
 
   janus.ast.PrimitiveMacro
   (apply [mac args dyn] ; macros receive unevaluated arguments and context
@@ -204,20 +217,40 @@
     ;; (println "μ" (params μ) (:name μ) (reduce args dyn) (body μ))
     (reduce (body μ) (extend dyn (params μ) [(μname μ) (reduce args dyn)]))))
 
+(defn reduce-coll [acc xs ccs]
+  (if (empty? xs)
+    (return ccs acc)
+    (exec (first xs)
+      (with-return ccs
+        (fn [x]
+          (reduce-coll (conj acc x) (rest xs) ccs))))))
+
 (extend-protocol Exec
+  Object
+  (exec [x ccs]
+    (return ccs x))
+
+  clojure.lang.PersistentVector
+  (exec [xs ccs]
+    (reduce-coll [] xs ccs))
+
   janus.ast.Application
   (exec [x ccs]
     (exapply (head x) (tail x) ccs))
 
   janus.ast.Emission
   (exec [x ccs]
-    (loop [kvs (:kvs x)]
+    (let [kvs (:kvs x)]
       (when (seq kvs)
-        (let [ch (get ccs (first kvs))]
-          ;; TODO: There should be a special channel for these and a warning, not a panic.
-          (assert (not (nil? ch)) "Sending on unbound channel!")
-          (ch (second kvs)))
-        (recur (drop 2 kvs))))))
+        (exec (first kvs)
+              (with-return ccs
+                (fn [k]
+                  (exec (second kvs)
+                        (with-return ccs
+                          (fn [v]
+                            (println k v)
+                            (schedule [(get ccs k) v])
+                            (exec (ast/emission (drop 2 kvs)) ccs)))))))))))
 
 (extend-protocol ExecApply
   janus.ast.PrimitiveFunction
@@ -292,9 +325,16 @@
 
 (def out (atom nil))
 
+(defn go! [f ccs]
+  (schedule [(fn [_] (exec f ccs)) []])
+  (run!))
+
 (defn ev [s]
-  (execute
-   (eval (:form (r/read (r/string-reader s) @env)) (empty-env))
+  (eval (:form (r/read (r/string-reader s) @env)) (empty-env)))
+
+(defn eev [s]
+  (go!
+   (ev s)
    {(xkeys :return)  #(do (reset! out %) (println %))
     (xkeys :env)     #(swap! env assoc (first %) (second %))
     ;; (xkeys :unbound) (fn [x] (println "Unbound!" x))
