@@ -29,7 +29,7 @@
 (defn head [x] (:head x))
 (defn tail [x] (:tail x))
 
-(defn id [x] (:name x))
+(defn id [x] (:id x))
 (defn params [x] (:params x))
 (defn body [x] (:body x))
 
@@ -117,7 +117,8 @@
 (defn unbound-error [s dyn]
   ;; FIXME: We need this fallthrough for delays, but we really should be
   ;; refusing to compile on this error.
-  (trace! "Unbound symbol error: " s (meta s)))
+  (trace! "Unbound symbol error: " "" [s dyn (dissoc (meta s) :lex)])
+  (throw (RuntimeException. "Unbound symbol, cannot proceed.")))
 
 (defn delayed? [v]
   (symbol? v))
@@ -127,8 +128,8 @@
 
 (defn dyn-lookup [s dyn]
   (let [v (get dyn s)]
-    (if-let [m (meta v)]
-      (case (:type m)
+    (if-let [t (::type (meta v))]
+      (case t
         :param (ast/delay s v 1)
         :recur (ast/recursion v))
       v)))
@@ -141,6 +142,9 @@
 
 (defn lex-lookup [s]
   (lex s))
+
+(defn delayed-resolve [s dyn]
+  (get dyn s))
 
 (defn resolve [s dyn]
   ;; (println s (dyn-bound? s dyn) (lex-lookup s))
@@ -163,7 +167,7 @@
           (reduce-coll (conj acc x) (rest xs) dyn ccs))))))
 
 (defn ev-chain [v dyn d ccs]
-  (if (zero? d)
+  (if (< d 1)
     (return ccs v)
     (eval v dyn (with-return ccs #(ev-chain % dyn (dec d) ccs)))))
 
@@ -188,24 +192,38 @@
     (trace! :reduce :μ x)
     (reduce (body x) dyn (with-return (capture-ccs)
                            (fn [body]
-                             (return ccs (ast/μ (id x) (params x) body))))))
+                             (return ccs (ast/μ (id x) (:name x) (params x) body))))))
 
   janus.ast.Delay
   (reduce [x dyn ccs]
-    (trace! :reduce :D [x (resolve [(:sym x) (:ref x)] dyn)])
-    (if-let [r (resolve [(:sym x) (:ref x)] dyn)]
+    (trace! :reduce :D [x (:depth x) dyn])
+    (if-let [r (delayed-resolve [(:sym x) (:ref x)] dyn)]
       ;; (println x dyn)
-      (ev-chain r dyn (dec (:depth x)) ccs)
+      (ev-chain r dyn (dec (:depth x))
+                (with-return ccs
+                  (fn [v]
+                    (trace! :resolution :D [x v])
+                    (reduce v dyn ccs))))
       (return ccs x)))
 
   janus.ast.DelayedApplication
   (reduce [x dyn ccs]
+    (trace! :reduce :DA [x (:depth x)])
     (reduce (head x) dyn
             (with-return ccs
               (fn [head]
                 (apply head (:tail x) dyn
                        (with-return ccs
-                         #(ev-chain % dyn (dec (:depth x)) ccs)))))))
+                         #(ev-chain % dyn (:depth x) ccs)))))))
+
+  janus.ast.Emission
+  (reduce [x dyn ccs]
+    (trace! :reduce :E [(captured? ccs) x])
+    (if (captured? ccs)
+      (return ccs x)
+      (reduce (:kvs x) dyn (with-return ccs
+                             (fn [kvs]
+                               (dorun (map #(emission! % ccs) kvs)))))))
 
   janus.ast.Application
   (reduce [x dyn ccs]
@@ -250,7 +268,7 @@
 
   janus.ast.Symbol
   (eval [s dyn ccs]
-    (trace! :eval :S [s (resolve s dyn)])
+    (trace! :eval :S [s dyn])
     (reduce (resolve s dyn) (empty-env) ccs)))
 
 (extend-protocol Apply
@@ -275,21 +293,33 @@
     (reduce args dyn
             (with-return ccs
               (fn [args]
-                (reduce (body μ) (extend dyn [(params μ) (id μ)] args) ccs))))))
+                (reduce (body μ) (extend dyn [(params μ) (id μ)] args (:name μ) μ)
+                        ccs))))))
 
 ;;;;; Builtins
 
+(defn fill-name [args]
+  (if (= 2 (count args))
+    [::anon (first args) (second args)]
+    args))
+
 (defn createμ [_ args dyn ccs]
-  (let [[params body] args
+  (let [[name params body] (fill-name args)
         id            (gensym)]
-    (reduce params dyn (with-return ccs
-                         (fn [params]
-                           (reduce body (extend dyn params (with-meta id
-                                                             {:type :param}))
-                                   (with-return (capture-ccs)
-                                              (fn [body]
-                                                (return ccs
-                                                  (ast/μ id params body))))))))))
+    (trace! :createμ :init args)
+    (reduce name dyn
+            (with-return ccs
+              (fn [name]
+                (reduce params dyn
+                        (with-return ccs
+                          (fn [params]
+                            (reduce body (extend dyn params (with-meta id
+                                                              {::type :param}))
+                                    (with-return (capture-ccs)
+                                      (fn [body]
+                                        (trace! :createμ :reduced [name params body])
+                                        (return ccs
+                                          (ast/μ id name params body)))))))))))))
 
 (defn args-reduction
   {:style/indent 3}
@@ -355,9 +385,8 @@
    })
 
 (defn reduced? [x]
-  (cond
-    (vector? x) (every? reduced? x)
-    true (not (str/starts-with? (str (type x)) "class janus.ast"))))
+  (assert (vector? x) "args to primitive fn must be a vector.")
+  (not-any? #(instance? janus.ast.Delay %) x))
 
 (defn pwrap [f]
   "Wraps a host (pure) function into the channel system as a primitive.
@@ -365,13 +394,18 @@
   (fn [p args dyn ccs]
     (reduce args dyn (with-return ccs
                        (fn [args]
+                         (trace! :apply :pFn [p f (reduced? args) (map type args) args])
                          (if (reduced? args )
-                           (try
-                             (let [v (clojure.core/apply f args)]
-                               (return ccs v))
-                             (catch Throwable e
-                               (error ccs {:msg       "Error caught in pFn."
-                                           :exception e})))
+                           (let [v (try
+                                     (clojure.core/apply f args)
+                                     (catch Throwable e
+                                       (error ccs {:msg       "Error caught in pFn."
+                                                   :p         p
+                                                   :f         f
+                                                   :args      args
+                                                   :exception e})))]
+                             (trace! :return :pFn v)
+                             (when v (return ccs v)))
                            (return ccs (ast/delayedapplication p args 0))))))))
 
 (defn tagged [f]
