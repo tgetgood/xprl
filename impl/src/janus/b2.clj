@@ -202,6 +202,7 @@
     ;; (println "A" head tail dyn)
     (ast/application (reduce head dyn) (reduce tail dyn)))
 
+  janus.ast.PrimitiveFunction
   (apply [head tail dyn]
     (let [tail (reduce tail dyn)]
       (if (reduced? tail)

@@ -204,21 +204,21 @@
      (pp/write-out name)
      (pp/write-out f))))
 
-(defrecord PrimitiveMacro [f]
+(defrecord Primitive [f]
   Object
   (toString [_]
-    (str "#pMac[" (fname f) "]")))
+    (str "#F[" (fname f) "]")))
 
-(defmethod print-method PrimitiveMacro [{:keys [f]} ^Writer w]
-  (.write w "#pMac[")
+(defmethod print-method Primitive [{:keys [f]} ^Writer w]
+  (.write w "#F[")
   (if-let [n (:name (meta f))]
     (.write w (str n))
     (print-method f w))
   (.write w "]"))
 
-(defmethod pp/simple-dispatch PrimitiveMacro [{:keys [f]}]
+(defmethod pp/simple-dispatch Primitive [{:keys [f]}]
   (pp/pprint-logical-block
-   :prefix "#pMac[" :suffix "]"
+   :prefix "#F[" :suffix "]"
    (if-let [name (:name (meta f))]
      (pp/write-out name)
      (pp/write-out f))))
@@ -328,10 +328,10 @@
     (.write w (str (:name (meta (:f form)))))
     (.write w "]\n"))
 
-  PrimitiveMacro
+  Primitive
   (insp [form ^Writer w level]
     (spacer w level)
-    (.write w "pMac[")
+    (.write w "F[")
     (.write w (str (:name (meta (:f form)))))
     (.write w "]\n"))
 

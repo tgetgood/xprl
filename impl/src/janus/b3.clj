@@ -8,19 +8,13 @@
    [janus.reader :as r]))
 
 (defprotocol Reduce
-  (reduce ^{:style/indent 2} [x dyn ccs]))
+  (reduce [x dyn ccs]))
 
 (defprotocol Eval
   (eval [x dyn ccs]))
 
 (defprotocol Apply
   (apply [head tail dyn ccs]))
-
-(defprotocol ChannelMap
-  (lookup [this channel]))
-
-(defprotocol Channel
-  (send! [this message cb]))
 
 ;;;;; Accessors
 
@@ -42,6 +36,7 @@
 ;; This is a black box: we throw the task over the fence and are assured that it
 ;; will eventually run, but we have no indication of when.
 (defn schedule [task]
+  ;; (println "adding: " task)
   (.add stack task))
 
 (defn run-task [[f arg]]
@@ -56,39 +51,98 @@
 
 (defn run! []
   (when-let [task (next-task)]
+    ;; (println "running: " task)
     (run-task task)
     (recur)))
 
 (def xkeys
-  {:return (ast/keyword "return")
-   :error  (ast/keyword "error")
-   :env    (ast/keyword "env")})
+  {:return  (ast/keyword "return")
+   :error   (ast/keyword "error")
+   :unbound (ast/keyword "unbound")
+   :env     (ast/keyword "env")})
+
+(defn captured? [m]
+  (true? (::captured? m)))
+
+(defn capture-ccs []
+  {::captured? true})
+
+(defn empty-ccs []
+  {})
+
+(defn send! [ch msg]
+  ;; FIXME: oversimplification using continuations as channels.
+  (ch msg))
+
+(defn emission! [[chname msg] ccs]
+  (let [ch (get ccs chname)]
+    (if ch
+      (send! ch msg)
+      (let [ch (get ccs (xkeys :unbound))]
+        (if ch
+          (send! ch [chname msg])
+          (throw (RuntimeException.
+                  (str "Can't deliver message: " msg " to " chname))))))))
 
 (defn with-return [ccs cont]
   (assoc ccs (xkeys :return) cont))
 
 (defn return {:style/indent 1} [ccs v]
-  #_(send! (lookup ccs (xkeys :return)) v))
+  (send! (get ccs (xkeys :return)) v))
 
 (defn error [ccs e]
-  (schedule [(get ccs (xkeys :error)) e]))
+  (send! (get ccs (xkeys :error)) e))
 
 (defrecord Stream [cache offset ch])
 
+(defn stream? [x]
+  (instance? Stream x))
 
-(defn call [f args dyn ccs]
-  (try
-    (return ccs (clojure.core/apply (:f f) args))
-    (catch Throwable e (error ccs {:msg "Call error"
-                                   :ex e}))))
+;;;;; Primitives
 
-(defn maccall [f args dyn ccs]
-  ((:f f) args dyn ccs))
+(defn primitive-call [f args dyn ccs]
+  ((:f f) f args dyn ccs))
 
 ;;;;; Env
 
 (defn empty-env []
   {})
+
+(defn unbound-error [s dyn]
+  nil)
+
+(defn delayed? [v]
+  (symbol? v))
+
+(defn dyn-bound? [s dyn]
+  (contains? dyn s))
+
+(defn dyn-lookup [s dyn]
+  (let [v (get dyn s)]
+    (if-let [m (meta v)]
+      (case (:type m)
+        :param (ast/delay s v 1)
+        :recur (ast/recursion v))
+      v)))
+
+(defn lex [x]
+  (-> x meta :lex (get x)))
+
+(defn lex-bound? [s]
+  (not (nil? (lex s))))
+
+(defn lex-lookup [s]
+  (lex s))
+
+(defn resolve [s dyn]
+  ;; (println s (dyn-bound? s dyn) (lex-lookup s))
+  (cond
+    (dyn-bound? s dyn) (dyn-lookup s dyn)
+    (lex-bound? s)     (lex-lookup s)
+    true               (unbound-error s dyn)))
+
+(defn extend [dyn & kvs]
+  (clojure.core/apply assoc dyn kvs))
 
 ;;;;; Interpreter
 
@@ -126,6 +180,7 @@
 
   janus.ast.Delay
   (reduce [x dyn ccs]
+    (println "delay" x)
     (if-let [r (resolve [(:sym x) (:ref x)] dyn)]
       ;; (println x dyn)
       (ev-chain r dyn (dec (:depth x)) ccs)
@@ -146,10 +201,12 @@
 
   janus.ast.Delay
   (eval [x dyn ccs]
+    (println "eval delay" x)
     (return ccs (ast/delay (:sym x) (:ref x) (inc (:depth x)))))
 
   janus.ast.Pair ; (I (P x y)) => (A (I x) y)
   (eval [x dyn ccs]
+    (println "eval pair: " x)
     (eval (head x) dyn (with-return ccs #(apply % (tail x) dyn ccs))))
 
   janus.ast.Immediate
@@ -162,7 +219,8 @@
 
   janus.ast.Symbol
   (eval [s dyn ccs]
-    (resolve s dyn (with-return ccs #(reduce % (empty-env) ccs)))))
+    ;; (println s (resolve s dyn)
+    (reduce (resolve s dyn) (empty-env) ccs)))
 
 (extend-protocol Apply
   janus.ast.Application ; (A (A x y) z) proceeds from inside out:
@@ -173,13 +231,10 @@
   (apply [head tail dyn ccs]
     (return ccs (ast/application head tail)))
 
-  janus.ast.PrimitiveMacro
-  (apply [mac args dyn ccs] ; macros receive unevaluated arguments and context
-    (maccall mac args dyn ccs))
-
-  janus.ast.PrimitiveFunction
-  (apply [f args dyn ccs] ; reduce the arguments before calling the primitive
-    (reduce args dyn (with-return ccs #(call f % dyn ccs))))
+  janus.ast.Primitive
+  (apply [x args dyn ccs] ; macros receive unevaluated arguments and context
+    (println "primitive " x)
+    (primitive-call x args dyn ccs))
 
   janus.ast.Mu
   (apply [μ args dyn ccs]
@@ -187,3 +242,154 @@
             (with-return ccs
               (fn [args]
                 (reduce (body μ) (extend dyn [(params μ) (id μ)] args) ccs))))))
+
+;;;;; Builtins
+
+(defn createμ [_ args dyn ccs]
+  (let [[params body] args
+        id            (gensym)]
+    (reduce params dyn (with-return ccs
+                         (fn [params]
+                           (reduce body (extend dyn params (with-meta id
+                                                             {:type :param}))
+                                   (with-return ccs
+                                              (fn [body]
+                                                (return ccs
+                                                  (ast/μ id params body))))))))))
+
+(defn args-reduction
+  {:style/indent 3}
+  [acc args dyn ccs]
+  (if (seq args)
+    (eval (first args) dyn
+          (with-return ccs
+            (fn [k]
+              (reduce (second args) dyn
+                      (with-return ccs
+                        (fn [v]
+                          (println "emit-reduction" [k v])
+                          (args-reduction (conj acc [k v]) (drop 2 args)
+                                          dyn ccs)))))))
+    (return ccs acc)))
+
+(defn emit [_ args dyn ccs]
+  (args-reduction [] args dyn
+    (with-return ccs
+      (fn [kvs]
+        (if (captured? ccs)
+          (return ccs (ast/emission kvs))
+          (dorun (map #(emission! % ccs) kvs)))))))
+
+(defn first* [args dyn ccs]
+  (reduce args dyn (with-return ccs
+                     (fn [[v]]
+                       #_(if (stream? v)
+                         (stream-first v ccs)
+                         (return ccs (first v)))))))
+
+(defn rest* [args dyn ccs]
+  (reduce args dyn (with-return ccs
+                     (fn [[v]]
+                       #_(if (stream? v)
+                         (stream-rest v ccs)
+                         ;; REVIEW: Might want to cast this into a vector...
+                         (return ccs (rest v)))))))
+
+(def macros
+  {"μ"      createμ
+   ;;   "ν"       createν
+   "emit"   emit
+   ;;   "select"  select
+   "first*" first*
+   "rest*"  rest*})
+
+(defn nth* [c i]
+  (nth c (dec i)))
+
+(def fns
+  {"+*"   +
+   "**"   *
+   "-*"   -
+   "/*"   /
+   ">*"   >
+   "<*"   <
+   "=*"   =
+   "mod*" mod
+
+   "count*" count
+   "nth*"   nth* ; Base 1 indexing
+   })
+
+(defn reduced? [x]
+  (cond
+    (vector? x) (every? reduced? x)
+    true (not (str/starts-with? (str (type x)) "class janus.ast"))))
+
+(defn pwrap [f]
+  "Wraps a host (pure) function into the channel system as a primitive.
+  Throwables are caught and sent on the `:error` channel if connected."
+  (fn [p args dyn ccs]
+    (reduce args dyn (with-return ccs
+                       (fn [args]
+                         (if (reduced? args )
+                           (try
+                             (let [v (clojure.core/apply f args)]
+                               (return ccs v))
+                             (catch Throwable e
+                               (error ccs {:msg       "Error caught in pFn."
+                                           :exception e})))
+                           (return ccs (ast/application p args))))))))
+
+(defn tagged [f]
+  (fn [[k v]]
+    (let [k' (ast/symbol k)]
+      [k' (f (with-meta v {:name k'}))])))
+
+(defn tag-primitives [x]
+  (into {} (map (tagged ast/->Primitive)) x))
+
+(def base-env
+  (merge
+   (tag-primitives macros)
+   (tag-primitives (into {} (map (fn [[k v]] [k (pwrap v)])) fns))))
+
+;;;;; namespaces
+
+;;;;; repl
+
+(def srcpath "../src/")
+(def bootxprl (str srcpath "boot.xprl"))
+
+(def env (atom base-env))
+
+(def out (atom nil))
+
+(defn go! [f ccs]
+  (schedule [(fn [_]  (eval f (empty-env) ccs)) []])
+  (run!))
+
+(defn ev [s]
+  (go! (:form (r/read (r/string-reader s) @env))
+       {(xkeys :return)  #(do (reset! out %) (println %))
+        (xkeys :env)     #(swap! env assoc (first %) (second %))
+        ;; (xkeys :unbound) (fn [x] (println "Unbound!" x))
+        (xkeys :error)   (fn [e] (println {:msg   "top level error"
+                                           :error e}))}))
+
+(defn loadfile [envatom fname]
+  (let [conts {(xkeys :env)    #(swap! envatom assoc (first %) (second %))
+               ;; FIXME: This should log a warning. It's not a fatal error
+               (xkeys :return) #(throw (RuntimeException. "return to top level!"))
+               (xkeys :error)  (fn [x]
+                                 (println "Error: " x))}]
+    (loop [reader (r/file-reader fname)]
+      (let [reader (r/read reader @envatom)
+            form   (:form reader)]
+        (if (= :eof form)
+          @envatom
+          (do
+            (go! form (with-return conts println))
+            (recur reader)))))))
+
+(defmacro inspect [n]
+  `(-> @env (get (ast/symbol ~(name n))) ast/inspect))
