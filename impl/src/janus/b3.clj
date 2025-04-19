@@ -7,6 +7,12 @@
    [janus.ast :as ast]
    [janus.reader :as r]))
 
+(def verbose true)
+
+(defmacro trace! [f n args]
+  (when verbose
+    `(println ~(name f) ~(name n) ~args)))
+
 (defprotocol Reduce
   (reduce [x dyn ccs]))
 
@@ -109,7 +115,9 @@
   {})
 
 (defn unbound-error [s dyn]
-  nil)
+  ;; FIXME: We need this fallthrough for delays, but we really should be
+  ;; refusing to compile on this error.
+  (trace! "Unbound symbol error: " s (meta s)))
 
 (defn delayed? [v]
   (symbol? v))
@@ -162,82 +170,108 @@
 (extend-protocol Reduce
   Object
   (reduce [x _ ccs]
+    (trace! :reduce :Obj x)
     (return ccs x))
 
   clojure.lang.PersistentVector
   (reduce [x dyn ccs]
+    (trace! :reduce :L x)
     (reduce-coll [] x dyn ccs))
 
   janus.ast.Immediate
   (reduce [x dyn ccs]
+    (trace! :reduce :I x)
     (eval (form x) dyn ccs))
 
   janus.ast.Mu
   (reduce [x dyn ccs]
+    (trace! :reduce :μ x)
     (reduce (body x) dyn (with-return (capture-ccs)
                            (fn [body]
                              (return ccs (ast/μ (id x) (params x) body))))))
 
   janus.ast.Delay
   (reduce [x dyn ccs]
-    (println "delay" x)
+    (trace! :reduce :D [x (resolve [(:sym x) (:ref x)] dyn)])
     (if-let [r (resolve [(:sym x) (:ref x)] dyn)]
       ;; (println x dyn)
       (ev-chain r dyn (dec (:depth x)) ccs)
       (return ccs x)))
 
+  janus.ast.DelayedApplication
+  (reduce [x dyn ccs]
+    (reduce (head x) dyn
+            (with-return ccs
+              (fn [head]
+                (apply head (:tail x) dyn
+                       (with-return ccs
+                         #(ev-chain % dyn (dec (:depth x)) ccs)))))))
+
   janus.ast.Application
   (reduce [x dyn ccs]
+    (trace! :reduce :A x)
     (reduce (head x) dyn (with-return ccs #(apply % (tail x) dyn ccs)))))
 
 (extend-protocol Eval
   Object
   (eval [x _ ccs]
+    (trace! :eval :Obj x)
     (return ccs x))
 
   clojure.lang.PersistentVector ; (I (L x y ...)) => (L (I x) (I y) ...)
   (eval [xs dyn ccs]
+    (trace! :eval :L xs)
     (reduce (into [] (map ast/immediate) xs) dyn ccs))
 
   janus.ast.Delay
   (eval [x dyn ccs]
-    (println "eval delay" x)
+    (trace! :eval :D x)
     (return ccs (ast/delay (:sym x) (:ref x) (inc (:depth x)))))
+
+  janus.ast.DelayedApplication
+  (eval [x dyn ccs]
+    (trace! :eval :DA x)
+    (return ccs (ast/delayedapplication (:head x) (:tail x) (inc (:depth x)))))
 
   janus.ast.Pair ; (I (P x y)) => (A (I x) y)
   (eval [x dyn ccs]
-    (println "eval pair: " x)
+    (trace! :eval :P x)
     (eval (head x) dyn (with-return ccs #(apply % (tail x) dyn ccs))))
 
   janus.ast.Immediate
   (eval [x dyn ccs]
+    (trace! :eval :I x)
     (eval (form x) dyn (with-return ccs #(eval % dyn ccs))))
 
   janus.ast.Application ; (I (A x y)) must be treated in applicative order.
   (eval [x dyn ccs]
+    (trace! :eval :A x)
     (reduce x dyn (with-return ccs #(eval % dyn ccs))))
 
   janus.ast.Symbol
   (eval [s dyn ccs]
-    ;; (println s (resolve s dyn)
+    (trace! :eval :S [s (resolve s dyn)])
     (reduce (resolve s dyn) (empty-env) ccs)))
 
 (extend-protocol Apply
   janus.ast.Application ; (A (A x y) z) proceeds from inside out:
   (apply [head tail dyn ccs]
+    (trace! :apply :A [head tail])
     (reduce head dyn (with-return ccs #(apply % tail dyn ccs))))
 
   janus.ast.Delay
   (apply [head tail dyn ccs]
-    (return ccs (ast/application head tail)))
+    (trace! :apply :D [head tail])
+    (return ccs (ast/delayedapplication head tail 0)))
 
   janus.ast.Primitive
   (apply [x args dyn ccs] ; macros receive unevaluated arguments and context
-    (println "primitive " x)
+    (trace! :apply :F [x args])
     (primitive-call x args dyn ccs))
 
   janus.ast.Mu
   (apply [μ args dyn ccs]
+    (trace! :apply :μ [μ args])
     (reduce args dyn
             (with-return ccs
               (fn [args]
@@ -252,7 +286,7 @@
                          (fn [params]
                            (reduce body (extend dyn params (with-meta id
                                                              {:type :param}))
-                                   (with-return ccs
+                                   (with-return (capture-ccs)
                                               (fn [body]
                                                 (return ccs
                                                   (ast/μ id params body))))))))))
@@ -267,7 +301,6 @@
               (reduce (second args) dyn
                       (with-return ccs
                         (fn [v]
-                          (println "emit-reduction" [k v])
                           (args-reduction (conj acc [k v]) (drop 2 args)
                                           dyn ccs)))))))
     (return ccs acc)))
@@ -276,6 +309,7 @@
   (args-reduction [] args dyn
     (with-return ccs
       (fn [kvs]
+        (trace! :emission "" [(captured? ccs) kvs])
         (if (captured? ccs)
           (return ccs (ast/emission kvs))
           (dorun (map #(emission! % ccs) kvs)))))))
@@ -338,7 +372,7 @@
                              (catch Throwable e
                                (error ccs {:msg       "Error caught in pFn."
                                            :exception e})))
-                           (return ccs (ast/application p args))))))))
+                           (return ccs (ast/delayedapplication p args 0))))))))
 
 (defn tagged [f]
   (fn [[k v]]
@@ -370,7 +404,8 @@
 
 (defn ev [s]
   (go! (:form (r/read (r/string-reader s) @env))
-       {(xkeys :return)  #(do (reset! out %) (println %))
+       {
+        (xkeys :return)  #(do (reset! out %) (println %))
         (xkeys :env)     #(swap! env assoc (first %) (second %))
         ;; (xkeys :unbound) (fn [x] (println "Unbound!" x))
         (xkeys :error)   (fn [e] (println {:msg   "top level error"

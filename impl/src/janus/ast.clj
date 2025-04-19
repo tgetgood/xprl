@@ -185,25 +185,6 @@
 (defn fname [f]
   (or (:name (meta f)) (str f)))
 
-(defrecord PrimitiveFunction [f]
-  Object
-  (toString [_]
-    (str "#pFn[" (fname f) "]")))
-
-(defmethod print-method PrimitiveFunction [{:keys [f]} ^Writer w]
-  (.write w "#pFn[")
-  (if-let [n (:name (meta f))]
-    (.write w (str n))
-    (print-method f w))
-  (.write w "]"))
-
-(defmethod pp/simple-dispatch PrimitiveFunction [{:keys [f]}]
-  (pp/pprint-logical-block
-   :prefix "#pFn[" :suffix "]"
-   (if-let [name (:name (meta f))]
-     (pp/write-out name)
-     (pp/write-out f))))
-
 (defrecord Primitive [f]
   Object
   (toString [_]
@@ -228,10 +209,40 @@
   (toString [_]
     (str "(#ν " params " " body ")")))
 
-(defrecord Delay [sym ref depth])
+(defn nest-eval [base n]
+  (if (pos? n)
+    (immediate (nest-eval base (dec n)))
+    base))
+
+(defrecord Delay [sym ref depth]
+  Object
+  (toString [_]
+    (str (nest-eval sym depth))))
+
+(defmethod print-method Delay [{:keys [sym depth]} w]
+  (print-method (nest-eval sym depth) w))
+
+(defmethod pp/simple-dispatch Delay  [{:keys [sym depth]}]
+  (pp/simple-dispatch (nest-eval sym depth)))
 
 (defn delay [s r d]
-  (Delay. s r d))
+  (with-meta (Delay. s r d)
+    (select-keys (meta s) [:file :string :line :col])))
+
+(defrecord DelayedApplication [head tail depth]
+  Object
+  (toString [_]
+    (str (nest-eval (application head tail) depth))))
+
+(defmethod print-method DelayedApplication [{:keys [head tail depth]} w]
+  (print-method (nest-eval (application head tail) depth) w))
+
+(defmethod pp/simple-dispatch DelayedApplication [{:keys [head tail depth]}]
+  (pp/simple-dispatch (nest-eval (application head tail) depth)))
+
+(defn delayedapplication [head tail depth]
+  (with-meta (->DelayedApplication head tail depth)
+    (select-keys (meta head) [:file :string :line :col])))
 
 (defrecord Emission [kvs])
 
@@ -321,13 +332,6 @@
     (.write w "L\n")
     (dorun (map #(insp % w (inc level)) form)))
 
-  PrimitiveFunction
-  (insp [form ^Writer w level]
-    (spacer w level)
-    (.write w "pFn[")
-    (.write w (str (:name (meta (:f form)))))
-    (.write w "]\n"))
-
   Primitive
   (insp [form ^Writer w level]
     (spacer w level)
@@ -341,15 +345,16 @@
     (.write w "μ[")
     (.write w (str (:name form)))
     (.write w "]\n")
-    (insp (:params form) w level)
+    (insp (:params form) w (inc level))
     (insp (:body form) w level))
 
   Delay
   (insp [form ^Writer w level]
-    (spacer w level)
-    (.write w "D[")
-    (.write w (str (:sym form) "," (:ref form) "," (:depth form)))
-    (.write w "]\n"))
+    (insp (nest-eval (:sym form) (:depth form)) w level))
+
+  DelayedApplication
+  (insp [form ^Writer w level]
+    (insp (nest-eval (application (:head form) (:tail form)) (:depth form)) w level))
 
   Emission
   (insp [form ^Writer w level]
