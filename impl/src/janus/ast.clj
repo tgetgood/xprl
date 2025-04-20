@@ -244,7 +244,18 @@
   (with-meta (->DelayedApplication head tail depth)
     (select-keys (meta head) [:file :string :line :col])))
 
-(defrecord Emission [kvs])
+(defrecord Emission [kvs]
+  Object
+  (toString [_]
+    (str "#E" (into {} kvs))))
+
+(defmethod print-method Emission [{:keys [kvs]} ^Writer w]
+  (.write w "#E")
+  (print-method (into {} kvs) w))
+
+(defmethod pp/simple-dispatch Emission [{:keys [kvs]}]
+  (pp/write-out (symbol "#E"))
+  (pp/simple-dispatch (into {} kvs)))
 
 (defn emission [kvs]
   (Emission. kvs))
