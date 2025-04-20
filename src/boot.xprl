@@ -43,8 +43,8 @@
 
 (def count (wrap . count*))
 
-(def first (wrap . first*))
-(def rest (wrap . rest*))
+;; (def first (wrap . first*))
+;; (def rest (wrap . rest*))
 
 (def + (wrap . +*))
 (def - (wrap . -*))

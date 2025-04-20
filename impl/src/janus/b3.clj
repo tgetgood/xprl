@@ -1,5 +1,5 @@
 (ns janus.b3
-  (:refer-clojure :exclude [reduce eval apply extend resolve run! reduced?])
+  (:refer-clojure :exclude [reduce eval apply extend resolve run! reduced? delay?])
   (:import
    (java.util.concurrent ConcurrentLinkedDeque))
   (:require
@@ -11,7 +11,7 @@
 
 (defmacro trace! [f n args]
   (when verbose
-    `(println ~(name f) ~(name n) ~args)))
+    `(println (name ~f) (name ~n) ~args)))
 
 (defprotocol Reduce
   (reduce [x dyn ccs]))
@@ -82,6 +82,7 @@
 
 (defn emission! [[chname msg] ccs]
   (let [ch (get ccs chname)]
+    (trace! :emit (str chname) (if ch msg [msg ::unbound]))
     (if ch
       (send! ch msg)
       (let [ch (get ccs (xkeys :unbound))]
@@ -94,10 +95,10 @@
   (assoc ccs (xkeys :return) cont))
 
 (defn return {:style/indent 1} [ccs v]
-  (send! (get ccs (xkeys :return)) v))
+  (emission! [(xkeys :return) v] ccs))
 
 (defn error [ccs e]
-  (send! (get ccs (xkeys :error)) e))
+  (emission! [(xkeys :error) e] ccs))
 
 (defrecord Stream [cache offset ch])
 
@@ -118,7 +119,7 @@
   ;; FIXME: We need this fallthrough for delays, but we really should be
   ;; refusing to compile on this error.
   (trace! "Unbound symbol error: " "" [s dyn (dissoc (meta s) :lex)])
-  (throw (RuntimeException. "Unbound symbol, cannot proceed.")))
+  (throw (RuntimeException. (str "Unbound symbol " s ", cannot proceed."))))
 
 (defn delayed? [v]
   (symbol? v))
@@ -154,7 +155,11 @@
     true               (unbound-error s dyn)))
 
 (defn extend [dyn & kvs]
-  (clojure.core/apply assoc dyn kvs))
+  (if (empty? kvs)
+    dyn
+    (if (= ::anon (first kvs))
+      (recur dyn (drop 2 kvs))
+      (recur (assoc dyn (first kvs) (second kvs)) (drop 2 kvs)))))
 
 ;;;;; Interpreter
 
@@ -196,14 +201,9 @@
 
   janus.ast.Delay
   (reduce [x dyn ccs]
-    (trace! :reduce :D [x (:depth x) dyn])
+    (trace! :reduce :D [x (:depth x) (get dyn [(:sym x) (:ref x)])])
     (if-let [r (delayed-resolve [(:sym x) (:ref x)] dyn)]
-      ;; (println x dyn)
-      (ev-chain r dyn (dec (:depth x))
-                (with-return ccs
-                  (fn [v]
-                    (trace! :resolution :D [x v])
-                    (reduce v dyn ccs))))
+      (ev-chain r dyn (dec (:depth x)) ccs)
       (return ccs x)))
 
   janus.ast.DelayedApplication
@@ -218,11 +218,11 @@
 
   janus.ast.Emission
   (reduce [x dyn ccs]
-    (trace! :reduce :E [(captured? ccs) x])
-    (if (captured? ccs)
-      (return ccs x)
-      (reduce (:kvs x) dyn (with-return ccs
-                             (fn [kvs]
+    (trace! :reduce :E [(captured? ccs) x dyn])
+    (reduce (:kvs x) dyn (with-return ccs
+                           (fn [kvs]
+                             (if (captured? ccs)
+                               (return ccs (ast/emission kvs))
                                (dorun (map #(emission! % ccs) kvs)))))))
 
   janus.ast.Application
@@ -280,7 +280,9 @@
   janus.ast.Delay
   (apply [head tail dyn ccs]
     (trace! :apply :D [head tail])
-    (return ccs (ast/delayedapplication head tail 0)))
+    (reduce tail dyn (with-return ccs
+                       (fn [tail]
+                         (return ccs (ast/delayedapplication head tail 0))))))
 
   janus.ast.Primitive
   (apply [x args dyn ccs] ; macros receive unevaluated arguments and context
@@ -293,6 +295,7 @@
     (reduce args dyn
             (with-return ccs
               (fn [args]
+                (trace! :reduce :μ-body [(params μ) args (body μ)])
                 (reduce (body μ) (extend dyn [(params μ) (id μ)] args (:name μ) μ)
                         ccs))))))
 
@@ -339,19 +342,19 @@
   (args-reduction [] args dyn
     (with-return ccs
       (fn [kvs]
-        (trace! :emission "" [(captured? ccs) kvs])
+        (trace! :emission  (str (captured? ccs)) kvs)
         (if (captured? ccs)
           (return ccs (ast/emission kvs))
           (dorun (map #(emission! % ccs) kvs)))))))
 
-(defn first* [args dyn ccs]
+(defn first* [_ args dyn ccs]
   (reduce args dyn (with-return ccs
-                     (fn [[v]]
+                     (fn [v]
                        #_(if (stream? v)
                          (stream-first v ccs)
                          (return ccs (first v)))))))
 
-(defn rest* [args dyn ccs]
+(defn rest* [_ args dyn ccs]
   (reduce args dyn (with-return ccs
                      (fn [[v]]
                        #_(if (stream? v)
@@ -384,9 +387,14 @@
    "nth*"   nth* ; Base 1 indexing
    })
 
+(defn delay? [x]
+  (or (instance? janus.ast.Delay x) (instance? janus.ast.DelayedApplication x)))
+
 (defn reduced? [x]
-  (assert (vector? x) "args to primitive fn must be a vector.")
-  (not-any? #(instance? janus.ast.Delay %) x))
+  (cond
+    (vector? x) (not-any? delay? x)
+    (delay? x)  false
+    true        (assert false ("Unknown pFn args " (type x) " " x))) )
 
 (defn pwrap [f]
   "Wraps a host (pure) function into the channel system as a primitive.
@@ -395,7 +403,7 @@
     (reduce args dyn (with-return ccs
                        (fn [args]
                          (trace! :apply :pFn [p f (reduced? args) (map type args) args])
-                         (if (reduced? args )
+                         (if (reduced? args)
                            (let [v (try
                                      (clojure.core/apply f args)
                                      (catch Throwable e
@@ -404,7 +412,6 @@
                                                    :f         f
                                                    :args      args
                                                    :exception e})))]
-                             (trace! :return :pFn v)
                              (when v (return ccs v)))
                            (return ccs (ast/delayedapplication p args 0))))))))
 
