@@ -1,5 +1,5 @@
 (ns janus.ast
-  (:refer-clojure :exclude [reduced? symbol keyword keyword? destructure delay])
+  (:refer-clojure :exclude [reduced? symbol symbol? keyword keyword? destructure delay])
   (:require
    [clojure.pprint :as pp]
    [clojure.string :as str]
@@ -40,21 +40,26 @@
 
 (ps Symbol)
 
-(defonce dot (->Symbol ["."]))
-
 (defn split-symbolic [s]
   (if (str/includes? s ".")
     (str/split s #"\.")
     [s]))
 
+(def unbound :unbound)
+
 (defn symbol
-  ([s] (symbol s :unbound))
+  ([s] (symbol s unbound))
   ([s b]
    (cond
      ;; TODO: Intern symbols
      (= s ".")            dot
      (re-find #"^\.+$" s) (->Symbol [s b])
      :else                (->Symbol (split-symbolic s) b))))
+
+(defonce dot (->Symbol ["."] unbound))
+
+(defn symbol? [s]
+  (instance? Symbol s))
 
 (defn keyword [s]
   (->Keyword (split-symbolic s)))
@@ -139,7 +144,8 @@
 
 (defn immediate
   [form]
-  (with-meta (->Immediate form) (meta form)))
+  (with-meta (->Immediate form)
+    (assoc (meta form) :reduced? false)))
 
 (ps Immediate)
 
@@ -156,7 +162,7 @@
 (defn application
   [head tail]
   (with-meta (->Application head tail)
-    (select-keys (meta head) [:file :string :line :col])))
+    (assoc (meta head) :reduced? false)))
 
 (ps Application)
 
@@ -228,8 +234,7 @@
   (pp/simple-dispatch (nest-eval sym depth)))
 
 (defn delay [s r d]
-  (with-meta (Delay. s r d)
-    (select-keys (meta s) [:file :string :line :col])))
+  (with-meta (Delay. s r d) (meta s)))
 
 (defrecord DelayedApplication [head tail depth]
   Object
@@ -244,7 +249,7 @@
 
 (defn delayedapplication [head tail depth]
   (with-meta (->DelayedApplication head tail depth)
-    (select-keys (meta head) [:file :string :line :col])))
+    (meta head)))
 
 (defrecord Emission [kvs]
   Object
