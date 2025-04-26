@@ -1,5 +1,3 @@
-{:deps    {org.clojure/clojure   {:mvn/version "1.12.0"}
-           com.taoensso/telemere {:mvn/version "1.0.0-RC1"}
-           com.taoensso/tufte    {:mvn/version "2.6.3"}}
- :paths   ["src"]
- :aliases {:repl {:exec-fn janus.core/repl}}}
+{:deps     {org.clojure/clojure   {:mvn/version "1.12.0"}
+            com.taoensso/telemere {:mvn/version "1.0.0-RC1"}}
+ :paths    ["src"]}
