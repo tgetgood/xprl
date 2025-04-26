@@ -47,6 +47,8 @@
 
 (def unbound :unbound)
 
+(declare dot)
+
 (defn symbol
   ([s] (symbol s unbound))
   ([s b]
@@ -208,6 +210,25 @@
 (defmethod pp/simple-dispatch Primitive [{:keys [f]}]
   (pp/pprint-logical-block
    :prefix "#F[" :suffix "]"
+   (if-let [name (:name (meta f))]
+     (pp/write-out name)
+     (pp/write-out f))))
+
+(defrecord Macro [f]
+  Object
+  (toString [_]
+    (str "#M[" (fname f) "]")))
+
+(defmethod print-method Macro [{:keys [f]} ^Writer w]
+  (.write w "#M[")
+  (if-let [n (:name (meta f))]
+    (.write w (str n))
+    (print-method f w))
+  (.write w "]"))
+
+(defmethod pp/simple-dispatch Macro [{:keys [f]}]
+  (pp/pprint-logical-block
+   :prefix "#M[" :suffix "]"
    (if-let [name (:name (meta f))]
      (pp/write-out name)
      (pp/write-out f))))

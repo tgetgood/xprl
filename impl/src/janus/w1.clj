@@ -1,6 +1,6 @@
 (ns janus.w1
   "Tree walking simplifier. Maybe backtracking is overkill."
-  (:refer-clojure :exclude [reduce eval apply extend resolve run! reduced? delay?])
+  (:refer-clojure :exclude [reduce eval apply extend resolve run! reduced? reduced])
   (:import
    (java.util.concurrent ConcurrentLinkedDeque))
   (:require
@@ -9,32 +9,50 @@
    [janus.ast :as ast]
    [janus.reader :as r]))
 
+(def verbose true)
+
+(defmacro trace! [& args]
+  (when verbose
+    `(println ~@args)))
+
 (declare reduce-walk)
 
 ;;;;; env
 
 (defn top-resolve [s]
-  (println (-> s meta :lex (get s)))
+  (trace! "static resolve" s (-> s meta :lex (get s)))
   (if-let [b (-> s meta :lex (get s))]
-    (with-meta (ast/symbol (str s) b) (meta s))
+    (with-meta b (meta s))
     (throw (RuntimeException. (str "unresolvable symbol: " s)))))
 
 (defn resolve [s]
   (let [b (:binding s)]
-    (println s b)
+    (trace! "resolve" s b)
     (cond
       (= b :unbound) (top-resolve s)
       (symbol? b)    s
-      true           (if (instance? clojure.lang.IMeta b)
-                       (with-meta b (assoc (meta s) :reduced? true))
-                       b))))
+      true           b)))
 
 ;;;;; application
 
+(defn reduced? [x]
+  (if (instance? clojure.lang.IMeta x)
+    (:reduced? (meta x))
+    true))
+
+(defn reduced [x]
+  (if (instance? clojure.lang.IMeta x)
+    (with-meta x (assoc (meta x) :reduced? true))
+    x))
+
 (defn primitive-call [head tail]
-  (println head)
-  (println tail (meta tail))
-  ((:f head) head tail))
+  (let [args (reduce-walk tail)]
+    (if (reduced? args)
+      (clojure.core/apply (:f head) args)
+      (ast/application head args))))
+
+(defn macro-call [head tail]
+  ((:f head) tail))
 
 (defn param-walk [id params args body]
   (let [f (fn [form]
@@ -49,7 +67,7 @@
 (defn μ-invoke [μ args]
   (let [args' (reduce-walk args)
         body' (param-set μ args')]
-    (reduce-walk body')))
+    body'))
 
 ;;;;; walker
 
@@ -60,64 +78,69 @@
    janus.ast.Symbol              :S
    janus.ast.Application         :A
    janus.ast.Primitive           :F
+   janus.ast.Macro               :M
    janus.ast.Mu                  :μ})
+
+(declare eval-walk)
 
 (def eval-rules
   {;; (I (L x y ...)) => (L (I x) (I y) ...)
-   :L (fn [xs] (let [ys (reduce-walk (into [] (map ast/immediate) xs))]
-                 (with-meta ys {:reduced? (every? reduced? (map meta ys))})))
+   :L (fn [xs] (into [] (map ast/immediate) xs))
    ;; (I (P x y)) => (A (I x) y)
-   :P (fn [{:keys [head tail]}] (reduce-walk
-                                 (ast/application (ast/immediate head) tail)))
-   :S (fn [s] (reduce-walk (resolve s)))})
+   :P (fn [{:keys [head tail]}] (ast/application (ast/immediate head) tail))
+   :I (fn [x] (ast/immediate (eval-walk x)))
+   :S (fn [s] (resolve s))})
 
 (defn eval-walk [{:keys [form]}]
+  (trace! "ewalk" (type form) form)
   (if-let [f (eval-rules (type-table (type form)))]
-    (f form)
+    (let [v (f form)]
+      (trace! "ewalkm" (type form) form v (= v form))
+      (if (= v form)
+        (ast/immediate v)
+        v))
     form))
 
 (def apply-rules
   {:μ μ-invoke
-   :F primitive-call})
+   :F primitive-call
+   :M macro-call})
 
 (defn apply-walk [{:keys [head tail] :as x}]
-  (println head (type head))
+  (trace! "awalk" (type head) x)
   (let [h (reduce-walk head)]
     (if-let [f (apply-rules (type-table (type h)))]
-      (f head tail)
+      (f h tail)
       (with-meta (ast/application h tail) (meta x)))))
 
-(def base-rules
+(def reduce-rules
   {:I (memoize eval-walk)
-   :A (memoize apply-walk)})
+   :A (memoize apply-walk)
+   :μ (fn [{:keys [id name params body]}]
+        (let [p'    (reduce-walk params)
+              body' (param-walk id p' id body)]
+          (ast/μ id name p' (reduce-walk body'))))
+   :L (fn [xs]
+        (let [ys (into [] (map reduce-walk) xs)]
+          (with-meta ys {:reduced? (every? reduced? ys)})))})
 
 (defn reduce-walk* [x]
-  (if-let [f (base-rules (type-table (type x)))]
-    (f x)
-    x))
+  (trace! "rwalk" (type x) x)
+  (if (reduced? x)
+    x
+    (if-let [f (reduce-rules (type-table (type x)))]
+      (let [v (f x)]
+        (if (= x v)
+          v
+          (reduce-walk (f x))))
+      x)))
 
 (def reduce-walk (memoize reduce-walk*))
 
-(defn reduced? [x]
-  (if (instance? clojure.lang.IMeta x)
-    (:reduced? (meta x))
-    true))
-
-(defn reduce-tree [x]
-  (if (reduced? x)
-    x
-    (let [o (reduce-walk x)]
-      (if (identical? o x)
-        x
-        (reduce-tree o)))))
-
-(defn simplify [x]
-  (walk/postwalk reduce-tree x))
-
 ;;;;; Builtins
 
-(defn createμ [_ [params body]]
-  (println "!!!!!!!"))
+(defn createμ [[params body]]
+  (ast/μ (gensym) "" params body))
 
 (def macros
   {"μ"      createμ
@@ -145,24 +168,18 @@
    "nth*"   nth* ; Base 1 indexing
    })
 
-(defn pwrap [f]
-  (fn [p args]
-    (if (reduced? args)
-      (reduce-walk (f args))
-      p)))
-
 (defn tagged [f]
   (fn [[k v]]
     (let [k' (ast/symbol k)]
       [k' (f (with-meta v {:name k'}))])))
 
-(defn tag-primitives [x]
-  (into {} (map (tagged ast/->Primitive)) x))
+(defn tag-primitives [x f]
+  (into {} (map (tagged f)) x))
 
 (def base-env
   (merge
-   (tag-primitives macros)
-   (tag-primitives (into {} (map (fn [[k v]] [k (pwrap v)])) fns))))
+   (tag-primitives macros ast/->Macro)
+   (tag-primitives fns ast/->Primitive)))
 
 ;;;;; UI
 
@@ -172,7 +189,7 @@
 (def env (atom base-env))
 
 (defn go! [f ccs]
-  (simplify (ast/immediate f)))
+  (reduce-walk (ast/immediate f)))
 
 (defn ev [s]
   (go! (:form (r/read (r/string-reader s) @env))
