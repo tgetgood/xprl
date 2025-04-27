@@ -35,18 +35,28 @@
 
 ;;;;; application
 
-(defn reduced? [x]
+(defn cut [x]
   (if (instance? clojure.lang.IMeta x)
-    (:reduced? (meta x))
+    (with-meta x (assoc (meta x) ::cut true))
+    x))
+
+(defn cut? [x]
+  (if (instance? clojure.lang.IMeta x)
+    (::cut (meta x))
     true))
 
-(defn reduced [x]
-  (if (instance? clojure.lang.IMeta x)
-    (with-meta x (assoc (meta x) :reduced? true))
-    x))
+(defn pending? [x]
+  (some #(instance? % x)
+            [janus.ast.Immediate janus.ast.Application janus.ast.Symbol]))
+
+(defn reduced? [x]
+  (if (vector? x)
+    (every? reduced? x)
+    (not (pending? x))))
 
 (defn primitive-call [head tail]
   (let [args (reduce-walk tail)]
+    (trace! "pcall" head args)
     (if (reduced? args)
       (clojure.core/apply (:f head) args)
       (ast/application head args))))
@@ -59,7 +69,7 @@
             (if (and (ast/symbol? form) (= (:names params) (:names form)))
               (ast/symbol (str form) args)
               form))]
-    (walk/prewalk f body)))
+    (walk/postwalk f body)))
 
 (defn param-set [{:keys [id params body]} args]
   (param-walk id params args body))
@@ -88,16 +98,20 @@
    :L (fn [xs] (into [] (map ast/immediate) xs))
    ;; (I (P x y)) => (A (I x) y)
    :P (fn [{:keys [head tail]}] (ast/application (ast/immediate head) tail))
-   :I (fn [x] (ast/immediate (eval-walk x)))
-   :S (fn [s] (resolve s))})
+   :I (fn [x] (let [v (eval-walk x)]
+                (if (pending? v)
+                  (ast/immediate v)
+                  v)))
+   :S resolve})
 
 (defn eval-walk [{:keys [form]}]
   (trace! "ewalk" (type form) form)
   (if-let [f (eval-rules (type-table (type form)))]
     (let [v (f form)]
-      (trace! "ewalkm" (type form) form v (= v form))
-      (if (= v form)
-        (ast/immediate v)
+      (trace! "ewalkstep" form v (type v) (pending? v))
+      (if (pending? v)
+          #_(or (instance? janus.ast.Immediate v) (instance? janus.ast.Symbol v))
+        (cut (ast/immediate v))
         v))
     form))
 
@@ -114,28 +128,24 @@
       (with-meta (ast/application h tail) (meta x)))))
 
 (def reduce-rules
-  {:I (memoize eval-walk)
-   :A (memoize apply-walk)
+  {:I (memoize eval-walk)  ; TODO: memoise
+   :A (memoize apply-walk) ; TODO: memoise
    :μ (fn [{:keys [id name params body]}]
         (let [p'    (reduce-walk params)
-              body' (param-walk id p' id body)]
+              body' (if (ast/symbol? p') (param-walk id p' id body) body)]
           (ast/μ id name p' (reduce-walk body'))))
-   :L (fn [xs]
-        (let [ys (into [] (map reduce-walk) xs)]
-          (with-meta ys {:reduced? (every? reduced? ys)})))})
+   :L (fn [xs] (into [] (map reduce-walk) xs))})
 
 (defn reduce-walk* [x]
   (trace! "rwalk" (type x) x)
-  (if (reduced? x)
-    x
-    (if-let [f (reduce-rules (type-table (type x)))]
-      (let [v (f x)]
-        (if (= x v)
-          v
-          (reduce-walk (f x))))
-      x)))
+  (if-let [f (reduce-rules (type-table (type x)))]
+    (let [v (f x)]
+      (if (or (= x v) (cut? v))
+        v
+        (reduce-walk (f x))))
+    x))
 
-(def reduce-walk (memoize reduce-walk*))
+(def reduce-walk (memoize reduce-walk*)) ; TODO: memoise
 
 ;;;;; Builtins
 
