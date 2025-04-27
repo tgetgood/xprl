@@ -80,6 +80,13 @@
         body' (param-set μ args')]
     body'))
 
+(defn μ-reduce [{:keys [name id params body]}]
+  (let [p'     (clean-param (reduce-walk params))
+        body'  (if (ast/symbol? p') (param-walk id p' id body) body)
+        body'' (reduce-walk body')]
+    (trace! "reduceμ" p' body'')
+    (ast/μ id name p' body'')))
+
 ;;;;; walker
 
 (def type-table
@@ -92,6 +99,19 @@
    janus.ast.Macro               :M
    janus.ast.Mu                  :μ})
 
+;; REVIEW: This is overengineering looked at simply. But the point is to force
+;; out the similarity in the three "types" of walkers and hopefully unify them.
+(defmacro defwalker [name rules params k found not-found]
+  `(defn ~name ~params
+     (let [t# (type ~k)
+           tk# (type-table t#)]
+       (trace! (name '~name) "rule:" tk# "arg:" ~k)
+       (if-let [f# (~rules tk#)]
+         (let [v# (f# ~k)]
+           (trace! (name '~name) "step" (type v#) v#)
+           (~found v#))
+         ~not-found))))
+
 (declare eval-walk)
 
 (def eval-rules
@@ -102,20 +122,16 @@
    :I (fn [x] (eval-walk x))
    :S resolve})
 
-(defn eval-walk [{:keys [form]}]
-  (trace! "ewalk" (type form) form)
-  (if-let [f (eval-rules (type-table (type form)))]
-    (let [v (f form)]
-      (trace! "ewalkstep" form v (type v) (unevalable? v))
-      (if (unevalable? v)
-        (ast/immediate v)
-        v))
-    form))
+(defwalker eval-walk eval-rules [{:keys [form]}] form
+  #(if (unevalable? %) (ast/immediate %) %)
+  form)
 
 (def apply-rules
   {:μ μ-invoke
    :F primitive-call
    :M macro-call})
+
+#_(defwalker apply-walk apply-rules [head tail] head )
 
 (defn apply-walk [{:keys [head tail] :as x}]
   (trace! "awalk" (type head) x)
@@ -126,25 +142,14 @@
 
 (def reduce-rules
   {:I eval-walk  ; TODO: memoise
-   :A apply-walk ; TODO: memoise
-   :μ (fn [{:keys [id name params body]}]
-        (let [p'    (clean-param (reduce-walk params))
-              body' (if (ast/symbol? p') (param-walk id p' id body) body)
-              body'' (reduce-walk body')]
-          (trace! "reduceμ" p' body'')
-          (ast/μ id name p' body'')))
+   :A apply-walk
+   #_(fn [{:keys [head tail]}] (apply-walk (reduce-walk head) tail)) ; TODO: memoise
+   :μ μ-reduce
    :L (fn [xs] (into [] (map reduce-walk) xs))})
 
-(defn reduce-walk* [x]
-  (trace! "rwalk" (type x) x)
-  (if-let [f (reduce-rules (type-table (type x)))]
-    (let [v (f x)]
-      (if (= x v)
-        v
-        (reduce-walk (f x))))
-    x))
-
-(def reduce-walk reduce-walk*) ; TODO: memoise
+(defwalker reduce-walk reduce-rules [x] x
+  #(if (= x %) % (reduce-walk %))
+  x)
 
 ;;;;; Builtins
 
