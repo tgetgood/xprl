@@ -50,14 +50,14 @@
     (every? reduced? x)
     (not (ast-indeterminate? x))))
 
-(defn primitive-call [head tail]
+(defn primitive-call [[head tail]]
   (let [args (reduce-walk tail)]
     (trace! "pcall" head args)
     (if (reduced? args)
       (clojure.core/apply (:f head) args)
       (ast/application head args))))
 
-(defn macro-call [head tail]
+(defn macro-call [[head tail]]
   ((:f head) tail))
 
 (defn param-walk [id params args body]
@@ -75,7 +75,7 @@
     (ast/symbol (str p) :μ-param)
     p))
 
-(defn μ-invoke [μ args]
+(defn μ-invoke [[μ args]]
   (let [args' (reduce-walk args)
         body' (param-set μ args')]
     body'))
@@ -101,13 +101,13 @@
 
 ;; REVIEW: This is overengineering looked at simply. But the point is to force
 ;; out the similarity in the three "types" of walkers and hopefully unify them.
-(defmacro defwalker [name rules params k found not-found]
+(defmacro defwalker [name rules params k arg found not-found]
   `(defn ~name ~params
      (let [t# (type ~k)
            tk# (type-table t#)]
-       (trace! (name '~name) "rule:" tk# "arg:" ~k)
+       (trace! (name '~name) "rule:" tk# "arg:" ~arg)
        (if-let [f# (~rules tk#)]
-         (let [v# (f# ~k)]
+         (let [v# (f# ~arg)]
            (trace! (name '~name) "step" (type v#) v#)
            (~found v#))
          ~not-found))))
@@ -122,7 +122,7 @@
    :I (fn [x] (eval-walk x))
    :S resolve})
 
-(defwalker eval-walk eval-rules [{:keys [form]}] form
+(defwalker eval-walk eval-rules [{:keys [form]}] form form
   #(if (unevalable? %) (ast/immediate %) %)
   form)
 
@@ -135,19 +135,13 @@
   identity
   (ast/application head tail))
 
-(defn apply-walk [head tail]
-  (trace! "awalk" (type head) head tail)
-  (if-let [f (apply-rules (type-table (type head)))]
-    (f head tail)
-    (ast/application head tail)))
-
 (def reduce-rules
   {:I eval-walk  ; TODO: memoise
    :A (fn [{:keys [head tail]}] (apply-walk (reduce-walk head) tail)) ; TODO: memoise
    :μ μ-reduce
    :L (fn [xs] (into [] (map reduce-walk) xs))})
 
-(defwalker reduce-walk reduce-rules [x] x
+(defwalker reduce-walk reduce-rules [x] x x
   #(if (= x %) % (reduce-walk %))
   x)
 
