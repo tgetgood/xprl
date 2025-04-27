@@ -1,11 +1,7 @@
 (ns janus.w1
   "Tree walking simplifier. Maybe backtracking is overkill."
-  (:refer-clojure :exclude [reduce eval apply extend resolve run! reduced? reduced])
-  (:import
-   (java.util.concurrent ConcurrentLinkedDeque))
+  (:refer-clojure :exclude [resolve reduced?])
   (:require
-   [clojure.string :as str]
-   [clojure.walk :as walk]
    [janus.ast :as ast]
    [janus.reader :as r]))
 
@@ -16,6 +12,7 @@
     `(println ~@args)))
 
 (declare reduce-walk)
+(declare eval-walk)
 
 ;;;;; env
 
@@ -29,7 +26,7 @@
   (let [b (:binding s)]
     (trace! "resolve" s b)
     (cond
-      (= b :unbound) (top-resolve s)
+      (= b ast/unbound) (top-resolve s)
       (symbol? b)    s
       true           b)))
 
@@ -39,10 +36,10 @@
   (some #(instance? % x)
         [janus.ast.Immediate janus.ast.Application #_janus.ast.Symbol]))
 
-(defn evalable? [x]
+(defn evaluated? [x]
   (cond
-    (instance? janus.ast.Symbol x)    (not (symbol? (:binding x)))
-    (instance? janus.ast.Immediate x) (evalable? (:form x))
+    (instance? janus.ast.Symbol x)    false
+    (instance? janus.ast.Immediate x) false #_(evaluated? (:form x))
     true                              true))
 
 (defn reduced? [x]
@@ -111,8 +108,6 @@
            (~found v#))
          ~not-found))))
 
-(declare eval-walk)
-
 (def eval-rules
   {;; (I (L x y ...)) => (L (I x) (I y) ...)
    :L (fn [xs] (into [] (map ast/immediate) xs))
@@ -122,7 +117,7 @@
    :S resolve})
 
 (defwalker eval-walk eval-rules [{:keys [form]}] form form
-  #(if (evalable? %) % (ast/immediate %))
+  #(if (evaluated? %) % (ast/immediate %))
   form)
 
 (def apply-rules
