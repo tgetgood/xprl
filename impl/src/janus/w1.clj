@@ -2,10 +2,11 @@
   "Tree walking simplifier. Maybe backtracking is overkill."
   (:refer-clojure :exclude [resolve reduced?])
   (:require
+   [clojure.walk :as walk]
    [janus.ast :as ast]
    [janus.reader :as r]))
 
-(def verbose true)
+(def verbose false)
 
 (defmacro trace! [& args]
   (when verbose
@@ -30,37 +31,12 @@
       (symbol? b)    s
       true           b)))
 
-;;;;; application
-
-(defn ast-indeterminate? [x]
-  (some #(instance? % x)
-        [janus.ast.Immediate janus.ast.Application #_janus.ast.Symbol]))
-
-(defn evaluated? [x]
-  (cond
-    (instance? janus.ast.Symbol x)    false
-    (instance? janus.ast.Immediate x) false #_(evaluated? (:form x))
-    true                              true))
-
-(defn reduced? [x]
-  (if (vector? x)
-    (every? reduced? x)
-    (not (ast-indeterminate? x))))
-
-(defn primitive-call [[head tail]]
-  (let [args (reduce-walk tail)]
-    (trace! "pcall" head args)
-    (if (reduced? args)
-      (clojure.core/apply (:f head) args)
-      (ast/application head args))))
-
-(defn macro-call [[head tail]]
-  ((:f head) tail))
-
 (defn param-walk [id params args body]
   (let [f (fn [form]
             (if (and (ast/symbol? form) (= (:names params) (:names form)))
-              (ast/symbol (str form) args)
+              (do
+                (println "replacing!!" form args)
+                (ast/symbol (str form) args))
               form))]
     (walk/postwalk f body)))
 
@@ -72,10 +48,37 @@
     (ast/symbol (str p) :μ-param)
     p))
 
+;;;;; application
+
+(defn ast-reduced? [x]
+  (not-any? #(instance? % x) [janus.ast.Immediate janus.ast.Application]))
+
+(defn evaluated? [x]
+  (cond
+    (instance? janus.ast.Symbol x)    false
+    (instance? janus.ast.Immediate x) false
+    true                              true))
+
+(defn primitive-reduced? [x]
+  (and (vector? x) (every? ast-reduced? x)))
+
+(defn primitive-call [[head tail]]
+  (let [args (reduce-walk tail)]
+    (trace! "pcall" head args)
+    (if (primitive-reduced? args)
+      (clojure.core/apply (:f head) args)
+      (ast/application head args))))
+
+(defn macro-call [[head tail]]
+  ((:f head) tail))
+
 (defn μ-invoke [[μ args]]
-  (let [args' (reduce-walk args)
-        body' (param-set μ args')]
-    body'))
+  (let [args' (reduce-walk args)]
+    (if (evaluated? args')
+      (param-set μ args')
+      (ast/application μ args'))))
+
+;;;;; reduction
 
 (defn μ-reduce [{:keys [name id params body]}]
   (let [p'     (clean-param (reduce-walk params))
@@ -101,10 +104,10 @@
   `(defn ~name ~params
      (let [t# (type ~k)
            tk# (type-table t#)]
-       (trace! (name '~name) "rule:" tk# "arg:" ~arg)
+       (trace! (name '~name) "rule" (or tk# :V) ~arg)
        (if-let [f# (~rules tk#)]
          (let [v# (f# ~arg)]
-           (trace! (name '~name) "step" (type v#) v#)
+           (trace! (name '~name) "post" (type-table (type v#)) v#)
            (~found v#))
          ~not-found))))
 
@@ -113,7 +116,7 @@
    :L (fn [xs] (into [] (map ast/immediate) xs))
    ;; (I (P x y)) => (A (I x) y)
    :P (fn [{:keys [head tail]}] (ast/application (ast/immediate head) tail))
-   :I (fn [x] (eval-walk x))
+   :I #'eval-walk ; need the var since it's only `declare`d at this point.
    :S resolve})
 
 (defwalker eval-walk eval-rules [{:keys [form]}] form form
