@@ -39,11 +39,11 @@
   (some #(instance? % x)
         [janus.ast.Immediate janus.ast.Application #_janus.ast.Symbol]))
 
-(defn unevalable? [x]
+(defn evalable? [x]
   (cond
-    (instance? janus.ast.Symbol x)    (symbol? (:binding x))
-    (instance? janus.ast.Immediate x) (unevalable? (:form x))
-    true                              false))
+    (instance? janus.ast.Symbol x)    (not (symbol? (:binding x)))
+    (instance? janus.ast.Immediate x) (evalable? (:form x))
+    true                              true))
 
 (defn reduced? [x]
   (if (vector? x)
@@ -84,7 +84,6 @@
   (let [p'     (clean-param (reduce-walk params))
         body'  (if (ast/symbol? p') (param-walk id p' id body) body)
         body'' (reduce-walk body')]
-    (trace! "reduceμ" p' body'')
     (ast/μ id name p' body'')))
 
 ;;;;; walker
@@ -123,7 +122,7 @@
    :S resolve})
 
 (defwalker eval-walk eval-rules [{:keys [form]}] form form
-  #(if (unevalable? %) (ast/immediate %) %)
+  #(if (evalable? %) % (ast/immediate %))
   form)
 
 (def apply-rules
@@ -148,7 +147,6 @@
 ;;;;; Builtins
 
 (defn createμ [[params body]]
-  (trace! "createμ" params body)
   (ast/μ (gensym) "" params body))
 
 (def macros
@@ -197,14 +195,8 @@
 
 (def env (atom base-env))
 
-(defn go! [f ccs]
+(defn go! [f]
   (reduce-walk (ast/immediate f)))
 
 (defn ev [s]
-  (go! (:form (r/read (r/string-reader s) @env))
-       {}
-       #_{(xkeys :return)  #(do (reset! out %) (println %))
-            (xkeys :env)     #(swap! env assoc (first %) (second %))
-            ;; (xkeys :unbound) (fn [x] (println "Unbound!" x))
-            (xkeys :error)   (fn [e] (println {:msg   "top level error"
-                                               :error e}))}))
+  (go! (:form (r/read (r/string-reader s) @env))))
