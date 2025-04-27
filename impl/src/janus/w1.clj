@@ -131,7 +131,9 @@
    :F primitive-call
    :M macro-call})
 
-#_(defwalker apply-walk apply-rules [head tail] head )
+(defwalker apply-walk apply-rules [head tail] head [head tail]
+  identity
+  (ast/application head tail))
 
 (defn apply-walk [head tail]
   (trace! "awalk" (type head) head tail)
