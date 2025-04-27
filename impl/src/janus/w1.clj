@@ -133,17 +133,15 @@
 
 #_(defwalker apply-walk apply-rules [head tail] head )
 
-(defn apply-walk [{:keys [head tail] :as x}]
-  (trace! "awalk" (type head) x)
-  (let [h (reduce-walk head)]
-    (if-let [f (apply-rules (type-table (type h)))]
-      (f h tail)
-      (with-meta (ast/application h tail) (meta x)))))
+(defn apply-walk [head tail]
+  (trace! "awalk" (type head) head tail)
+  (if-let [f (apply-rules (type-table (type head)))]
+    (f head tail)
+    (ast/application head tail)))
 
 (def reduce-rules
   {:I eval-walk  ; TODO: memoise
-   :A apply-walk
-   #_(fn [{:keys [head tail]}] (apply-walk (reduce-walk head) tail)) ; TODO: memoise
+   :A (fn [{:keys [head tail]}] (apply-walk (reduce-walk head) tail)) ; TODO: memoise
    :μ μ-reduce
    :L (fn [xs] (into [] (map reduce-walk) xs))})
 
