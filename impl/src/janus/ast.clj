@@ -279,11 +279,11 @@
 
 (defmethod print-method Emission [{:keys [kvs]} ^Writer w]
   (.write w "#E")
-  (print-method (into {} kvs) w))
+  (print-method kvs w))
 
 (defmethod pp/simple-dispatch Emission [{:keys [kvs]}]
   (pp/write-out (symbol "#E"))
-  (pp/simple-dispatch (into {} kvs)))
+  (pp/simple-dispatch kvs))
 
 (defn emission [kvs]
   (Emission. kvs))
