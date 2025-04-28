@@ -6,7 +6,7 @@
    [janus.ast :as ast]
    [janus.reader :as r]))
 
-(def verbose false)
+(def verbose true)
 
 (defmacro trace! [& args]
   (when verbose
@@ -21,46 +21,38 @@
   (trace! "static resolve" s (-> s meta :lex (get s)))
   (if-let [b (-> s meta :lex (get s))]
     (with-meta b (meta s))
-    (throw (RuntimeException. (str "unresolvable symbol: " s)))))
+    (ast/immediate s)
+    #_(throw (RuntimeException. (str "unresolvable symbol: " s)))))
 
 (defn resolve [s]
   (let [b (:binding s)]
     (trace! "resolve" s b)
     (cond
       (= b ast/unbound) (top-resolve s)
-      (symbol? b)    s
+      (symbol? b)    (ast/immediate s)
       true           b)))
 
 (defn param-walk [id params args body]
+  (trace! "param" params "set to" args "for" id "in" body )
   (let [f (fn [form]
             (if (and (ast/symbol? form) (= (:names params) (:names form)))
-              (do
-                (println "replacing!!" form args)
-                (ast/symbol (str form) args))
+              (ast/symbol (str form) args)
               form))]
     (walk/postwalk f body)))
 
 (defn param-set [{:keys [id params body]} args]
   (param-walk id params args body))
 
-(defn clean-param [p]
-  (if (ast/symbol? p)
-    (ast/symbol (str p) :μ-param)
-    p))
-
 ;;;;; application
-
-(defn ast-reduced? [x]
-  (not-any? #(instance? % x) [janus.ast.Immediate janus.ast.Application]))
 
 (defn evaluated? [x]
   (cond
-    (instance? janus.ast.Symbol x)    false
-    (instance? janus.ast.Immediate x) false
-    true                              true))
+    (instance? janus.ast.Immediate x)   false
+    (instance? janus.ast.Application x) false
+    true                                true))
 
 (defn primitive-reduced? [x]
-  (and (vector? x) (every? ast-reduced? x)))
+  (and (vector? x) (every? evaluated? x)))
 
 (defn primitive-call [[head tail]]
   (let [args (reduce-walk tail)]
@@ -73,18 +65,21 @@
   ((:f head) tail))
 
 (defn μ-invoke [[μ args]]
+  (println μ args)
   (let [args' (reduce-walk args)]
     (if (evaluated? args')
       (param-set μ args')
       (ast/application μ args'))))
 
+(defn application [[head tail]]
+  (ast/application head tail))
+
 ;;;;; reduction
 
-(defn μ-reduce [{:keys [name id params body]}]
-  (let [p'     (clean-param (reduce-walk params))
-        body'  (if (ast/symbol? p') (param-walk id p' id body) body)
-        body'' (reduce-walk body')]
-    (ast/μ id name p' body'')))
+(defn μ-reduce [{:keys [id name params body]}]
+  (if (ast/symbol? params)
+    (ast/μ id name params (reduce-walk (param-walk id params id body)))
+    (ast/μ id name (reduce-walk params) (reduce-walk body))))
 
 ;;;;; walker
 
@@ -118,25 +113,30 @@
    :L (fn [xs] (into [] (map ast/immediate) xs))
    ;; (I (P x y)) => (A (I x) y)
    :P (fn [{:keys [head tail]}] (ast/application (ast/immediate head) tail))
-   :I #'eval-walk ; need the var since it's only `declare`d at this point.
    :S resolve})
 
-(defwalker eval-walk eval-rules [{:keys [form]}] form form
-  #(if (evaluated? %) % (ast/immediate %))
-  form)
+(defwalker eval-walk eval-rules [x] x x
+  identity
+  ;; Put the `I` back if you can't evaluate.
+  (if (evaluated? x) x (ast/immediate x)))
 
 (def apply-rules
   {:μ μ-invoke
    :F primitive-call
-   :M macro-call})
+   :M macro-call
+   ;; These (I & A) are here as rules since fallthrough allows anything to be in
+   ;; the head of a pair without triggering an error (the computation just
+   ;; stalls on an A node.
+   :I application
+   :A application})
 
 (defwalker apply-walk apply-rules [head tail] head [head tail]
   identity
-  (ast/application head tail))
+  (throw (RuntimeException. (str "cannot apply " tail " to " head))))
 
 (def reduce-rules
-  {:I eval-walk  ; TODO: memoise
-   :A (fn [{:keys [head tail]}] (apply-walk (reduce-walk head) tail)) ; TODO: memoise
+  {:I (fn [{:keys [form]}] (eval-walk (reduce-walk form)))
+   :A (fn [{:keys [head tail]}] (apply-walk (reduce-walk head) tail))
    :μ μ-reduce
    :L (fn [xs] (into [] (map reduce-walk) xs))})
 

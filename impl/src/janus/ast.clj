@@ -382,7 +382,7 @@
   (insp [form ^Writer w level]
     (spacer w level)
     (.write w "μ[")
-    (.write w (str (:name form)))
+    (.write w (str (:id form)))
     (.write w "]\n")
     (insp (:params form) w (inc level))
     (insp (:body form) w (inc level)))
