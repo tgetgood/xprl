@@ -1,7 +1,6 @@
 (ns janus.b3
   (:refer-clojure :exclude [reduce eval apply extend resolve run! reduced? delay?])
-  (:import
-   (java.util.concurrent ConcurrentLinkedDeque))
+  (:import (java.util.concurrent ConcurrentLinkedDeque))
   (:require
    [clojure.string :as str]
    [janus.ast :as ast]

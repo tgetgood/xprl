@@ -1,19 +1,19 @@
 (ns janus.w1
   "Tree walking simplifier. Maybe backtracking is overkill."
-  (:refer-clojure :exclude [resolve reduced?])
+  (:refer-clojure :exclude [resolve run!])
+  (:import (java.util.concurrent ConcurrentLinkedDeque))
   (:require
    [clojure.walk :as walk]
    [janus.ast :as ast]
    [janus.reader :as r]))
 
-(def verbose true)
+(def verbose false)
 
 (defmacro trace! [& args]
   (when verbose
     `(println ~@args)))
 
 (declare reduce-walk)
-(declare eval-walk)
 
 ;;;;; env
 
@@ -65,7 +65,6 @@
   ((:f head) tail))
 
 (defn μ-invoke [[μ args]]
-  (println μ args)
   (let [args' (reduce-walk args)]
     (if (evaluated? args')
       (param-set μ args')
@@ -81,6 +80,18 @@
     (ast/μ id name params (reduce-walk (param-walk id params id body)))
     (ast/μ id name (reduce-walk params) (reduce-walk body))))
 
+(defn emit-walk [acc kvs]
+  (if (seq kvs)
+    (let [[k v] (first kvs)
+          k' (reduce-walk (ast/immediate k))
+          v' (reduce-walk v)]
+      (trace! "emit-walk" k "->" k' ":" v "->" v')
+      (recur (conj acc [k' v']) (rest kvs)))
+    acc))
+
+(defn reduce-emission [{:keys [kvs]}]
+  (ast/emission (emit-walk [] kvs)))
+
 ;;;;; walker
 
 (def type-table
@@ -91,7 +102,8 @@
    janus.ast.Application         :A
    janus.ast.Primitive           :F
    janus.ast.Macro               :M
-   janus.ast.Mu                  :μ})
+   janus.ast.Mu                  :μ
+   janus.ast.Emission            :E})
 
 (defn ast-type [x]
   (get type-table (type x) :V))
@@ -138,7 +150,9 @@
   {:I (fn [{:keys [form]}] (eval-walk (reduce-walk form)))
    :A (fn [{:keys [head tail]}] (apply-walk (reduce-walk head) tail))
    :μ μ-reduce
-   :L (fn [xs] (into [] (map reduce-walk) xs))})
+   :L (fn [xs] (into [] (map reduce-walk) xs))
+   :E reduce-emission
+   })
 
 (defwalker reduce-walk reduce-rules [x] x x
   #(if (= x %) % (reduce-walk %))
@@ -146,13 +160,22 @@
 
 ;;;;; Builtins
 
-(defn createμ [[params body]]
-  (ast/μ (gensym) "" params body))
+(defn createμ [args]
+  (case (count args)
+    2 (let [name ""
+            [params body] args]
+        (ast/μ (gensym) name params body))
+    3 (let [[name params body] args]
+        (ast/μ (gensym) name params body))))
+
+(defn emit [kvs]
+  (assert (even? (count kvs)))
+  (ast/emission (map vec (partition 2 kvs))))
 
 (def macros
-  {"μ"      createμ
+  {"μ"    createμ
    ;;   "ν"       createν
-   ;; "emit"   emit
+   "emit" emit
    ;;   "select"  select
    ;; "first*" first*
    ;; "rest*"  rest*
@@ -188,6 +211,68 @@
    (tag-primitives macros ast/->Macro)
    (tag-primitives fns ast/->Primitive)))
 
+;;;;; Runtime
+
+(def stack (ConcurrentLinkedDeque.))
+
+;; A task cannot be scheduled until it is ready to run.
+;;
+;; This is a black box: we throw the task over the fence and are assured that it
+;; will eventually run, but we have no indication of when.
+(defn schedule [task]
+  (.add stack task))
+
+(defn run-task [[f arg]]
+  (f arg))
+
+(defn next-task []
+  (try
+    (.pop stack)
+    (catch java.util.NoSuchElementException e
+      (println "---"))))
+
+(defn run! []
+  (when-let [task (next-task)]
+    (run-task task)
+    (recur)))
+
+(def xkeys
+  {:return  (ast/keyword "return")
+   :error   (ast/keyword "error")
+   :unbound (ast/keyword "unbound")
+   :env     (ast/keyword "env")})
+
+(defn with-return [ccs cont]
+  (assoc ccs (xkeys :return) cont))
+
+(defn send! [ccs chn msg]
+  (let [err #(throw (RuntimeException. (str "No such channel: " chn)))
+        unbound (get ccs (xkeys :unbound) err)]
+    (schedule [(get ccs chn unbound) msg])))
+
+(defn perform-emit! [{:keys [kvs]} ccs]
+  (loop [kvs kvs]
+    (when (seq kvs)
+      (let [[chn msg] (first kvs)]
+        (send! ccs chn msg))
+      (recur (rest kvs)))))
+
+(defn μ-connect [μ ccs]
+  )
+
+(defn send-return! [v ccs]
+  (send! ccs (xkeys :return) v))
+
+(def connection-rules
+  {:E perform-emit!
+   :μ μ-connect})
+
+(defn connection [x]
+  (get connection-rules (ast-type x) send-return!))
+
+(defn connect [form ccs]
+  ((connection form) form ccs))
+
 ;;;;; UI
 
 (def srcpath "../src/")
@@ -195,11 +280,36 @@
 
 (def env (atom base-env))
 
-(defn go! [f]
-  (reduce-walk (ast/immediate f)))
+(defn go!
+  ([f]
+   (reduce-walk (ast/immediate f)))
+  ([f ccs]
+   (schedule [(fn [_] (connect (go! f) ccs))])
+   (run!)))
 
 (defn ev [s]
   (go! (:form (r/read (r/string-reader s) @env))))
+
+(defn iev [s]
+  (ast/inspect (ev s)))
+
+(defn loadfile [envatom fname]
+  (let [conts {(xkeys :env)    #(swap! envatom assoc (first %) (second %))
+               ;; FIXME: This should log a warning. It's not a fatal error
+               (xkeys :return) #(throw (RuntimeException. "return to top level!"))
+               (xkeys :error)  (fn [x]
+                                 (println "Error: " x))}]
+    (loop [reader (r/file-reader fname)]
+      (let [reader (r/read reader @envatom)
+            form   (:form reader)]
+        (if (= :eof form)
+          @envatom
+          (do
+            (go! form (with-return conts println))
+            (recur reader)))))))
+
+(defmacro inspect [n]
+  `(-> @env (get (ast/symbol ~(name n))) ast/inspect))
 
 (defn check [s]
   (ast/inspect (:form (r/read (r/string-reader s) @env))))
