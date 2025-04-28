@@ -7,7 +7,7 @@
    [janus.ast :as ast]
    [janus.reader :as r]))
 
-(def verbose true)
+(def verbose false)
 
 (defmacro trace! [& args]
   (when verbose
@@ -65,10 +65,7 @@
   ((:f head) tail))
 
 (defn μ-invoke [[{:keys [id name params body] :as μ} args]]
-  (let [args' (reduce-walk args)
-        μ (if (ast/symbol? name)
-            (ast/μ id name params (param-walk id name μ body))
-            μ)]
+  (let [args' (reduce-walk args)]
     (if (evaluated? args')
       (param-set μ args')
       (ast/application μ args'))))
@@ -78,10 +75,12 @@
 
 ;;;;; reduction
 
-(defn μ-reduce [{:keys [id name params body]}]
-  (if (ast/symbol? params)
-    (ast/μ id name params (reduce-walk (param-walk id params id body)))
-    (ast/μ id (reduce-walk name) (reduce-walk params) (reduce-walk body))))
+(defn μ-reduce [{:keys [id name params body] :as μ}]
+  (let [name (if (not (evaluated? name)) (reduce-walk name) name)
+        body (if (evaluated? name) (param-walk id name μ body) body)]
+    (if (ast/symbol? params)
+      (ast/μ id name params (reduce-walk (param-walk id params id body)))
+      (ast/μ id name (reduce-walk params) (reduce-walk body)))))
 
 (defn emit-walk [acc kvs]
   (if (seq kvs)
@@ -201,6 +200,9 @@
    "<*"   <
    "=*"   =
    "mod*" mod
+
+   "first*" first
+   "rest*"  #(into [] (rest %))
 
    "count*" count
    "nth*"   nth* ; Base 1 indexing
