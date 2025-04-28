@@ -113,17 +113,14 @@
 (defn first-to-pass [s & fs]
   (loop [[f & fs] fs]
     (when f
-      (if-let [v (f s)]
-        v
-        (recur fs)))))
+      (let [v (f s)]
+        (if (nil? v)
+          (recur fs)
+          v)))))
 
 (defn interpret [r]
-  (let [s (:token r)
-        v (first-to-pass s parse-number parse-double parse-bool parse-keyword)]
-    (if v
-      v
-      ;; If noting else, it's a symbol.
-      (ast/symbol s))))
+  (let [s (:token r)]
+    (first-to-pass s parse-number parse-double parse-bool parse-keyword ast/symbol)))
 
 (defn readimmediate [r]
   (update (read* r) :result ast/immediate))

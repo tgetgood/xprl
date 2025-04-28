@@ -28,7 +28,7 @@
   (if ~(nth* ~body 1) ~(nth* ~body 2) ~(cond ~(rest (rest body)))))
 
 (defμ when x
-  (if ~(nth* ~x 1) ~(nth* ~x 2) (emit)))
+  (if ~(nth* ~x 1) ~(nth* ~x 2) ~(emit)))
 
 ;; Primitive elevation
 

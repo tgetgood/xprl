@@ -371,6 +371,13 @@
     (.write w "L\n")
     (dorun (map #(insp % w (inc level)) form)))
 
+  Macro
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "M[")
+    (.write w (str (:name (meta (:f form)))))
+    (.write w "]\n"))
+
   Primitive
   (insp [form ^Writer w level]
     (spacer w level)

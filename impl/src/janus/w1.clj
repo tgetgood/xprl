@@ -7,7 +7,7 @@
    [janus.ast :as ast]
    [janus.reader :as r]))
 
-(def verbose false)
+(def verbose true)
 
 (defmacro trace! [& args]
   (when verbose
@@ -64,8 +64,11 @@
 (defn macro-call [[head tail]]
   ((:f head) tail))
 
-(defn μ-invoke [[μ args]]
-  (let [args' (reduce-walk args)]
+(defn μ-invoke [[{:keys [id name params body] :as μ} args]]
+  (let [args' (reduce-walk args)
+        μ (if (ast/symbol? name)
+            (ast/μ id name params (param-walk id name μ body))
+            μ)]
     (if (evaluated? args')
       (param-set μ args')
       (ast/application μ args'))))
@@ -78,7 +81,7 @@
 (defn μ-reduce [{:keys [id name params body]}]
   (if (ast/symbol? params)
     (ast/μ id name params (reduce-walk (param-walk id params id body)))
-    (ast/μ id name (reduce-walk params) (reduce-walk body))))
+    (ast/μ id (reduce-walk name) (reduce-walk params) (reduce-walk body))))
 
 (defn emit-walk [acc kvs]
   (if (seq kvs)
@@ -151,8 +154,7 @@
    :A (fn [{:keys [head tail]}] (apply-walk (reduce-walk head) tail))
    :μ μ-reduce
    :L (fn [xs] (into [] (map reduce-walk) xs))
-   :E reduce-emission
-   })
+   :E reduce-emission})
 
 (defwalker reduce-walk reduce-rules [x] x x
   #(if (= x %) % (reduce-walk %))
@@ -172,11 +174,17 @@
   (assert (even? (count kvs)))
   (ast/emission (map vec (partition 2 kvs))))
 
+(defn select {:name "select"} [[p t f]]
+  (let [p (reduce-walk p)]
+    (cond
+      (boolean? p)         (if p (reduce-walk t) (reduce-walk f))
+      (not (evaluated? p)) (ast/application (ast/->Macro #'select) [p t f]))))
+
 (def macros
-  {"μ"    createμ
+  {"μ"      createμ
    ;;   "ν"       createν
-   "emit" emit
-   ;;   "select"  select
+   "emit"   emit
+   "select" select
    ;; "first*" first*
    ;; "rest*"  rest*
    })
@@ -196,6 +204,8 @@
 
    "count*" count
    "nth*"   nth* ; Base 1 indexing
+
+   ;; "select" select
    })
 
 (defn tagged [f]
@@ -258,6 +268,7 @@
       (recur (rest kvs)))))
 
 (defn μ-connect [μ ccs]
+  (throw (RuntimeException. "!!!!"))
   )
 
 (defn send-return! [v ccs]
