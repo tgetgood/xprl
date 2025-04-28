@@ -98,16 +98,18 @@
    janus.ast.Macro               :M
    janus.ast.Mu                  :μ})
 
+(defn ast-type [x]
+  (get type-table (type x) :V))
+
 ;; REVIEW: This is overengineering looked at simply. But the point is to force
 ;; out the similarity in the three "types" of walkers and hopefully unify them.
 (defmacro defwalker [name rules params k arg found not-found]
   `(defn ~name ~params
-     (let [t# (type ~k)
-           tk# (type-table t#)]
-       (trace! (name '~name) "rule" (or tk# :V) ~arg)
-       (if-let [f# (~rules tk#)]
+     (let [t# (ast-type ~k)]
+       (trace! (name '~name) "rule" t# ~arg)
+       (if-let [f# (~rules t#)]
          (let [v# (f# ~arg)]
-           (trace! (name '~name) "post" (type-table (type v#)) v#)
+           (trace! (name '~name) "post" (ast-type v#) v#)
            (~found v#))
          ~not-found))))
 
@@ -198,3 +200,6 @@
 
 (defn ev [s]
   (go! (:form (r/read (r/string-reader s) @env))))
+
+(defn check [s]
+  (ast/inspect (:form (r/read (r/string-reader s) @env))))
