@@ -268,8 +268,7 @@
       (recur (rest kvs)))))
 
 (defn μ-connect [μ ccs]
-  (throw (RuntimeException. "!!!!"))
-  )
+  (throw (RuntimeException. "!!!!")))
 
 (defn send-return! [v ccs]
   (send! ccs (xkeys :return) v))
