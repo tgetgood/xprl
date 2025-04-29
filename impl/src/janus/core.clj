@@ -1,4 +1,4 @@
-(ns janus.w1
+(ns janus.core
   "Tree walking simplifier. Maybe backtracking is overkill."
   (:refer-clojure :exclude [resolve run!])
   (:import (java.util.concurrent ConcurrentLinkedDeque))
