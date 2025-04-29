@@ -243,35 +243,6 @@
     (immediate (nest-eval base (dec n)))
     base))
 
-(defrecord Delay [sym ref depth]
-  Object
-  (toString [_]
-    (str (nest-eval sym depth))))
-
-(defmethod print-method Delay [{:keys [sym depth]} w]
-  (print-method (nest-eval sym depth) w))
-
-(defmethod pp/simple-dispatch Delay  [{:keys [sym depth]}]
-  (pp/simple-dispatch (nest-eval sym depth)))
-
-(defn delay [s r d]
-  (with-meta (Delay. s r d) (meta s)))
-
-(defrecord DelayedApplication [head tail depth]
-  Object
-  (toString [_]
-    (str (nest-eval (application head tail) depth))))
-
-(defmethod print-method DelayedApplication [{:keys [head tail depth]} w]
-  (print-method (nest-eval (application head tail) depth) w))
-
-(defmethod pp/simple-dispatch DelayedApplication [{:keys [head tail depth]}]
-  (pp/simple-dispatch (nest-eval (application head tail) depth)))
-
-(defn delayedapplication [head tail depth]
-  (with-meta (->DelayedApplication head tail depth)
-    (meta head)))
-
 (defrecord Emission [kvs]
   Object
   (toString [_]
@@ -288,11 +259,6 @@
 (defn emission [kvs]
   (Emission. kvs))
 
-(defrecord Recursion [id]
-  )
-
-(defn recursion [id]
-  (Recursion. id))
 ;;;;; Destructuring
 
 (defprotocol Destructurable
@@ -391,14 +357,6 @@
     (.write w "μ\n")
     (insp (:params form) w (inc level))
     (insp (:body form) w (inc level)))
-
-  Delay
-  (insp [form ^Writer w level]
-    (insp (nest-eval (:sym form) (:depth form)) w level))
-
-  DelayedApplication
-  (insp [form ^Writer w level]
-    (insp (nest-eval (application (:head form) (:tail form)) (:depth form)) w level))
 
   Emission
   (insp [form ^Writer w level]
