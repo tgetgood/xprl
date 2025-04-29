@@ -173,13 +173,13 @@
   (.write ^Writer *out* "#")
   (pp/simple-dispatch (->Pair head tail)))
 
-(defrecord Mu [id name params body]
+(defrecord Mu [params body]
   Object
   (toString [_]
     (str "(#μ " params " " body ")")))
 
-(defn μ [id name params body]
-  (->Mu id name params body))
+(defn μ [params body]
+  (->Mu params body))
 
 (defn μ? [x]
   (instance? Mu x))
@@ -388,9 +388,7 @@
   Mu
   (insp [form ^Writer w level]
     (spacer w level)
-    (.write w "μ[")
-    (.write w (str (:id form)))
-    (.write w "]\n")
+    (.write w "μ\n")
     (insp (:params form) w (inc level))
     (insp (:body form) w (inc level)))
 

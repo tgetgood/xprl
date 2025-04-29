@@ -17,6 +17,11 @@
 
 ;;;;; env
 
+(def local 'local)
+
+(defn local? [x]
+  (= x local))
+
 (defn top-resolve [s]
   (trace! "static resolve" s (-> s meta :lex (get s)))
   (if-let [b (-> s meta :lex (get s))]
@@ -29,19 +34,19 @@
     (trace! "resolve" s b)
     (cond
       (= b ast/unbound) (top-resolve s)
-      (symbol? b)    (ast/immediate s)
+      (local? b)    (ast/immediate s)
       true           b)))
 
-(defn param-walk [id params args body]
-  (trace! "param" params "set to" args "for" id "in" body )
+(defn param-walk [params args body]
+  (trace! "param" params "set to" args "in" body )
   (let [f (fn [form]
             (if (and (ast/symbol? form) (= (:names params) (:names form)))
               (ast/symbol (str form) args)
               form))]
     (walk/postwalk f body)))
 
-(defn param-set [{:keys [id params body]} args]
-  (param-walk id params args body))
+(defn param-set [{:keys [params body]} args]
+  (param-walk params args body))
 
 ;;;;; application
 
@@ -64,7 +69,7 @@
 (defn macro-call [[head tail]]
   ((:f head) tail))
 
-(defn μ-invoke [[{:keys [id name params body] :as μ} args]]
+(defn μ-invoke [[μ args]]
   (let [args' (reduce-walk args)]
     (if (evaluated? args')
       (param-set μ args')
@@ -75,12 +80,10 @@
 
 ;;;;; reduction
 
-(defn μ-reduce [{:keys [id name params body] :as μ}]
-  (let [name (if (not (evaluated? name)) (reduce-walk name) name)
-        body (if (evaluated? name) (param-walk id name μ body) body)]
-    (if (ast/symbol? params)
-      (ast/μ id name params (reduce-walk (param-walk id params id body)))
-      (ast/μ id name (reduce-walk params) (reduce-walk body)))))
+(defn μ-reduce [{:keys [params body]}]
+  (if (ast/symbol? params)
+    (ast/μ params (reduce-walk (param-walk params local body)))
+    (ast/μ (reduce-walk params) (reduce-walk body))))
 
 (defn emit-walk [acc kvs]
   (if (seq kvs)
@@ -161,13 +164,8 @@
 
 ;;;;; Builtins
 
-(defn createμ [args]
-  (case (count args)
-    2 (let [name ""
-            [params body] args]
-        (ast/μ (gensym) name params body))
-    3 (let [[name params body] args]
-        (ast/μ (gensym) name params body))))
+(defn createμ [[params body]]
+  (ast/μ params body))
 
 (defn emit [kvs]
   (assert (even? (count kvs)))
