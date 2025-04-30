@@ -149,7 +149,7 @@
 
 (defwalker apply-walk apply-rules [head tail] head [head tail]
   identity
-  (throw (RuntimeException. (str "cannot apply " tail " to " head))))
+  (throw (RuntimeException. (str "cannot apply (" (type head) ") " head ))))
 
 (def reduce-rules
   {:I (fn [{:keys [form]}] (eval-walk (reduce-walk form)))
