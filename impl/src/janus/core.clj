@@ -287,6 +287,7 @@
 ;;;;; UI
 
 (def srcpath "../src/")
+(def recxprl (str srcpath "recur.xprl"))
 (def bootxprl (str srcpath "boot.xprl"))
 
 (def env (atom base-env))

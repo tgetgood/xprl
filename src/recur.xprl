@@ -1,0 +1,69 @@
+;; We need to derive a version of the fixed point (Y) combinator for μs.
+;;
+;; REVIEW: I've chosen to keep the (clj) interpreter absurdly simple. That means
+;; no named μs, no destructuring, etc..
+;;
+;; That decision is painful right now, but I think it will pay off when it comes
+;; time to bootstrap off of the jvm. I had better be right...
+
+(emit :env [def ~(μ x ~(emit :env [~(nth* ~x 1) ~~(nth* ~x 2)] :return ~(nth* ~x 1)))]
+      :return def)
+
+;; (def Y
+;;   (μ f
+;;      ~((μ x ~(f . ~(~x . ~x)))
+;;        .
+;;        (μ x ~(f . ~(~x . ~x))))))
+
+;; (def AoY
+;;   (μ f
+;;      ~((μ x ~(~f . ~(μ z ~(x . ~(x . ~z)))))
+;;        .
+;;        ~(μ x ~(~f . ~(μ z ~(x . ~(x . ~z))))))))
+
+(def !
+  (μ !
+     ~(μ x
+         ~~(select ~(<* ~x 2)
+                   1
+                   ~(** ~x ~((~! . ~!) . ~(-* ~x 1)))))))
+
+((! . !) . 5)
+
+(def app
+  (μ f
+     ~(μ x
+         ~((~f . ~f) . ~x))))
+
+(def !
+  (app . ~(μ !
+             ~(μ x
+                 ~~(select ~(<* ~x 2)
+                           1
+                           ~(** ~x ~(! . ~(-* ~x 1))))))))
+
+(! . 1)
+(! . 2)
+(! . 3)
+
+;; (def !
+;;   (μ !
+;;      ~(μ x
+;;         ~~(select ~(<* ~x 2)
+;;                   1
+;;                   ~(** ~x ~(! . ~(-* ~x 1)))))))
+
+
+
+
+
+;; ;; ((app . ~(μ f ~(μ x ~((! . ~(app . ~f)) . ~x)))) . 2)
+;; ;; ((app . ~(μ f ~(μ x ~((! . ~(app . ~f)) . ~x)))) . 3)
+
+;; (def Y
+;;   (μ f
+;;      ~(μ x
+;;          ~((! . ~(app . ~f)) . ~x))))
+
+
+;; ((Y . !) . 10)
