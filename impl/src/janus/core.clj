@@ -275,7 +275,8 @@
 
 (def connection-rules
   {:E perform-emit!
-   :μ μ-connect})
+;   :μ μ-connect
+   })
 
 (defn connection [x]
   (get connection-rules (ast-type x) send-return!))
