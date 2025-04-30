@@ -9,6 +9,8 @@
 (emit :env [def ~(μ x ~(emit :env [~(nth* ~x 1) ~~(nth* ~x 2)] :return ~(nth* ~x 1)))]
       :return def)
 
+;; Sadly, these don't quite work...
+
 ;; (def Y
 ;;   (μ f
 ;;      ~((μ x ~(f . ~(~x . ~x)))
@@ -30,21 +32,72 @@
 
 ((! . !) . 5)
 
-(def app
+;; curry with self as first arg. Weird thought, but Curry was original.
+(def sc
   (μ f
      ~(μ x
-         ~((~f . ~f) . ~x))))
+         ~((~~f . ~f) . ~x))))
 
 (def !
-  (app . ~(μ !
+  (sc . ~(μ !
+             ~(μ x
+                 ~~(select ~(<* ~x 2)
+                           1
+                           ~(** ~x ~((sc . ~!) . ~(-* ~x 1))))))))
+
+(! . 1)
+(! . 2)
+(! . 3)
+
+(! . 10)
+
+
+
+(def !!
+  (μ !
+     ~(μ x
+         ~~(select ~(<* ~x 2)
+                   1
+                   ~(** ~x ~(! . ~(-* ~x 1)))))))
+
+(def !
+  (sc . ~(μ f
+            ~(μ x
+                ~((!! . ~(sc . f)) . ~x)))))
+
+(! . 1)
+
+(! . 2)
+(! . 3)
+
+(! . 10)
+
+(def rec
+  (μ g
+    ~(sc . ~(μ f
+            ~(μ x
+                ~((g . ~(sc . f)) . ~x)))) ))
+
+(def !
+  (rec . ~(μ !
              ~(μ x
                  ~~(select ~(<* ~x 2)
                            1
                            ~(** ~x ~(! . ~(-* ~x 1))))))))
 
 (! . 1)
+
 (! . 2)
 (! . 3)
+
+(! . 10)
+
+;; The API we want is something like:
+;; (def defrec
+;;   (μ x
+;;      ~(def ~(nth* ~x 1)
+;;         (μ y
+;;            ~((rec . ~(μ ~(nth* ~x 1) ~~(nth* ~x 2))) . y)))))
 
 ;; (def !
 ;;   (μ !
