@@ -38,7 +38,7 @@
       true           b)))
 
 (defn param-walk [params args body]
-  (trace! "param" params "set to" args "in" body )
+  (trace! "param" params "set to" args "in" body)
   (let [f (fn [form]
             (if (and (ast/symbol? form) (= (:names params) (:names form)))
               (ast/symbol (str form) args)
