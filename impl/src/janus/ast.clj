@@ -49,19 +49,20 @@
 
 (declare dot)
 
+(defn bind [s b]
+  (assert (instance? Symbol s))
+  (with-meta s (assoc (meta s) :binding b)))
+
 (defn symbol
   ([s] (symbol s unbound))
   ([s b]
    (cond
      ;; TODO: Intern symbols
      (= s ".")            dot
-     (re-find #"^\.+$" s) (with-meta (->Symbol s)
-                            (assoc (meta s) :binding) b)
-     :else                (with-meta (->Symbol (split-symbolic s))
-                            (assoc (meta s) :binding b)))))
+     (re-find #"^\.+$" s) (bind (->Symbol s) b)
+     :else                (bind (->Symbol (split-symbolic s)) b))))
 
-(defonce dot (with-meta (->Symbol ".")
-               {:binding unbound}))
+(defonce dot (bind (->Symbol ".") unbound))
 
 (defn symbol? [s]
   (instance? Symbol s))
@@ -149,8 +150,7 @@
 
 (defn immediate
   [form]
-  (with-meta (->Immediate form)
-    (assoc (meta form) :reduced? false)))
+  (with-meta (->Immediate form) (meta form)))
 
 (ps Immediate)
 
@@ -166,8 +166,7 @@
 
 (defn application
   [head tail]
-  (with-meta (->Application head tail)
-    (assoc (meta head) :reduced? false)))
+  (with-meta (->Application head tail) (meta head)))
 
 (ps Application)
 

@@ -7,7 +7,7 @@
    [janus.ast :as ast]
    [janus.reader :as r]))
 
-(def verbose false)
+(def verbose true)
 
 (defmacro trace! [& args]
   (when verbose
@@ -31,6 +31,20 @@
 (defn resolve [s]
   (let [b (binding s)]
     (trace! "resolve" s ":" b)
+    ;; REVIEW: Primitive macros (namely `select` need to be able to try and
+    ;; reduce an expression with unbound variables even though it would be an
+    ;; error for a μ to do so.
+    ;;
+    ;; I don't know what to do about that. On the one hand I want to enforce the
+    ;; error for μs, but on the other I don't want to write a separate "soft
+    ;; reduction" logic.
+    ;;
+    ;; a connundrum...
+    #_(cond
+      (unbound? b) (throw (RuntimeException. "unbound"))
+      (local? b)   (ast/immediate s)
+      true         b)
+
     (if (or (local? b) (unbound? b))
       (ast/immediate s)
       b)))
@@ -38,7 +52,7 @@
 (defn param-walk [params args body]
   (assert (ast/symbol? params) "What are we changing here?")
   (trace! "param" params "set to" args "in" body)
-  (let [sym (ast/symbol (str params) args)
+  (let [sym (ast/bind params args)
         f   (fn [form]
               (if (= params form)
                 sym
@@ -47,6 +61,17 @@
 
 (defn param-set [{:keys [params body]} args]
   (param-walk params args body))
+
+(defn indirect-param-set [param body]
+  (assert (ast/symbol? param))
+  (trace! "indirect param set" param body)
+  (walk/postwalk (fn [form]
+                   (if (= form param)
+                     (do
+                       (trace! "indirect found" form (binding form))
+                       (ast/bind form (param-walk param local (binding form))))
+                     form))
+                 body))
 
 ;;;;; application
 
@@ -83,7 +108,10 @@
 (defn μ-reduce [{:keys [params body]}]
   (if (ast/symbol? params)
     (ast/μ params (reduce-walk (param-walk params local body)))
-    (ast/μ (reduce-walk params) (reduce-walk body))))
+    (let [p' (reduce-walk params)]
+      (ast/μ p' (reduce-walk (if (ast/symbol? p')
+                               (indirect-param-set p' body)
+                               body))))))
 
 (defn emit-walk [acc kvs]
   (if (seq kvs)
@@ -290,6 +318,7 @@
 (def srcpath "../src/")
 (def recxprl (str srcpath "recur.xprl"))
 (def bootxprl (str srcpath "boot.xprl"))
+(def testxprl (str srcpath "test.xprl"))
 
 (def env (atom base-env))
 

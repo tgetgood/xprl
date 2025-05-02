@@ -132,7 +132,7 @@
     (let [sym (ast/symbol token)]
       ;; The symbol might be bound to `false`!
       (if (contains? lex sym)
-        (ast/symbol token (get lex sym))
+        (ast/bind sym (get lex sym))
         sym))))
 
 (defn interpret [r]
