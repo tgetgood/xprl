@@ -24,6 +24,19 @@
 ;;        ~(μ x ~(~f . ~(μ z ~(x . ~(x . ~z))))))))
 
 ;; (def !
+;;   (AoY . ~(μ !
+;;            ~(μ x
+;;                ~~(select ~(<* ~x 2)
+;;                          1
+;;                          ~(** ~x ~(! . ~(-* ~x 1))))))))
+
+;; (! . 1)
+;; (! . 2)
+;; (! . 3)
+
+;; (! . 10)
+
+;; (def !
 ;;   (μ !
 ;;      ~(μ x
 ;;          ~~(select ~(<* ~x 2)
@@ -32,11 +45,11 @@
 
 ;; ((! . !) . 5)
 
-;; curry with self as first arg. Weird thought, but Curry was original.
-(def sc
-  (μ f
-     ~(μ x
-         ~((~f . ~~f) . ~x))))
+;; ;; curry with self as first arg. Weird thought, but Curry was original.
+;; (def sc
+;;   (μ f
+;;      ~(μ x
+;;          ~((~f . ~~f) . ~x))))
 
 ;; (def !
 ;;   (sc . ~(μ !
@@ -72,11 +85,11 @@
 
 ;; (! . 10)
 
-(def rec
-  (μ g
-    ~(sc . ~(μ f
-            ~(μ x
-                ~((g . ~(sc . f)) . ~x)))) ))
+;; (def rec
+;;   (μ g
+;;     ~(sc . ~(μ f
+;;             ~(μ x
+;;                 ~((g . ~(sc . f)) . ~x))))))
 
 ;; (def !
 ;;   (rec . ~(μ !
@@ -92,18 +105,47 @@
 
 ;; (! . 10)
 
-;; The API we want is something like:
-(def defrec
-  (μ x
-     ~(def ~(nth* ~x 1)
-        (rec . ~(μ ~(nth* ~x 1) ~~(nth* ~x 2))))))
+;; curry with self as first arg. Weird thought, but Curry was original.
+(def sc
+  (μ f
+     ~(μ x
+         ~((~f . ~~f) . ~x))))
 
-(defrec !
+(def rec
+  (μ g
+    ~(sc . ~(μ f
+               ~(g . ~(sc . f))))))
+
+;; (def defrec
+;;   (μ x
+;;      ~(def ~(nth* ~x 1)
+;;         (rec . ~(μ ~(nth* ~x 1) ~~(nth* ~x 2))))))
+
+(def !body
   (μ x
      ~~(select ~(<* ~x 2)
                1
                ~(** ~x ~(! . ~(-* ~x 1))))))
 
+(def ! (rec . ~(μ ! ~!body)))
+
+;; (def !
+;;   (rec . ~(μ !
+;;              ~(μ x
+;;                  ~~(select ~(<* ~x 2)
+;;                            1
+;;                            ~(** ~x ~(! . ~(-* ~x 1))))))))
+
+;; (def defμ
+;;   (μ x
+;;      ~(def ~(nth* ~x 1)
+;;         (μ ~(nth* ~x 2) ~~(nth* ~x 3)))))
+
+;; (defμ ! x
+;;   (μ x
+;;      ~~(select ~(<* ~x 2)
+;;                1
+;;                ~(** ~x ~(! . ~(-* ~x 1))))))
 
 (! . 1)
 
@@ -111,15 +153,3 @@
 (! . 3)
 
 (! . 10)
-
-
-;; ;; ((app . ~(μ f ~(μ x ~((! . ~(app . ~f)) . ~x)))) . 2)
-;; ;; ((app . ~(μ f ~(μ x ~((! . ~(app . ~f)) . ~x)))) . 3)
-
-;; (def Y
-;;   (μ f
-;;      ~(μ x
-;;          ~((! . ~(app . ~f)) . ~x))))
-
-
-;; ((Y . !) . 10)
