@@ -17,7 +17,7 @@
 
 ;;;;; env
 
-(def local 'local)
+(def local 'unknown)
 
 (defn local? [x]
   (= x local))
@@ -26,18 +26,18 @@
   (trace! "static resolve" s (-> s meta :lex (get s)))
   (if-let [b (-> s meta :lex (get s))]
     (with-meta b (meta s))
-    (ast/immediate s)
-    #_(throw (RuntimeException. (str "unresolvable symbol: " s)))))
+    (ast/immediate s)))
 
 (defn resolve [s]
   (let [b (:binding s)]
-    (trace! "resolve" s b)
+    (trace! "resolve" s ":" b)
     (cond
       (= b ast/unbound) (top-resolve s)
-      (local? b)    (ast/immediate s)
-      true           b)))
+      (local? b)        (ast/immediate s)
+      true              b)))
 
 (defn param-walk [params args body]
+  (assert (ast/symbol? params) "What are we changing here?")
   (trace! "param" params "set to" args "in" body)
   (let [f (fn [form]
             (if (and (ast/symbol? form) (= (:names params) (:names form)))
@@ -71,7 +71,7 @@
 
 (defn μ-invoke [[μ args]]
   (let [args' (reduce-walk args)]
-    (if (evaluated? args')
+    (if (and (ast/symbol? (:params μ)) (evaluated? args'))
       (param-set μ args')
       (ast/application μ args'))))
 
