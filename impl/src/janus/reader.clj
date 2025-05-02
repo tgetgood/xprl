@@ -124,7 +124,7 @@
     (let [s (apply str (butlast token))]
       (if-let [sym (get @gensyms s)]
         sym
-        (let [sym (ast/symbol (name (gensym s)))]
+        (let [sym (ast/symbol (name (gensym (str s "_"))))]
           (swap! gensyms assoc s sym)
           sym)))
     ;; Non-gensym syms *should* have top level bindings.
