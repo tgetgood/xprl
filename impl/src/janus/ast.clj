@@ -30,7 +30,7 @@
 
 (ps Keyword)
 
-(defrecord Symbol [names binding]
+(defrecord Symbol [names]
   Object
   (toString [_]
     (transduce (interpose ".") str "" names)))
@@ -55,10 +55,13 @@
    (cond
      ;; TODO: Intern symbols
      (= s ".")            dot
-     (re-find #"^\.+$" s) (->Symbol [s b])
-     :else                (->Symbol (split-symbolic s) b))))
+     (re-find #"^\.+$" s) (with-meta (->Symbol s)
+                            (assoc (meta s) :binding) b)
+     :else                (with-meta (->Symbol (split-symbolic s))
+                            (assoc (meta s) :binding b)))))
 
-(defonce dot (->Symbol ["."] unbound))
+(defonce dot (with-meta (->Symbol ".")
+               {:binding unbound}))
 
 (defn symbol? [s]
   (instance? Symbol s))

@@ -1,6 +1,6 @@
 (ns janus.core
   "Tree walking simplifier. Maybe backtracking is overkill."
-  (:refer-clojure :exclude [resolve run!])
+  (:refer-clojure :exclude [resolve run! binding])
   (:import (java.util.concurrent ConcurrentLinkedDeque))
   (:require
    [clojure.walk :as walk]
@@ -22,19 +22,18 @@
 (defn local? [x]
   (= x local))
 
-(defn top-resolve [s]
-  (trace! "static resolve" s (-> s meta :lex (get s)))
-  (if-let [b (-> s meta :lex (get s))]
-    (with-meta b (meta s))
-    (ast/immediate s)))
+(defn unbound? [x]
+  (= x ast/unbound))
+
+(defn binding [s]
+  (:binding (meta s)))
 
 (defn resolve [s]
-  (let [b (:binding s)]
+  (let [b (binding s)]
     (trace! "resolve" s ":" b)
-    (cond
-      (= b ast/unbound) (top-resolve s)
-      (local? b)        (ast/immediate s)
-      true              b)))
+    (if (or (local? b) (unbound? b))
+      (ast/immediate s)
+      b)))
 
 (defn param-walk [params args body]
   (assert (ast/symbol? params) "What are we changing here?")
