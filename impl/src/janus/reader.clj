@@ -1,6 +1,6 @@
 (ns janus.reader
   "This reader uses the weirdest monadish data pattern, but it seems to work."
-  (:refer-clojure :exclude [read meta])
+  (:refer-clojure :exclude [read])
   (:require [clojure.string :as str]
             [clojure.set :as s]
             [janus.ast :as ast])
@@ -27,8 +27,8 @@
    :col 1
    :line 1})
 
-(defn meta [r]
-  (dissoc r :token :until :result :reader))
+(defn clean-meta [r]
+  (dissoc r :token :until :result :reader :lex :gensyms))
 
 (defn read1 [s]
   (let [next (.read ^PushbackReader (:reader s))]
@@ -118,9 +118,29 @@
           (recur fs)
           v)))))
 
+(defn parse-symbol [{:keys [token gensyms lex]}]
+  ;; gensyms can't have top level bindings (they're unique).
+  (if (str/ends-with? token "#")
+    (let [s (apply str (butlast token))]
+      (if-let [sym (get @gensyms s)]
+        sym
+        (let [sym (ast/symbol (name (gensym s)))]
+          (swap! gensyms assoc s sym)
+          sym)))
+    ;; Non-gensym syms *should* have top level bindings.
+    ;; BUT sometimes they shouldn't...
+    (let [sym (ast/symbol token)]
+      ;; The symbol might be bound to `false`!
+      (if (contains? lex sym)
+        (ast/symbol token (get lex sym))
+        sym))))
+
 (defn interpret [r]
   (let [s (:token r)]
-    (first-to-pass s parse-number parse-double parse-bool parse-keyword ast/symbol)))
+    (let [t (first-to-pass s parse-number parse-double parse-bool parse-keyword)]
+      (if (nil? t)
+        (parse-symbol r)
+        t))))
 
 (defn readimmediate [r]
   (update (read* r) :result ast/immediate))
@@ -140,7 +160,7 @@
         n     (count res)]
     (assoc forms :result
            (cond
-             (= 1 n) (ast/->Pair (first res) (with-meta [] (meta r)))
+             (= 1 n) (ast/->Pair (first res) (with-meta [] (clean-meta r)))
 
              (= ast/dot (nth res (- n 2)))
              (if (= n 3)
@@ -255,15 +275,17 @@
 (defn read*
   [r]
   (let [w (consumewhitespace (assoc r :token ""))
-        m (meta w)
+        m (clean-meta w)
         o (readinner w)]
     (cond
       (not (contains? o :result))               (recur o)
-      (instance? clojure.lang.IObj (:result o)) (update o :result with-meta m)
+      (instance? clojure.lang.IObj (:result o)) (update o :result
+                                                        #(with-meta %
+                                                           (merge (meta %) m)))
       :else                                     o)))
 
 (defn read [reader env]
-  (s/rename-keys (read* (assoc reader :lex env)) {:result :form}))
+  (s/rename-keys (read* (assoc reader :lex env :gensyms (atom {}))) {:result :form}))
 
 (defn read-file
   "Reads all forms from file `fname` and returns then in a vector.
