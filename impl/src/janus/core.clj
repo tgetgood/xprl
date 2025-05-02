@@ -38,10 +38,11 @@
 (defn param-walk [params args body]
   (assert (ast/symbol? params) "What are we changing here?")
   (trace! "param" params "set to" args "in" body)
-  (let [f (fn [form]
-            (if (and (ast/symbol? form) (= (:names params) (:names form)))
-              (ast/symbol (str form) args)
-              form))]
+  (let [sym (ast/symbol (str params) args)
+        f   (fn [form]
+              (if (= params form)
+                sym
+                form))]
     (walk/postwalk f body)))
 
 (defn param-set [{:keys [params body]} args]
