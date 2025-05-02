@@ -140,9 +140,10 @@
   {:μ μ-invoke
    :F primitive-call
    :M macro-call
-   ;; These (I & A) are here as rules since fallthrough allows anything to be in
-   ;; the head of a pair without triggering an error (the computation just
+   ;; These (E, I & A) are here as rules since fallthrough allows anything to be
+   ;; in the head of a pair without triggering an error (the computation just
    ;; stalls on an A node.
+   :E application
    :I application
    :A application})
 
