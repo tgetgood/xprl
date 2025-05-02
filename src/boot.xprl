@@ -10,7 +10,7 @@
 (def defμ
   (μ x
      ~(def ~(nth* ~x 1)
-        (μ ~(nth* ~x 1) ~(nth* ~x 2) ~~(nth* ~x 3)))))
+        (μ ~(nth* ~x 2) ~~(nth* ~x 3)))))
 
 (defμ fn x
   (μ args
