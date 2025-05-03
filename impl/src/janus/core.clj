@@ -203,7 +203,7 @@
 (defn select {:name "select"} [[p t f]]
   (let [p (reduce-walk p)]
     (cond
-      (boolean? p)         (if p (reduce-walk t) (reduce-walk f))
+      (boolean? p)         (if p t f)
       (not (evaluated? p)) (ast/application (ast/->Macro #'select) [p t f]))))
 
 (def macros
