@@ -40,6 +40,9 @@
     ;; reduction" logic.
     ;;
     ;; a connundrum...
+    ;;
+    ;; TODO: we could just try catching the exception in the impl of select...
+    ;; Dumb? check. Effective? maybe
     #_(cond
       (unbound? b) (throw (RuntimeException. "unbound"))
       (local? b)   (ast/immediate s)
