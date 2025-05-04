@@ -7,7 +7,7 @@
    [janus.ast :as ast]
    [janus.reader :as r]))
 
-(def verbose true)
+(def verbose false)
 
 (defmacro trace! [& args]
   (when verbose
