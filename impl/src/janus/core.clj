@@ -7,7 +7,8 @@
    [janus.ast :as ast]
    [janus.reader :as r]))
 
-(def verbose false)
+(def verbose true)
+
 
 (defmacro trace! [& args]
   (when verbose
@@ -20,13 +21,14 @@
 (def local 'unknown)
 
 (defn local? [x]
-  (= x local))
+  (symbol? x))
 
 (defn unbound? [x]
   (= x ast/unbound))
 
 (defn binding [s]
-  (:binding (meta s)))
+  (trace! "bindings:" s (:env (meta s)))
+  (-> s meta :env (get s)))
 
 (defn resolve [s]
   (let [b (binding s)]
@@ -43,7 +45,7 @@
     ;;
     ;; TODO: we could just try catching the exception in the impl of select...
     ;; Dumb? check. Effective? maybe
-    #_(cond
+    (cond
       (unbound? b) (throw (RuntimeException. "unbound"))
       (local? b)   (ast/immediate s)
       true         b)
@@ -52,29 +54,39 @@
       (ast/immediate s)
       b)))
 
-(defn param-walk [params args body]
-  (assert (ast/symbol? params) "What are we changing here?")
-  (trace! "param" params "set to" args "in" body)
-  (let [sym (ast/bind params args)
-        f   (fn [form]
-              (if (= params form)
-                sym
-                form))]
-    (walk/postwalk f body)))
+(defn μ? [x] (instance? janus.ast.Mu x))
 
-(defn param-set [{:keys [params body]} args]
-  (param-walk params args body))
+(defn ast? [x]
+  (some #(instance? % x)
+        [janus.ast.Symbol janus.ast.Pair janus.ast.Application
+         janus.ast.Immediate janus.ast.Emission]))
 
-(defn indirect-param-set [param body]
-  (assert (ast/symbol? param))
-  (trace! "indirect param set" param body)
-  (walk/postwalk (fn [form]
-                   (if (= form param)
+(defn bind [x s b]
+  (with-meta x (update (meta x) :env assoc s b)))
+
+(defn lex-update1 [sym binding form]
+  (trace! "lex-update" sym binding form)
+  (cond
+    (μ? form)      (if (not= sym (:param form))
                      (do
-                       (trace! "indirect found" form (binding form))
-                       (ast/bind form (param-walk param local (binding form))))
-                     form))
-                 body))
+                       #_(assert (or (local? binding)
+                                     (-> form meta :env (get sym) local?)))
+                       (bind (assoc form
+                                    :params (lex-update1 sym binding (:params form))
+                                    :body (lex-update1 sym binding (:body form)))
+                             sym binding))
+                     form)
+    (vector? form) (bind (into [] (map #(lex-update1 sym binding %)) form)
+                         sym binding)
+    (ast? form)    (let [env (assoc (:env form) sym binding)]
+                     (bind (reduce (fn [form [k v]]
+                                     (assoc form k (lex-update1 sym binding v)))
+                                   form form)
+                           sym binding))
+    true           form))
+
+(defn lex-update [sym binding form]
+  (lex-update1 sym binding form))
 
 ;;;;; application
 
@@ -98,9 +110,10 @@
   ((:f head) tail))
 
 (defn μ-invoke [[μ args]]
+  (trace! "invoke" μ "with" args)
   (let [args' (reduce-walk args)]
     (if (and (ast/symbol? (:params μ)) (evaluated? args'))
-      (param-set μ args')
+      (lex-update (:params μ) args' (:body μ))
       (ast/application μ args'))))
 
 (defn application [[head tail]]
@@ -108,13 +121,13 @@
 
 ;;;;; reduction
 
-(defn μ-reduce [{:keys [params body]}]
+(defn μ-reduce [{:keys [params body] :as μ}]
   (if (ast/symbol? params)
-    (ast/μ params (reduce-walk (param-walk params local body)))
+    (assoc μ :body (reduce-walk (lex-update params 'local body)))
     (let [p' (reduce-walk params)]
-      (ast/μ p' (reduce-walk (if (ast/symbol? p')
-                               (indirect-param-set p' body)
-                               body))))))
+      (assoc μ
+             :params p'
+             :body (reduce-walk body)))))
 
 (defn emit-walk [acc kvs]
   (if (seq kvs)
@@ -125,8 +138,8 @@
       (recur (conj acc [k' v']) (rest kvs)))
     acc))
 
-(defn reduce-emission [{:keys [kvs]}]
-  (ast/emission (emit-walk [] kvs)))
+(defn reduce-emission [{:keys [kvs] :as e}]
+  (assoc e :kvs (emit-walk [] kvs)))
 
 ;;;;; walker
 
@@ -197,11 +210,12 @@
 ;;;;; Builtins
 
 (defn createμ [[params body]]
-  (ast/μ params body))
+  (with-meta (ast/μ params body) (meta body)))
 
 (defn emit [kvs]
   (assert (even? (count kvs)))
-  (ast/emission (map vec (partition 2 kvs))))
+  (with-meta (ast/emission (map vec (partition 2 kvs)))
+    (meta kvs)))
 
 (defn select {:name "select"} [[p t f]]
   (let [p (reduce-walk p)]

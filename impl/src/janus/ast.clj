@@ -51,7 +51,7 @@
 
 (defn bind [s b]
   (assert (instance? Symbol s))
-  (with-meta s (assoc (meta s) :binding b)))
+  (with-meta s (update (meta s) :env assoc s b)))
 
 (defn symbol
   ([s] (symbol s unbound))

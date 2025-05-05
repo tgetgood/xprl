@@ -119,7 +119,7 @@
           v)))))
 
 (defn parse-symbol [{:keys [token gensyms lex]}]
-  ;; gensyms can't have top level bindings (they're unique).
+  ;; gensyms can't have bindings yet (they're unique).
   (if (str/ends-with? token "#")
     (let [s (apply str (butlast token))]
       (if-let [sym (get @gensyms s)]
@@ -127,11 +127,12 @@
         (let [sym (ast/symbol (name (gensym (str s "_"))))]
           (swap! gensyms assoc s sym)
           sym)))
-    ;; Non-gensym syms *should* have top level bindings.
-    ;; BUT sometimes they shouldn't...
+    ;; Non-gensym syms should either be parameters for μs (eventually) or be
+    ;; bound in the namespace.
+    ;; Unfortunately it's not possible to tell, in general, if a symbol will be
+    ;; the parameter of a μ.
     (let [sym (ast/symbol token)]
-      ;; The symbol might be bound to `false`!
-      (if (contains? lex sym)
+      (if (contains? lex sym) ; The symbol might be bound to `false`!
         (ast/bind sym (get lex sym))
         sym))))
 
