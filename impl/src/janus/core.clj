@@ -9,7 +9,6 @@
 
 (def verbose true)
 
-
 (defmacro trace! [& args]
   (when verbose
     `(println ~@args)))
