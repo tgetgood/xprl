@@ -5,7 +5,7 @@
    [janus.ast :as ast]
    [janus.reader :as r]))
 
-(def verbose true)
+(def verbose false)
 
 (defmacro trace! [& args]
   (when verbose
@@ -20,20 +20,19 @@
   ;; not instantiated) names must be empty by the time we finish reading it in.
   {:names {} :declared #{}})
 
-(defn ns-ref [val env]
-  {:value val
-   :env   env})
-
 (defn resolve [env s]
   (if-let [ref (get-in env [:names s])]
     (do
-      (trace! "resolve" s ":" (:value ref))
-      (walk :reduce (:env ref) (:value ref)))
+      (trace! "resolve" s ":" ref)
+      ref)
     (if (contains? (:declared env) s)
       (do
         (trace! "resolve" s ": declared, unbound")
         (ast/immediate s))
-      (throw (RuntimeException. (str "Unbound symbol: " s))))))
+      (do
+        (trace! "unbound symbol!!!" s)
+        (ast/immediate s))
+      #_(throw (RuntimeException. (str "Unbound symbol: " s))))))
 
 (defn μ-declare-1 [env s]
   ;; FIXME: This `declare` cannot be used at the namespace level since, for
@@ -47,9 +46,15 @@
       (update :declared conj s)
       (update :names dissoc s)))
 
+(defn tag-env [env v]
+  (cond
+    (vector? v)                      (into [] (map (partial tag-env env)) v)
+    (instance? clojure.lang.IMeta v) (with-meta v (assoc (meta v) ::env env))
+    true                             v))
+
 (defn bind [env s val]
   (-> env
-      (assoc-in [:names s] (ns-ref val env))
+      (assoc-in [:names s] (tag-env env val))
       (update :declared disj s)))
 
 (defn μ-declare [env μ]
@@ -89,10 +94,10 @@
 
 (defn μ-invoke [env [μ args]]
   (trace! "invoke" μ "with" args)
-  (let [args' (walk :reduce env args)]
-    (if (and (ast/symbol? (:params μ)) (evaluated? args'))
+  (let [args (walk :reduce env args)]
+    (if (and (ast/symbol? (:params μ)) (evaluated? args))
       (walk :reduce (μ-bind env μ args) (:body μ))
-      (ast/application μ args'))))
+      (ast/application μ args))))
 
 (defn application [_ [head tail]]
   (ast/application head tail))
@@ -103,9 +108,8 @@
   (if (ast/symbol? (:params μ))
     (assoc μ :body (walk :reduce (μ-declare env μ) (:body μ)))
     (let [μ' (assoc μ
-                    :env    env
                     :params (walk :reduce env (:params μ))
-                    :body   (walk :reduce env (:body μ) true))]
+                    :body   (walk :reduce env (:body μ)))]
       (if (ast/symbol? (:params μ'))
         (walk :reduce env μ')
         μ'))))
@@ -138,11 +142,16 @@
 (defn ast-type [x]
   (get type-table (type x) :V))
 
+(defn tagged-env [x]
+  (when (instance? clojure.lang.IMeta x)
+    (::env (meta x))))
+
 (def rules
   {:reduce
-   {:recur-check not=
-
-    :rules {:I (fn [env {:keys [form]}] (walk :eval env (walk :reduce env form)))
+   {:rules {:I (fn [env {:keys [form]}]
+                 (let [inner (walk :reduce env form)
+                       eenv (or (tagged-env inner) env)]
+                   (walk :eval eenv inner)))
             :A (fn [env {:keys [head tail]}]
                  (walk :apply env [(walk :reduce env head) tail]))
             :μ μ-reduce
@@ -181,39 +190,31 @@
                        (throw (RuntimeException. (str h " is not applicable. " t))))}}})
 
 
-(defn walk
-  ([state env form] (walk state env form false))
-  ([state env form early-stop?]
-   (let [t (ast-type ((get-in rules [state :dispatch] identity) form))]
-     (trace! (name state) "rule" t form)
-     ;; (trace! "env:" (sort-by :names (keys (:names env))))
-     (let [r (:rules (get rules state))
-           v ((get r t (get r :default)) env form)]
-       (trace! (name state) "post" (ast-type v) v)
-       (if (and ((get-in rules [state :recur-check] (constantly false)) form v)
-                ;; HACK: Is there no better way to do this?
-                (not early-stop?))
-         (do
-           (trace! "recurring on" form "->" v)
-           (recur state env v false))
-         v)))))
+(defn walk [state env form]
+  (let [t (ast-type ((get-in rules [state :dispatch] identity) form))]
+    (trace! (name state) "rule" t form)
+    (trace! "env:" (sort-by :names (keys (:names env))))
+    (let [r (:rules (get rules state))
+          v ((get r t (get r :default)) env form)]
+      (trace! (name state) "post" (ast-type v) v)
+      v)))
 
 ;;;;; Builtins
 
 (defn createμ [env args]
   (let [[name params body] (if (= 3 (count args)) args `[nil ~@args])]
-    (with-meta (ast/μ name params body)
-      (meta body)))) ; metadata carries debug info around, which is handy
+    (walk :reduce env (with-meta (ast/μ name params body)
+                        (meta body)))))
 
-(defn emit [_ kvs]
+(defn emit [env kvs]
   (assert (even? (count kvs)))
-  (with-meta (ast/emission (map vec (partition 2 kvs)))
-    (meta kvs)))
+  (walk :reduce env (with-meta (ast/emission (map vec (partition 2 kvs)))
+                      (meta kvs))))
 
 (defn select {:name "select"} [env [p t f]]
   (let [p (walk :reduce env p)]
     (cond
-      (boolean? p)         (if p t f)
+      (boolean? p)         (walk :reduce env (if p t f))
       (not (evaluated? p)) (ast/application (ast/->Macro #'select) [p t f]))))
 
 ;;;;; Boilerplate
@@ -259,9 +260,9 @@
 
 (def base-env
   (reduce (fn [acc [sym val]] (bind acc sym val)) (empty-ns)
-          (merge
-           (tag-primitives macros ast/->Macro)
-           (tag-primitives fns ast/->Primitive))))
+          (concat
+           (map (tagged ast/->Macro) macros)
+           (map (tagged ast/->Primitive) fns))))
 
 ;;;;; Runtime
 
@@ -360,7 +361,7 @@
             (recur reader)))))))
 
 (defmacro inspect [n]
-  `(-> @env (get-in [:names (ast/symbol ~(name n)) :value]) ast/inspect))
+  `(-> @env (get-in [:names (ast/symbol ~(name n))]) ast/inspect))
 
 (defn check [s]
   (ast/inspect (:form (r/read (r/string-reader s) @env))))

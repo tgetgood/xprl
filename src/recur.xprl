@@ -9,6 +9,18 @@
 (emit :env [def ~(μ x ~(emit :env [~(nth* ~x 1) ~~(nth* ~x 2)] :return ~(nth* ~x 1)))]
       :return def)
 
+(def !
+  (μ x
+     ~~(select ~(<* ~x 2)
+               1
+               ~(** ~x ~(! . ~(-* ~x 1))))))
+
+(! . 1)
+(! . 2)
+(! . 3)
+
+(! . 10)
+
 ;; Sadly, these don't quite work...
 
 (def Y
@@ -79,12 +91,12 @@
 (def !
   (sc . ~(μ f ~(!! . ~(sc . f)))))
 
-;; (! . 1)
+(! . 1)
 
-;; (! . 2)
-;; (! . 3)
+(! . 2)
+(! . 3)
 
-;; (! . 10)
+(! . 10)
 
 ;; (def rec
 ;;   (μ g
