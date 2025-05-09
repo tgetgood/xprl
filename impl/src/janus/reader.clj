@@ -28,7 +28,7 @@
    :line 1})
 
 (defn clean-meta [r]
-  (dissoc r :token :until :result :reader :lex :gensyms))
+  (dissoc r :token :until :result :reader :gensyms))
 
 (defn read1 [s]
   (let [next (.read ^PushbackReader (:reader s))]
@@ -118,8 +118,8 @@
           (recur fs)
           v)))))
 
-(defn parse-symbol [{:keys [token gensyms lex]}]
-  ;; gensyms can't have bindings yet (they're unique).
+(defn parse-symbol [{:keys [token gensyms]}]
+  ;; reader gensyms are global to the form being read but unique between forms.
   (if (str/ends-with? token "#")
     (let [s (apply str (butlast token))]
       (if-let [sym (get @gensyms s)]
@@ -127,14 +127,7 @@
         (let [sym (ast/symbol (name (gensym (str s "_"))))]
           (swap! gensyms assoc s sym)
           sym)))
-    ;; Non-gensym syms should either be parameters for μs (eventually) or be
-    ;; bound in the namespace.
-    ;; Unfortunately it's not possible to tell, in general, if a symbol will be
-    ;; the parameter of a μ.
-    (let [sym (ast/symbol token)]
-      (if (contains? lex sym) ; The symbol might be bound to `false`!
-        (ast/bind sym (get lex sym))
-        sym))))
+    (ast/symbol token)))
 
 (defn interpret [r]
   (let [s (:token r)]
@@ -285,8 +278,8 @@
                                                            (merge (meta %) m)))
       :else                                     o)))
 
-(defn read [reader env]
-  (s/rename-keys (read* (assoc reader :lex env :gensyms (atom {}))) {:result :form}))
+(defn read [reader]
+  (s/rename-keys (read* (assoc reader :gensyms (atom {}))) {:result :form}))
 
 (defn read-file
   "Reads all forms from file `fname` and returns then in a vector.

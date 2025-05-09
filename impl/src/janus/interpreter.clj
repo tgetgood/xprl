@@ -5,7 +5,7 @@
    [janus.ast :as ast]
    [janus.reader :as r]))
 
-(def verbose false)
+(def verbose true)
 
 (defmacro trace! [& args]
   (when verbose
@@ -18,19 +18,32 @@
 (defn empty-ns []
   {:names {} :declared #{}})
 
+(defn local-ref [val env]
+  {::local? true
+   :val     val
+   :env     env})
+
+(defn local? [x]
+  (and (map? x) (::local? x)))
+
 (defn resolve [env s]
   (trace! "resolve" s env)
   (if-let [ref (get-in env [:names s])]
-    (walk :reduce (empty-ns) ref) ; ref must be a μ so will have it's own env.
+    (if (local? ref)
+      (walk :reduce (:env ref) (:val ref))
+      ;; REVIEW: A value bound to a namespace will either be literal data or a
+      ;; μ, will it not? Can I guarantee that? Maybe I should just make all
+      ;; bindings close over an env...
+      (walk :reduce (empty-ns) ref))
     (if (contains? (:declared env) s)
       (ast/immediate s)
-      (throw (RuntimeException. (str "Unbound symbol: " s))))))
+      (throw (RuntimeException. (str "Unbound symbol: " s "\n" env))))))
 
 (defn declare [env s]
   (update env :declared conj s))
 
 (defn bind [env s val]
-  (let [env' (assoc-in env [:names s] val)]
+  (let [env' (assoc-in env [:names s] (local-ref val env))]
     (if (contains? (:declared env) s)
       (update env' :declared disj s)
       env')))
@@ -77,6 +90,7 @@
 
 (defn μ-invoke [env [μ args]]
   (trace! "invoke" μ "with" args)
+  (trace! "env:" (sort-by :names (keys (:names env))))
   (let [args' (walk :reduce env args)]
     (if (and (ast/symbol? (:params μ)) (evaluated? args'))
       (walk :reduce (μ-bind env μ args) (:body μ))
@@ -91,6 +105,7 @@
   (if (ast/symbol? (:params μ))
     (assoc μ :body (walk :reduce (μ-declare env μ) (:body μ)))
     (let [μ' (assoc μ
+                    :env    env
                     :params (walk :reduce env (:params μ))
                     :body   (walk :reduce env (:body μ) true))]
       (if (ast/symbol? (:params μ'))
@@ -164,8 +179,8 @@
             :A application
 
             ;; This would be where we add programmer defined extensions...
-            :default (fn [_ [h _]]
-                       (throw (RuntimeException. (str h " is not applicable."))))}}})
+            :default (fn [_ [h t]]
+                       (throw (RuntimeException. (str h " is not applicable. " t))))}}})
 
 
 (defn walk
@@ -173,6 +188,7 @@
   ([state env form early-stop?]
    (let [t (ast-type ((get-in rules [state :dispatch] identity) form))]
      (trace! (name state) "rule" t form)
+     (trace! "env:" (sort-by :names (keys (:names env))))
      (let [r (:rules (get rules state))
            v ((get r t (get r :default)) env form)]
        (trace! (name state) "post" (ast-type v) v)
@@ -289,6 +305,7 @@
   (loop [kvs kvs]
     (when (seq kvs)
       (let [[chn msg] (first kvs)]
+        (trace! "sending on" chn)
         (send! ccs chn msg))
       (recur (rest kvs)))))
 
@@ -324,7 +341,7 @@
    (run!)))
 
 (defn ev [s]
-  (go! (:form (r/read (r/string-reader s) @env))))
+  (go! @env (:form (r/read (r/string-reader s)))))
 
 (defn iev [s]
   (ast/inspect (ev s)))
@@ -336,12 +353,12 @@
                (xkeys :error)  (fn [x]
                                  (println "Error: " x))}]
     (loop [reader (r/file-reader fname)]
-      (let [reader (r/read reader @envatom)
+      (let [reader (r/read reader)
             form   (:form reader)]
         (if (= :eof form)
           @envatom
           (do
-            (go! @env form (with-return conts println))
+            (go! @envatom form (with-return conts println))
             (recur reader)))))))
 
 (defmacro inspect [n]

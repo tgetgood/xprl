@@ -45,24 +45,15 @@
     (str/split s #"\.")
     [s]))
 
-(def unbound :unbound)
-
-(declare dot)
-
-(defn bind [s b]
-  (assert (instance? Symbol s))
-  (with-meta s (update (meta s) :env assoc s b)))
+(defonce dot (->Symbol "."))
 
 (defn symbol
-  ([s] (symbol s unbound))
-  ([s b]
-   (cond
-     ;; TODO: Intern symbols
-     (= s ".")            dot
-     (re-find #"^\.+$" s) (bind (->Symbol s) b)
-     :else                (bind (->Symbol (split-symbolic s)) b))))
-
-(defonce dot (bind (->Symbol ".") unbound))
+  [s]
+  (cond
+    ;; TODO: Intern symbols
+    (= s ".")            dot
+    (re-find #"^\.+$" s) (->Symbol s)
+    :else                (->Symbol (split-symbolic s))))
 
 (defn symbol? [s]
   (instance? Symbol s))
