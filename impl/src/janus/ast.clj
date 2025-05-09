@@ -166,13 +166,13 @@
   (.write ^Writer *out* "#")
   (pp/simple-dispatch (->Pair head tail)))
 
-(defrecord Mu [name params body env]
+(defrecord Mu [name params body]
   Object
   (toString [_]
     (str "(#μ " params " " body ")")))
 
-(defn μ [name params body env]
-  (->Mu name params body env))
+(defn μ [name params body]
+  (->Mu name params body))
 
 (defn μ? [x]
   (instance? Mu x))

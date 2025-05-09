@@ -1,5 +1,5 @@
 (ns janus.interpreter
-  (:refer-clojure :exclude [resolve run! binding declare])
+  (:refer-clojure :exclude [resolve run! binding])
   (:import (java.util.concurrent ConcurrentLinkedDeque))
   (:require
    [janus.ast :as ast]
@@ -16,53 +16,52 @@
 ;;;;; Environment
 
 (defn empty-ns []
+  ;; REVIEW: One sanity check on a namespace is that the set of declared (but
+  ;; not instantiated) names must be empty by the time we finish reading it in.
   {:names {} :declared #{}})
 
-(defn local-ref [val env]
-  {::local? true
-   :val     val
-   :env     env})
-
-(defn local? [x]
-  (and (map? x) (::local? x)))
+(defn ns-ref [val env]
+  {:value val
+   :env   env})
 
 (defn resolve [env s]
-  (trace! "resolve" s env)
   (if-let [ref (get-in env [:names s])]
-    (if (local? ref)
-      (walk :reduce (:env ref) (:val ref))
-      ;; REVIEW: A value bound to a namespace will either be literal data or a
-      ;; μ, will it not? Can I guarantee that? Maybe I should just make all
-      ;; bindings close over an env...
-      (walk :reduce (empty-ns) ref))
+    (do
+      (trace! "resolve" s ":" (:value ref))
+      (walk :reduce (:env ref) (:value ref)))
     (if (contains? (:declared env) s)
-      (ast/immediate s)
-      (throw (RuntimeException. (str "Unbound symbol: " s "\n" env))))))
+      (do
+        (trace! "resolve" s ": declared, unbound")
+        (ast/immediate s))
+      (throw (RuntimeException. (str "Unbound symbol: " s))))))
 
-(defn declare [env s]
-  (update env :declared conj s))
+(defn μ-declare-1 [env s]
+  ;; FIXME: This `declare` cannot be used at the namespace level since, for
+  ;; correctness, we need to assert that no name is overwritten. Namespaces are
+  ;; append only (though each version of a namespace starts over so new versions
+  ;; can redefine old names).
+  ;;
+  ;; μs parameters, however, can shadow symbols in the env, which is what this
+  ;; does.
+  (-> env
+      (update :declared conj s)
+      (update :names dissoc s)))
 
 (defn bind [env s val]
-  (let [env' (assoc-in env [:names s] (local-ref val env))]
-    (if (contains? (:declared env) s)
-      (update env' :declared disj s)
-      env')))
-
-(defn fill-declarations [calling-env μ-env]
-  (reduce (fn [env s] (if (contains? (:names calling-env) s)
-                        (bind env s (get-in calling-env [:names s]))
-                        env))
-          μ-env
-          (:declarations μ-env)))
+  (-> env
+      (assoc-in [:names s] (ns-ref val env))
+      (update :declared disj s)))
 
 (defn μ-declare [env μ]
-  (let [env' (declare (fill-declarations env (:env μ)) (:params μ))]
+  (trace! "declare μ param" (:params μ))
+  (let [env' (μ-declare-1 env (:params μ))]
     (if (:name μ)
-      (declare env' (:name μ))
+      (μ-declare-1 env' (:name μ))
       env')))
 
 (defn μ-bind [env μ args]
-  (let [env' (bind (fill-declarations env (:env μ)) (:params μ) args )]
+  (trace! "bind μ" (:params μ) args)
+  (let [env' (bind env (:params μ) args)]
     (if (:name μ)
       (bind env' (:name μ) μ)
       env')))
@@ -90,7 +89,6 @@
 
 (defn μ-invoke [env [μ args]]
   (trace! "invoke" μ "with" args)
-  (trace! "env:" (sort-by :names (keys (:names env))))
   (let [args' (walk :reduce env args)]
     (if (and (ast/symbol? (:params μ)) (evaluated? args'))
       (walk :reduce (μ-bind env μ args) (:body μ))
@@ -188,7 +186,7 @@
   ([state env form early-stop?]
    (let [t (ast-type ((get-in rules [state :dispatch] identity) form))]
      (trace! (name state) "rule" t form)
-     (trace! "env:" (sort-by :names (keys (:names env))))
+     ;; (trace! "env:" (sort-by :names (keys (:names env))))
      (let [r (:rules (get rules state))
            v ((get r t (get r :default)) env form)]
        (trace! (name state) "post" (ast-type v) v)
@@ -202,8 +200,8 @@
 
 (defn createμ [env args]
   (let [[name params body] (if (= 3 (count args)) args `[nil ~@args])]
-    (with-meta (ast/μ  name params body env)
-      (meta body))))
+    (with-meta (ast/μ name params body)
+      (meta body)))) ; metadata carries debug info around, which is handy
 
 (defn emit [_ kvs]
   (assert (even? (count kvs)))
@@ -258,9 +256,10 @@
   (into {} (map (tagged f)) x))
 
 (def base-env
-  (merge
-   (tag-primitives macros ast/->Macro)
-   (tag-primitives fns ast/->Primitive)))
+  (reduce (fn [acc [sym val]] (bind acc sym val)) (empty-ns)
+          (merge
+           (tag-primitives macros ast/->Macro)
+           (tag-primitives fns ast/->Primitive))))
 
 ;;;;; Runtime
 
@@ -309,9 +308,6 @@
         (send! ccs chn msg))
       (recur (rest kvs)))))
 
-(defn μ-connect [μ ccs]
-  (throw (RuntimeException. "!!!!")))
-
 (defn send-return! [v ccs]
   (send! ccs (xkeys :return) v))
 
@@ -331,7 +327,7 @@
 (def bootxprl (str srcpath "boot.xprl"))
 (def testxprl (str srcpath "test.xprl"))
 
-(def env (atom (assoc (empty-ns) :names base-env)))
+(def env (atom base-env))
 
 (defn go!
   ([env f]
@@ -347,7 +343,7 @@
   (ast/inspect (ev s)))
 
 (defn loadfile [envatom fname]
-  (let [conts {(xkeys :env)    #(swap! envatom assoc-in [:names (first %)] (second %))
+  (let [conts {(xkeys :env)    (fn [[sym value]] (swap! envatom bind sym value))
                ;; FIXME: This should log a warning. It's not a fatal error
                (xkeys :return) #(throw (RuntimeException. "return to top level!"))
                (xkeys :error)  (fn [x]
@@ -362,7 +358,7 @@
             (recur reader)))))))
 
 (defmacro inspect [n]
-  `(-> @env (get-in [:names (ast/symbol ~(name n))]) ast/inspect))
+  `(-> @env (get-in [:names (ast/symbol ~(name n)) :value]) ast/inspect))
 
 (defn check [s]
   (ast/inspect (:form (r/read (r/string-reader s) @env))))
