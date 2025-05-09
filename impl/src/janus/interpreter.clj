@@ -193,7 +193,9 @@
        (if (and ((get-in rules [state :recur-check] (constantly false)) form v)
                 ;; HACK: Is there no better way to do this?
                 (not early-stop?))
-         (walk state env v false)
+         (do
+           (trace! "recurring on" form "->" v)
+           (recur state env v false))
          v)))))
 
 ;;;;; Builtins
