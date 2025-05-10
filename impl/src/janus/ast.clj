@@ -193,6 +193,9 @@
   (toString [_]
     (str "#F[" (fname f) "]")))
 
+(defn pfn [f]
+  (->Primitive f))
+
 (defmethod print-method Primitive [{:keys [f]} ^Writer w]
   (.write w "#F[")
   (if-let [n (:name (meta f))]
@@ -211,6 +214,9 @@
   Object
   (toString [_]
     (str "#M[" (fname f) "]")))
+
+(defn macro [f]
+  (->Macro f))
 
 (defmethod print-method Macro [{:keys [f]} ^Writer w]
   (.write w "#M[")

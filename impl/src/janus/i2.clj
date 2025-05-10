@@ -63,21 +63,25 @@
           inner
           (decls inner)))
 
+(defn merge-env [x y]
+  (let [outer (or (get-env x) (empty-ns))
+        inner (or (get-env y) outer)]
+    (bind-decls inner outer)))
+
 (defn nearest-env [x k]
-  (let [v     (get x k)
-        outer (or (get-env x) (empty-ns))
-        inner (or (get-env v) outer)
-        e     (bind-decls inner outer)]
+  (let [v (get x k)
+        e (merge-env x v)]
     (set-env v e)))
 
 ;;;;; Accessors
 
-(defn name [x] (nearest-env x :name))
 (defn params [x] (nearest-env x :params))
-(defn body [x] (nearest-env x :body))
-(defn head [x] (nearest-env x :head))
-(defn tail [x] (nearest-env x :tail))
-(defn form [x] (nearest-env x :form))
+(defn name   [x] (nearest-env x :name))
+(defn body   [x] (nearest-env x :body))
+(defn head   [x] (nearest-env x :head))
+(defn tail   [x] (nearest-env x :tail))
+(defn form   [x] (nearest-env x :form))
+(defn kvs    [x] (nearest-env x :kvs))
 
 ;;;;; Application
 
@@ -87,7 +91,7 @@
         env (if (name μ) (bind env (name μ) μ) env)]
     (set-env body env)))
 
-(defn μ-call [env [μ args]]
+(defn μ-call [μ args]
   (trace! "invoke" μ "with" args)
   (if (and (ast/symbol? (params μ)) (or (nil? (name μ)) (ast/symbol? (name μ))))
     (walk (μ-bind μ args))
@@ -102,15 +106,19 @@
 (defn primitive-reduced? [x]
   (and (vector? x) (every? evaluated? x)))
 
-(defn primitive-call [[head tail]]
+(defn primitive-call [head tail]
   (let [args (walk tail)]
     (trace! "pcall" head args)
     (if (primitive-reduced? args)
       (apply (:f head) args)
       (ast/application head args))))
 
-(defn macro-call [env [head tail]]
-  ((:f head) env tail))
+(defn macro-call [head tail]
+  ;; Macros can't be applied if they don't even have syntactic args.
+  (let [args (if (vector? tail) tail (walk tail))]
+    (if (vector? args)
+      ((:f head) args)
+      (ast/application head args))))
 
 ;;;;; Reduction
 
@@ -131,7 +139,25 @@
         (walk μ')))
     (assoc μ :body (walk (μ-declare μ)))))
 
-(defn emit-reduce [x])
+(defn emit-reduce [x]
+  (ast/emission (walk (kvs x))))
+
+(defn list-reduce [xs]
+  (with-meta (into [] (map #(walk (set-env % (merge-env % xs)))) xs) (meta xs)))
+
+;;;;; Eval
+
+(defn eval-list [xs]
+  (walk (with-meta (into [] (map ast/immediate xs)) (meta xs))))
+
+(defn eval-pair [p]
+  (walk (with-meta (ast/application (ast/immediate (head p)) (tail p)) (meta p))))
+
+(defn eval-eval [x]
+  (let [inner (walk x)]
+    (if (evaluated? inner)
+      (walk (ast/immediate inner))
+      (ast/immediate inner))))
 
 ;;;;; Tree walker
 
@@ -150,42 +176,72 @@
   (get type-table (type x) :V))
 
 (def rules
-  {:down {[:I :S] resolve   ; This is where the env is read
+  {[:I :S] resolve   ; env lookup
+   [:I :P] eval-pair ; (I (P x y)) => (A (I x) y)
+   [:I :L] eval-list ; (I (L x y ...)) => (L (I x) (I y) ...)
+   [:I :I] eval-eval ;
+   [:I :V] identity  ; (I V) => V. values eval to themselves
 
-          [:I :P] (fn [p] ; (I (P x y)) => (A (I x) y)
-                    (walk (ast/application (ast/immediate (head p)) (tail p))))
+   ;; In general we cannot walk into structures. These are the exceptions.
+   :L list-reduce
+   :μ μ-reduce
+   :E emit-reduce
 
-          [:I :L] (fn [xs] ; (I (L x y ...)) => (L (I x) (I y) ...)
-                    (walk (into [] (map ast/immediate xs))))
+   ;; Three kinds of operators are built in. I don't think we need any others,
+   ;; but that might change.
+   ;;
+   ;; In fact, I'm not 100% convinced we need to distinguish primitive fns from
+   ;; primitive macros as a language feature. It ought to be possible to
+   ;; implement a primitive fn as a primitive macro, but it has proven mightily
+   ;; inconvenient.
+   [:A :M] macro-call
+   [:A :F] primitive-call
+   [:A :μ] μ-call})
 
-          [:I :V] identity ; (I V) => V. values eval to themselves
+(defn make-tree [rules]
+  (reduce (fn [acc [k v]]
+            ;; FIXME: This works for now because there are no conflicting prefixes.
+            (assoc-in acc (if (vector? k) k [k]) v))
+          {} rules))
 
-          ;; In general we cannot walk into structures. These are the exceptions.
-          :L (fn [xs] (into [] (map walk) xs))
-          :μ μ-reduce
-          :E emit-reduce
+(defn step [x]
+  (cond
+    (instance? janus.ast.Immediate x)   (form x)
+    (instance? janus.ast.Application x) (head x)
+    true                                nil))
 
-          ;; Three kinds of applicables are built in. I don't think we need any
-          ;; others, but that might change.
-          [:A :M] macro-call
-          [:A :F] primitive-call
-          ;; REVIEW: Does it matter if the tail is currently reducible?
-          ;; So long and the name and params of the μ are reduced to symbols, we
-          ;; can apply any args in a purely syntactic fashion.
-          ;; Whether that's useful is to be determined.
-          [:A :μ] μ-call}
+(defn walk1 [rules sexp]
+  (when sexp
+    (let [t (ast-type sexp)]
+      (when-let [inst (get rules t)]
+        (if (fn? inst)
+          [inst sexp]
+          (recur inst (step sexp)))))))
 
-   ;; The upwards pass reconstructs the AST from whatever couldn't be evaluated
-   ;; on the way down.
-   ;; REVIEW: Does anything here look suspicious to you?
-   :up {[:I :S] identity
-        [:I :A] identity
-        [:I :I] identity
-        [:A :E] identity ; this one's a little fishy...
-        [:A :I] identity
-        [:A :A] identity
-        [:A :F] identity
+(defn smart-call [f x]
+  (cond
+    (instance? janus.ast.Immediate x)   (f (form x))
+    (instance? janus.ast.Application x) (f (head x) (tail x))
+    true                                (f x)))
 
-        ;; The application of a primitive macro cannot be postponed, so we don't
-        ;; have a case for [:A :M]
-        :A      'error}})
+(defn walk [sexp]
+  (if-let [f (walk1 (make-tree rules))]
+    (smart-call f sexp)
+    sexp))
+
+;;;;; Builtins
+
+(defn createμ [args]
+  (let [[name params body] (if (= 3 (count args)) args `[nil ~@args])]
+    (walk (ast/μ name params body))))
+
+(defn emit [kvs]
+  (assert (even? (count kvs)))
+  (walk (ast/emission
+         (map (fn [[k v]] [(ast/immediate k) v]) (partition 2 kvs)))))
+
+(defn select {:name "select"} [[p t f]]
+  (let [p (if (boolean? p) p (walk p))]
+    (cond
+      (boolean? p)         (walk (if p t f))
+      (not (evaluated? p)) (ast/application (ast/macro #'select) [p t f]))))
