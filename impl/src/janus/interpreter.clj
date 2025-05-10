@@ -5,7 +5,7 @@
    [janus.ast :as ast]
    [janus.reader :as r]))
 
-(def verbose false)
+(def verbose true)
 
 (defmacro trace! [& args]
   (when verbose
@@ -30,6 +30,16 @@
         (trace! "resolve" s ": declared, unbound")
         (ast/immediate s))
       (do
+        ;; FIXME: This case comes up when macros create macros which create
+        ;; macros... the innermost body gets reduced first before the outer
+        ;; parameters are set.
+        ;;
+        ;; There's nothing wrong with this, but at what point can I validly
+        ;; catch undefined references?
+        ;;
+        ;; It's not obvious that I can even do that at runtime. I'd hate for the
+        ;; only solution to be "trigger an error if you expect a number but get
+        ;; a partially evaluated sexp".
         (trace! "unbound symbol!!!" s)
         (ast/immediate s))
       #_(throw (RuntimeException. (str "Unbound symbol: " s))))))
@@ -193,7 +203,7 @@
 (defn walk [state env form]
   (let [t (ast-type ((get-in rules [state :dispatch] identity) form))]
     (trace! (name state) "rule" t form)
-    (trace! "env:" (sort-by :names (keys (:names env))))
+    ;; (trace! "env:" (sort-by :names (keys (:names env))))
     (let [r (:rules (get rules state))
           v ((get r t (get r :default)) env form)]
       (trace! (name state) "post" (ast-type v) v)
