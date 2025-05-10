@@ -5,14 +5,13 @@
    [janus.ast :as ast]
    [janus.reader :as r]))
 
-
 (def verbose true)
 
 (defmacro trace! [& args]
   (when verbose
     `(println ~@args)))
 
-(clojure.core/declare walk)
+(declare walk)
 
 ;;;;; Environment
 
@@ -120,6 +119,9 @@
       ((:f head) args)
       (ast/application head args))))
 
+(defn apply-head [h t]
+  (walk (ast/application (walk h) t)))
+
 ;;;;; Reduction
 
 (defn μ-declare [μ]
@@ -180,12 +182,20 @@
    [:I :P] eval-pair ; (I (P x y)) => (A (I x) y)
    [:I :L] eval-list ; (I (L x y ...)) => (L (I x) (I y) ...)
    [:I :I] eval-eval ;
-   [:I :V] identity  ; (I V) => V. values eval to themselves
+   :I      identity  ; (I V) => V. values eval to themselves
 
    ;; In general we cannot walk into structures. These are the exceptions.
    :L list-reduce
    :μ μ-reduce
    :E emit-reduce
+
+   [:A :I] apply-head
+   [:A :A] apply-head
+
+   ;; An emission which includes a message to :return can trigger off the
+   ;; application. But the connection logic isn't sophisticated enough for this
+   ;; yet.
+   ;; [:A :E] apply-head
 
    ;; Three kinds of operators are built in. I don't think we need any others,
    ;; but that might change.
@@ -200,8 +210,7 @@
 
 (defn make-tree [rules]
   (reduce (fn [acc [k v]]
-            ;; FIXME: This works for now because there are no conflicting prefixes.
-            (assoc-in acc (if (vector? k) k [k]) v))
+            (assoc-in acc (if (vector? k) (conj k :fn) [k :fn]) v))
           {} rules))
 
 (defn step [x]
@@ -211,12 +220,11 @@
     true                                nil))
 
 (defn walk1 [rules sexp]
-  (when sexp
-    (let [t (ast-type sexp)]
-      (when-let [inst (get rules t)]
-        (if (fn? inst)
-          [inst sexp]
-          (recur inst (step sexp)))))))
+  (trace! "walking" sexp)
+  (let [t (ast-type sexp)]
+    (if-let [inst (get rules t)]
+      (recur inst (step sexp))
+      rules)))
 
 (defn smart-call [f x]
   (cond
@@ -225,8 +233,10 @@
     true                                (f x)))
 
 (defn walk [sexp]
-  (if-let [f (walk1 (make-tree rules))]
-    (smart-call f sexp)
+  (if-let [f (:fn (walk1 (make-tree rules) sexp))]
+    (do
+      (trace! f "on" sexp)
+      (smart-call f sexp))
     sexp))
 
 ;;;;; Builtins
@@ -245,3 +255,152 @@
     (cond
       (boolean? p)         (walk (if p t f))
       (not (evaluated? p)) (ast/application (ast/macro #'select) [p t f]))))
+
+;;;;; Boilerplate
+
+(def macros
+  {"μ"      createμ
+   ;;   "ν"       createν
+   "emit"   emit
+   "select" select
+   ;; "first*" first*
+   ;; "rest*"  rest*
+   })
+
+(defn nth* [c i]
+  (nth c (dec i)))
+
+(def fns
+  {"+*"   +
+   "**"   *
+   "-*"   -
+   "/*"   /
+   ">*"   >
+   "<*"   <
+   "=*"   =
+   "mod*" mod
+
+   "first*" first
+   "rest*"  #(into [] (rest %)) ; We don't deal with seqs
+
+   "count*" count
+   "nth*"   nth* ; Base 1 indexing
+
+   ;; "select" select
+   })
+
+(defn tagged [f]
+  (fn [[k v]]
+    (let [k' (ast/symbol k)]
+      [k' (f (with-meta v {:name k'}))])))
+
+(defn tag-primitives [x f]
+  (into {} (map (tagged f)) x))
+
+(def base-env
+  (reduce (fn [acc [sym val]] (bind acc sym val)) (empty-ns)
+          (concat
+           (map (tagged ast/macro) macros)
+           (map (tagged ast/pfn) fns))))
+
+;;;;; Runtime
+
+(def stack (ConcurrentLinkedDeque.))
+
+;; A task cannot be scheduled until it is ready to run.
+;;
+;; This is a black box: we throw the task over the fence and are assured that it
+;; will eventually run, but we have no indication of when.
+(defn schedule [task]
+  (.add stack task))
+
+(defn run-task [[f arg]]
+  (f arg))
+
+(defn next-task []
+  (try
+    (.pop stack)
+    (catch java.util.NoSuchElementException e
+      (println "---"))))
+
+(defn run! []
+  (when-let [task (next-task)]
+    (run-task task)
+    (recur)))
+
+(def xkeys
+  {:return  (ast/keyword "return")
+   :error   (ast/keyword "error")
+   :unbound (ast/keyword "unbound")
+   :env     (ast/keyword "env")})
+
+(defn with-return [ccs cont]
+  (assoc ccs (xkeys :return) cont))
+
+(defn send! [ccs chn msg]
+  (let [err     (fn [_] (throw (RuntimeException. (str "No such channel: " chn))))
+        unbound (get ccs (xkeys :unbound) err)]
+    (schedule [(get ccs chn unbound) msg])))
+
+(defn perform-emit! [{:keys [kvs]} ccs]
+  (loop [kvs kvs]
+    (when (seq kvs)
+      (let [[chn msg] (first kvs)]
+        (trace! "sending on" chn)
+        (send! ccs chn msg))
+      (recur (rest kvs)))))
+
+(defn send-return! [v ccs]
+  (send! ccs (xkeys :return) v))
+
+(def connection-rules
+  {:E perform-emit!})
+
+(defn connection [x]
+  (get connection-rules (ast-type x) send-return!))
+
+(defn connect [form ccs]
+  ((connection form) form ccs))
+
+;;;;; UI
+
+(def srcpath "../src/")
+(def recxprl (str srcpath "recur.xprl"))
+(def bootxprl (str srcpath "boot.xprl"))
+(def testxprl (str srcpath "test.xprl"))
+
+(def env (atom base-env))
+
+(defn go!
+  ([env f]
+   (walk (set-env (ast/immediate f) env)))
+  ([env f ccs]
+   (schedule [(fn [_] (connect (go! env f) ccs))])
+   (run!)))
+
+(defn ev [s]
+  (go! @env (:form (r/read (r/string-reader s)))))
+
+(defn iev [s]
+  (ast/inspect (ev s)))
+
+(defn loadfile [envatom fname]
+  (let [conts {(xkeys :env)    (fn [[sym value]] (swap! envatom bind sym value))
+               ;; FIXME: This should log a warning. It's not a fatal error
+               (xkeys :return) #(throw (RuntimeException. "return to top level!"))
+               (xkeys :error)  (fn [x]
+                                 (println "Error: " x))}]
+    (loop [reader (r/file-reader fname)]
+      (let [reader (r/read reader)
+            form   (:form reader)]
+        (if (= :eof form)
+          @envatom
+          (do
+            (go! @envatom form (with-return conts println))
+            (recur reader)))))))
+
+(defmacro inspect [n]
+  `(-> @env (get-in [:names (ast/symbol ~(name n))]) ast/inspect))
+
+(defn check [s]
+  (ast/inspect (:form (r/read (r/string-reader s) @env))))
