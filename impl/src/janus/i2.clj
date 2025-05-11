@@ -181,7 +181,7 @@
   {[:I :S] resolve   ; env lookup
    [:I :P] eval-pair ; (I (P x y)) => (A (I x) y)
    [:I :L] eval-list ; (I (L x y ...)) => (L (I x) (I y) ...)
-   [:I :I] eval-eval ;
+   [:I :I] eval-eval
    :I      identity  ; (I V) => V. values eval to themselves
 
    ;; In general we cannot walk into structures. These are the exceptions.
@@ -213,42 +213,48 @@
             (assoc-in acc (if (vector? k) (conj k :fn) [k :fn]) v))
           {} rules))
 
+(def rule-tree (make-tree rules))
+
 (defn step [x]
   (cond
     (instance? janus.ast.Immediate x)   (form x)
     (instance? janus.ast.Application x) (head x)
     true                                nil))
 
-(defn walk1 [rules sexp]
-  (trace! "walking" sexp)
-  (let [t (ast-type sexp)]
-    (if-let [inst (get rules t)]
-      (recur inst (step sexp))
-      rules)))
+(defn walk1 [sexp]
+  (let [t1 (ast-type sexp)]
+    (if-let [subtree (get rule-tree t1)]
+      (let [subexp (step sexp)
+            t2 (ast-type subexp)]
+        (if-let [subsubtree (get subtree t2)]
+          [[t1 t2] (:fn subsubtree)]
+          [t1 (:fn subtree)]))
+      [t1 identity])))
 
 (defn smart-call [f x]
+  ;; Not actually all that smart...
   (cond
     (instance? janus.ast.Immediate x)   (f (form x))
     (instance? janus.ast.Application x) (f (head x) (tail x))
     true                                (f x)))
 
 (defn walk [sexp]
-  (if-let [f (:fn (walk1 (make-tree rules) sexp))]
-    (do
-      (trace! f "on" sexp)
-      (smart-call f sexp))
-    sexp))
+  (let [[rule f] (walk1 sexp)]
+    (trace! rule sexp)
+    (smart-call f sexp)))
 
 ;;;;; Builtins
 
 (defn createμ [args]
   (let [[name params body] (if (= 3 (count args)) args `[nil ~@args])]
-    (walk (ast/μ name params body))))
+    (walk (with-meta (ast/μ name params body) (meta args)))))
 
 (defn emit [kvs]
   (assert (even? (count kvs)))
   (walk (ast/emission
-         (map (fn [[k v]] [(ast/immediate k) v]) (partition 2 kvs)))))
+         (with-meta
+           (into [] (map (fn [[k v]] [(ast/immediate k) v])) (partition 2 kvs))
+           (meta kvs)))))
 
 (defn select {:name "select"} [[p t f]]
   (let [p (if (boolean? p) p (walk p))]
@@ -400,7 +406,7 @@
             (recur reader)))))))
 
 (defmacro inspect [n]
-  `(-> @env (get-in [:names (ast/symbol ~(name n))]) ast/inspect))
+  `(-> @env (get-in [:names (ast/symbol ~(clojure.core/name n))]) ast/inspect))
 
 (defn check [s]
   (ast/inspect (:form (r/read (r/string-reader s) @env))))
