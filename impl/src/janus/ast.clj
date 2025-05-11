@@ -245,7 +245,7 @@
 (defrecord Emission [kvs]
   Object
   (toString [_]
-    (str "#E" (into {} kvs))))
+    (str "#E" kvs)))
 
 (defmethod print-method Emission [{:keys [kvs]} ^Writer w]
   (.write w "#E")
@@ -256,7 +256,7 @@
   (pp/simple-dispatch kvs))
 
 (defn emission [kvs]
-  (Emission. kvs))
+  (->Emission kvs))
 
 ;;;;; Destructuring
 

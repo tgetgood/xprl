@@ -84,6 +84,9 @@
 
 ;;;;; Application
 
+(defn partial? [μ]
+  (not (and (or (nil? (name μ)) (ast/symbol? (name μ))) (ast/symbol? (params μ)))))
+
 (defn μ-bind [μ args]
   (let [body (body μ)
         env (bind (get-env body) (params μ) args)
@@ -92,9 +95,9 @@
 
 (defn μ-call [μ args]
   (trace! "invoke" μ "with" args)
-  (if (and (ast/symbol? (params μ)) (or (nil? (name μ)) (ast/symbol? (name μ))))
-    (walk (μ-bind μ args))
-    (ast/application μ args)))
+  (if (partial? μ)
+    (ast/application μ args)
+    (walk (μ-bind μ args))))
 
 (defn evaluated? [x]
   (cond
@@ -119,6 +122,9 @@
       ((:f head) args)
       (ast/application head args))))
 
+(defn error-call [h t]
+  (throw (RuntimeException. (str h " is not applicable, But was called with " t))))
+
 (defn apply-head [h t]
   (walk (ast/application (walk h) t)))
 
@@ -130,19 +136,17 @@
         env (if (name μ) (μ-declare-1 env (name μ)) env)]
     (set-env body env)))
 
-(defn partial? [μ]
-  (not (and (or (nil? (name μ)) (ast/symbol? (name μ))) (ast/symbol? (params μ)))))
-
 (defn μ-reduce [μ]
   (if (partial? μ)
-    (let [μ' (ast/μ (walk (name μ)) (walk (params μ)) (walk (body μ)))]
+    (let [μ' (with-meta (ast/μ (walk (name μ)) (walk (params μ)) (walk (body μ)))
+               (meta μ))]
       (if (partial? μ')
         μ'
         (walk μ')))
     (assoc μ :body (walk (μ-declare μ)))))
 
 (defn emit-reduce [x]
-  (ast/emission (walk (kvs x))))
+  (with-meta (ast/emission (walk (kvs x))) (meta x)))
 
 (defn list-reduce [xs]
   (with-meta (into [] (map #(walk (set-env % (merge-env % xs)))) xs) (meta xs)))
@@ -160,6 +164,13 @@
     (if (evaluated? inner)
       (walk (ast/immediate inner))
       (ast/immediate inner))))
+
+(defn eval-apply [x]
+  (let [app (walk x)
+        res (with-meta (ast/immediate app) (meta x))]
+    (if (evaluated? app)
+      (walk res)
+      res)))
 
 ;;;;; Tree walker
 
@@ -182,6 +193,7 @@
    [:I :P] eval-pair ; (I (P x y)) => (A (I x) y)
    [:I :L] eval-list ; (I (L x y ...)) => (L (I x) (I y) ...)
    [:I :I] eval-eval
+   [:I :A] eval-apply
    :I      identity  ; (I V) => V. values eval to themselves
 
    ;; In general we cannot walk into structures. These are the exceptions.
@@ -206,7 +218,8 @@
    ;; inconvenient.
    [:A :M] macro-call
    [:A :F] primitive-call
-   [:A :μ] μ-call})
+   [:A :μ] μ-call
+   :A      error-call})
 
 (defn make-tree [rules]
   (reduce (fn [acc [k v]]
@@ -239,9 +252,11 @@
     true                                (f x)))
 
 (defn walk [sexp]
-  (let [[rule f] (walk1 sexp)]
-    (trace! rule sexp)
-    (smart-call f sexp)))
+  (let [[rule f] (walk1 sexp)
+        _        (trace! "rule match:" rule sexp)
+        v        (smart-call f sexp)]
+    (trace! "result:" rule "\n" sexp "\n->\n" v)
+    v))
 
 ;;;;; Builtins
 
@@ -251,10 +266,10 @@
 
 (defn emit [kvs]
   (assert (even? (count kvs)))
-  (walk (ast/emission
-         (with-meta
-           (into [] (map (fn [[k v]] [(ast/immediate k) v])) (partition 2 kvs))
-           (meta kvs)))))
+  (walk
+   (with-meta
+     (ast/emission (into [] (map (fn [[k v]] [(ast/immediate k) v])) (partition 2 kvs)))
+     (meta kvs))))
 
 (defn select {:name "select"} [[p t f]]
   (let [p (if (boolean? p) p (walk p))]
@@ -348,11 +363,11 @@
         unbound (get ccs (xkeys :unbound) err)]
     (schedule [(get ccs chn unbound) msg])))
 
-(defn perform-emit! [{:keys [kvs]} ccs]
-  (loop [kvs kvs]
+(defn perform-emit! [x ccs]
+  (loop [kvs (kvs x)]
     (when (seq kvs)
       (let [[chn msg] (first kvs)]
-        (trace! "sending on" chn)
+        (trace! "sending on" chn ":" msg)
         (send! ccs chn msg))
       (recur (rest kvs)))))
 
