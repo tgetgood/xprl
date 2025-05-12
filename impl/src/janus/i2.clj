@@ -154,7 +154,12 @@
 
 (defn walk-μ [μ]
   (let [n  (name μ)]
-    (ast/μ (when n (walk n)) (walk (params μ)) (walk (body μ)))))
+    (ast/μ (when n (walk n)) (walk (params μ))
+           ;; TODO: Somehow magically suspend symbol declaration requirements at
+           ;; this point.
+           ;; dynamic vars will do it. Ironic when I'm implementing a language
+           ;; with no dynamic scoping.
+           (walk (body μ)))))
 
 (defn μ-reduce [μ]
   (let [μ' (if (partial? μ) (walk-μ μ) μ)]
