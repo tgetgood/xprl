@@ -318,7 +318,7 @@
 (defn select {:name "select"} [args]
   (let [[p t f] (map #(walk (xnth args %)) (range 3))]
     (cond
-      (boolean? p)         (walk (if p t f))
+      (boolean? p)         (if p t f)
       (not (evaluated? p)) (ast/application (ast/macro #'select) [p t f]))))
 
 ;;;;; Boilerplate

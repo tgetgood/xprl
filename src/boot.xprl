@@ -16,6 +16,10 @@
   (μ args
      ~((μ ~(nth* ~x 1) ~~(nth* ~x 2)) . ~~args)))
 
+(defμ defn x
+  (defμ ~(nth* ~x 1) args#
+    ((μ ~(nth* ~x 1) ~(nth* ~x 2) ~~(nth* ~x 3)) . ~~args#)))
+
 (def fn2
   (μ x
      ~(μ args
@@ -62,11 +66,9 @@
 (def first (wrap . first*))
 (def rest (wrap . rest*))
 
-(def inc
-  (fn x (+ 1 (nth x 1))))
+(defn inc x (+ 1 (nth x 1)))
 
-(def !
-  (fn n
-    (if (= n 0)
-      1
-      (* n (! . (- n 1))))))
+(defn ! n
+  (if (= n 0)
+    1
+    (* n (! . (- n 1)))))
