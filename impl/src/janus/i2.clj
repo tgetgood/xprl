@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [resolve run! binding name])
   (:import (java.util.concurrent ConcurrentLinkedDeque))
   (:require
+   [clojure.set :as set]
    [janus.ast :as ast]
    [janus.reader :as r]))
 
@@ -12,6 +13,8 @@
     `(println ~@args)))
 
 (declare walk)
+
+(def ^:dynamic *fail-on-undeclared* false)
 
 ;;;;; Environment
 
@@ -45,10 +48,11 @@
         (do
           (trace! "declared" s)
           (ast/immediate s))
-        (do
-          (trace! "statically unverifiable" s)
-          (ast/immediate s))
-        #_(throw (RuntimeException. (str "Unbound symbol: " s)))))))
+        (if *fail-on-undeclared*
+          (throw (RuntimeException. (str "Unbound symbol: " s)))
+          (do
+            (trace! "exceptionally undeclared:" s)
+            (ast/immediate s)))))))
 
 (defn bind [env s val]
   (-> env
@@ -57,14 +61,20 @@
 
 (defn μ-declare-1 [env s]
   (-> env
-      (update :declared conj s)
+      (update :declared (fnil conj #{}) s)
       (update :names dissoc s)))
 
 (defn bind-decls [inner outer]
   (when (seq inner)
-    (reduce (fn [e sym] (if-let [val (lookup outer sym)] (bind e sym val) e))
-            inner
-            (decls inner))))
+    ;; (println inner)
+    ;; (println outer)
+    (let [extra-decls (set/difference
+                       (decls outer)
+                       (set/union (decls inner) (into #{} (keys (:names inner)))))]
+      (update (reduce (fn [e sym] (if-let [val (lookup outer sym)] (bind e sym val) e))
+                      inner
+                      (decls inner))
+              :declared set/union extra-decls))))
 
 (defn merge-env [x y]
   (let [outer (or (get-env x) nil)
@@ -85,13 +95,7 @@
 (defn tail   [x] (nearest-env x :tail))
 (defn form   [x] (nearest-env x :form))
 (defn kvs    [x] (nearest-env x :kvs))
-(defn xnth [x n]
-  ;; (println "====")
-  ;; (println n x)
-  ;; (println (get-env x))
-  ;; (println (get-env (get x n)))
-  ;; (println (get-env (nearest-env x n)))
-  (nearest-env x n))
+(defn xnth [x n] (nearest-env x n))
 
 ;;;;; Application
 
@@ -102,6 +106,9 @@
   (let [body (body μ)
         env (bind (get-env body) (params μ) args)
         env (if (name μ) (bind env (name μ) μ) env)]
+    (trace! "binding params:" (params μ) (name μ)
+            "\nenv:" (sort-by :names (keys (:names env)))
+            "\ndeclared:" (sort-by :names (decls env)))
     (set-env body env)))
 
 (defn μ-call [μ args]
@@ -150,18 +157,28 @@
   (let [body (body μ)
         env (μ-declare-1 (get-env body) (params μ))
         env (if (name μ) (μ-declare-1 env (name μ)) env)]
+    (trace! "declaring params:" (params μ) (name μ) env
+            "\nenv:" (sort-by :names (keys (:names env)))
+            "\ndeclared:" (sort-by :names (decls env)))
     (set-env body env)))
 
 (defn walk-μ [μ]
-  (let [n  (name μ)]
-    (ast/μ (when n (walk n)) (walk (params μ))
-           ;; TODO: Somehow magically suspend symbol declaration requirements at
-           ;; this point.
-           ;; dynamic vars will do it. Ironic when I'm implementing a language
-           ;; with no dynamic scoping.
-           (walk (body μ)))))
+  (let [n   (name μ)
+        n   (when n (walk n))
+        p   (walk (params μ))
+        _   (trace! "=== suspending unbound error ===")
+        out (ast/μ n p (with-bindings {#'*fail-on-undeclared* false}
+                         (walk (body μ))))]
+    (trace! "=== restoring unbound error ===")
+    out))
 
 (defn μ-reduce [μ]
+  #_(trace! "reduce μ" μ "in"
+            "\nenv:" (sort-by :names (keys (:names (get-env μ))))
+            "\ndeclared:" (sort-by :names (decls (get-env μ)))
+            "\nparamsenv:" (sort-by :names (keys (:names (get-env (params μ)))))
+            "\ndeclared:" (sort-by :names (decls (get-env (params μ))))
+            "\n " (type (params μ)) (get-env (xnth (tail (params μ)) 0)))
   (let [μ' (if (partial? μ) (walk-μ μ) μ)]
     (if (partial? μ')
       μ'
@@ -298,8 +315,8 @@
      (ast/emission (into [] (map (fn [[k v]] [(ast/immediate k) v])) (partition 2 kvs)))
      (meta kvs))))
 
-(defn select {:name "select"} [[p t f]]
-  (let [p (if (boolean? p) p (walk p))]
+(defn select {:name "select"} [args]
+  (let [[p t f] (map #(walk (xnth args %)) (range 3))]
     (cond
       (boolean? p)         (walk (if p t f))
       (not (evaluated? p)) (ast/application (ast/macro #'select) [p t f]))))
