@@ -45,7 +45,10 @@
         (do
           (trace! "declared" s)
           (ast/immediate s))
-        (throw (RuntimeException. (str "Unbound symbol: " s)))))))
+        (do
+          (trace! "statically unverifiable" s)
+          (ast/immediate s))
+        #_(throw (RuntimeException. (str "Unbound symbol: " s)))))))
 
 (defn bind [env s val]
   (-> env
@@ -58,12 +61,13 @@
       (update :names dissoc s)))
 
 (defn bind-decls [inner outer]
-  (reduce (fn [e sym] (if-let [val (lookup outer sym)] (bind e sym val) e))
-          inner
-          (decls inner)))
+  (when (seq inner)
+    (reduce (fn [e sym] (if-let [val (lookup outer sym)] (bind e sym val) e))
+            inner
+            (decls inner))))
 
 (defn merge-env [x y]
-  (let [outer (or (get-env x) (empty-ns))
+  (let [outer (or (get-env x) nil)
         inner (or (get-env y) outer)]
     (bind-decls inner outer)))
 
@@ -81,6 +85,13 @@
 (defn tail   [x] (nearest-env x :tail))
 (defn form   [x] (nearest-env x :form))
 (defn kvs    [x] (nearest-env x :kvs))
+(defn xnth [x n]
+  ;; (println "====")
+  ;; (println n x)
+  ;; (println (get-env x))
+  ;; (println (get-env (get x n)))
+  ;; (println (get-env (nearest-env x n)))
+  (nearest-env x n))
 
 ;;;;; Application
 
@@ -95,9 +106,10 @@
 
 (defn μ-call [μ args]
   (trace! "invoke" μ "with" args)
-  (if (partial? μ)
-    (ast/application μ args)
-    (walk (μ-bind μ args))))
+  (let [μ' (if (partial? μ) (walk μ) μ)]
+    (if (partial? μ')
+      (ast/application μ' args)
+      (walk (μ-bind μ' args)))))
 
 (defn evaluated? [x]
   (cond
@@ -126,7 +138,11 @@
   (throw (RuntimeException. (str h " is not applicable, But was called with " t))))
 
 (defn apply-head [h t]
-  (walk (ast/application (walk h) t)))
+  (let [h' (walk h)
+        app (ast/application h' t)]
+    (if (evaluated? h')
+      (walk app)
+      app)))
 
 ;;;;; Reduction
 
@@ -136,28 +152,34 @@
         env (if (name μ) (μ-declare-1 env (name μ)) env)]
     (set-env body env)))
 
+(defn walk-μ [μ]
+  (let [n  (name μ)]
+    (ast/μ (when n (walk n)) (walk (params μ)) (walk (body μ)))))
+
 (defn μ-reduce [μ]
-  (if (partial? μ)
-    (let [μ' (with-meta (ast/μ (walk (name μ)) (walk (params μ)) (walk (body μ)))
-               (meta μ))]
-      (if (partial? μ')
-        μ'
-        (walk μ')))
-    (assoc μ :body (walk (μ-declare μ)))))
+  (let [μ' (if (partial? μ) (walk-μ μ) μ)]
+    (if (partial? μ')
+      μ'
+      (assoc μ' :body (walk (μ-declare μ'))))))
 
 (defn emit-reduce [x]
-  (with-meta (ast/emission (walk (kvs x))) (meta x)))
+  (ast/emission (walk (kvs x))))
+
+(defn list-xform [f xs]
+  (reduce (fn [acc i]
+            (conj acc (f (xnth xs i))))
+          [] (range (count xs))))
 
 (defn list-reduce [xs]
-  (with-meta (into [] (map #(walk (set-env % (merge-env % xs)))) xs) (meta xs)))
+  (list-xform walk xs))
 
 ;;;;; Eval
 
 (defn eval-list [xs]
-  (walk (with-meta (into [] (map ast/immediate xs)) (meta xs))))
+  (walk (list-xform ast/immediate xs)))
 
 (defn eval-pair [p]
-  (walk (with-meta (ast/application (ast/immediate (head p)) (tail p)) (meta p))))
+  (walk (ast/application (ast/immediate (head p)) (tail p))))
 
 (defn eval-eval [x]
   (let [inner (walk x)]
@@ -167,7 +189,7 @@
 
 (defn eval-apply [x]
   (let [app (walk x)
-        res (with-meta (ast/immediate app) (meta x))]
+        res (ast/immediate app)]
     (if (evaluated? app)
       (walk res)
       res)))
