@@ -6,7 +6,7 @@
    [janus.ast :as ast]
    [janus.reader :as r]))
 
-(def verbose true)
+(def verbose false)
 
 (defmacro trace! [& args]
   (when verbose
@@ -157,7 +157,7 @@
   (let [body (body μ)
         env (μ-declare-1 (get-env body) (params μ))
         env (if (name μ) (μ-declare-1 env (name μ)) env)]
-    (trace! "declaring params:" (params μ) (name μ) env
+    (trace! "declaring params:" (params μ) (name μ)
             "\nenv:" (sort-by :names (keys (:names env)))
             "\ndeclared:" (sort-by :names (decls env)))
     (set-env body env)))
