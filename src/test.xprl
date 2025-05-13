@@ -18,7 +18,7 @@
 ;; Scope test
 ;; Don't want dynamic scope to creep into the language just because we're using
 ;; it in the implementation
-((fn x (((fn x x) . +) . x ((fn x (+ x 1)) . 2))) 5) #_=>  8
+((fn x (((fn x x) . +) x ((fn x (+ x 1)) . 2))) . 5) #_=>  8
 
 ;; ((fn xs (+ (nth xs 1) (nth xs 2) (nth (nth xs 3) 1) 1)) 2 3 [1]) #_=> 7
 

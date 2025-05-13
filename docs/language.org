@@ -54,7 +54,7 @@ This is largely an aid to my own memory so bear with me.
 ** No Implicit Evaluation
    In constrast to most lisps (in fact all I've ever found save one called
    [[https://web.cs.wpi.edu/~jshutt/kernel.html][Kernel]]), we have no implicit evaluation. That means that both arguments and
-   return values are passed by name. That sounds crazy. If not for the Kernel
+   return values are passed by name[fn:1]. That sounds crazy. If not for the Kernel
    thesis I'd never have believed such a scheme could work, but it does!
 
    To explain, I'll need to jump ahead to μ.
@@ -121,8 +121,8 @@ This is largely an aid to my own memory so bear with me.
      (g 4 5)
      ;; => 9
 
-     ;; Note that this only works because `+` is defined so as to explicitly eval
-     ;; its arguments before applying the underlying addition operation.
+     ;; Note that this only works because `+` is defined so as to eval its
+     ;; arguments before applying the underlying addition operation.
    #+END_SRC
 
    Given a function that only works on literal values (say a version of =+=
@@ -149,7 +149,8 @@ This is largely an aid to my own memory so bear with me.
               ~((μ ~params ~~body) . ~~args))))
    #+END_SRC
 
-   This is the actual definition of =fn= at the core of the language.
+   This is the actual definition of =fn= at the core of the language (at least
+   after the point at which destructuring is defined).
 
    It may help to think of the body of a μ as quasiquoted, except that we can
    unquote as many times as we please.
@@ -229,13 +230,12 @@ This is largely an aid to my own memory so bear with me.
    =~(μ params body)= => =#(#Pmac[createμ] params body)=
 
    which causes the underlying implementation of the primitive =createμ= to be
-   called with the tail of the application: =[params body]= as well as the
-   current environment and continuation map.
+   called with the tail of the application: =[params body]=.
 
-   It's up to a primitive macro to continue appropriately, which makes them very
-   brittle. As of yet I only need 4 of them. They're all related to manipulating
-   context. Notably all control flow can be implemented as normal μs in the
-   language itself.
+   It's up to a primitive macro to continue the evaluation appropriately, which
+   makes them very brittle. As of yet I very few of them. They're all related to
+   creating and manipulating structures which are outside of the scope of the
+   syntax..
 
    There are also primitive functions which can only be applied to literal
    values. These aren't essential to having a working language, but while you
@@ -243,8 +243,8 @@ This is largely an aid to my own memory so bear with me.
    machine's arithmetic capabilities (or those of the implementation language at
    least).
 
-   Primitive functions are best thought of as functions implemented in another
-   language. We'll come back to them later.
+   Primitive functions are best thought of as interpreters implemented in
+   another language. We'll come back to them later.
 
    Our third rule of execution involves what it means to apply arguments to a μ.
 
@@ -254,8 +254,9 @@ This is largely an aid to my own memory so bear with me.
    =#((#μ params body) . args)= =>
    =(extend-enviroment (destructuring-bind params args) body)=
 
-   Note that =extend-environment= and =destructuring-bind= are only defined in
-   the implementation at present. Bootstrapping is not a short term goal.
+   Note that =extend-environment= and =destructuring-bind= are
+   oversimplifications for didactic purposes. We'll explain later how
+   environments really work.
 
    This is just Steele's "λ the ultimate declarative" without applicative
    semantics. A μ takes arguments, binds them to formal parameters, and then
@@ -272,8 +273,8 @@ This is largely an aid to my own memory so bear with me.
 
    becomes Y with symbols occuring in X renamed to their bindings in Z.
 
-   In particular =#((#μ X Y) . ~X)= => =Y=. This actually comes up a bunch when
-   compiling, so it's important to recognise.
+   In particular =#((#μ X Y) . ~X)= => =Y=. This actually comes up often as an
+   optimisation, so it's useful to recognise.
 
    Finally, eval distributes over lists, and literal values are fixed points to
    eval.
@@ -281,7 +282,13 @@ This is largely an aid to my own memory so bear with me.
    That is: =~V= => =V= if V is a literal value (number, string, bool, etc.)
 
    and: =~[X Y Z]= => =[~X ~Y ~Z]=
+
+   N.B.: The interpreter is currently (as of this commit) written to explicitly
+   walk the ast and apply rules. the =core/rules= map defines the rules
+   currently needed which is larger than those discussed above.
 ** Summary
+   - Note taken on [2025-05-13 Tue 15:22] \\
+     This section is likely out of sync with reality.
    Reduction is the process of applying the following rules repeatedly until
    none can be applied any longer:
 
@@ -317,33 +324,59 @@ This is largely an aid to my own memory so bear with me.
    at a value. That value might be a μ waiting on arguments. Obviously the
    interior of that μ will be blocked to some extent until those arguments are
    known.
-
-   Note on implementation:
-
-   The current interpreter implicitly embodies these rules. When I get around to
-   writing a compiler, the first step will be an explicit search over these
-   rules to find a "maximally reduced normal form" which can then be translated
-   into lower level code. But that's for another day.
 * The Environment
-  When reflecting on code at runtime, as when debugging or working in a repl,
-  you see sexps containing symbols. Each symbol is either statically defined by
-  the lexical context at dev time, in which case it's tagged with a pointer to
-  its referrant. Otherwise it's a local variable, that is a value bound by =let=
-  or passing arguments to an operator, in which case it is tagged with a
-  reference to the binding form. This is intended to make shadowing obvious.
+  The core semantics of the environment are based on Scheme. Or more
+  specifically on an adamantly lexically scoped version of scheme, the downsides
+  of which were explained in "the art of the interpreter".
 
-  To the runtime, however, there are no symbols, only values. Values known but
-  not yet operated upon and values as yet unknown.
+  To paraphrase that paper, lexical scoping "All the way up" results in a
+  strictly one pass interpreter where forward declarations and recursion (both
+  simple and mutual) are impossible because nothing can refer to anything that
+  didn't exist strictly before it does (including the form itself), Also
+  debugging is very hard if you can't redefine things and see what changes.
 
-  That needs a better explanation...
+  I haven't made these problems go away — they're not going anywhere — I just
+  think priorities have shifted and the evidence of the benefits to be had from
+  immutability make some pain worthwhile.
 
+  Firstly, computers are orders of magnitude faster than they were 50 years ago.
+  We don't need to change anything in place if we can recompile and entire
+  namespace in 100ms.
 
+  I also cheat by allowing a namespace to include "declarations" as part of its
+  definition and anything declared will, when evaluated, just postpone the
+  computation until it has been defined properly. Notably, named functions
+  declare their own names when created, so recursion works as expected.
+
+  Where we diverge from scheme, and all other lisps with which I'm familiar, is
+  in where the environment is stored and how it is managed.
+
+  The interpreter does not pass the environment around. Rather the environment
+  in which a sexp is to be interpreted is attached to (but not quite part of)
+  the sexp itself.
+
+  Thus during reduction when we create a new form to be acted upon later, we
+  also create and attach its environment so that when (if) it is eventually
+  evaluated that environment will determine its behaviour.
+
+  That makes the environment immutable. So much so that we can pass arguments to
+  a function without evaluating them knowing that when they are (eventually)
+  evaluated, it will be done so in the correct context.
+
+  One consequence of this is that lexical capture when metaprogramming is much
+  rarer than in other lisps. Though it is still possible.[fn:2]
+
+  The actual mechanics of attaching the env to forms and modifying it as
+  appropriate is sadly rather complex — likely a sign of my own poor
+  understanding — and I'm not going to go into detail here until I'm more
+  convinced that it's correct.
 * Channels and Streams
   In this language channels and streams are two sides of the same phenomenon.
 
-  A channel is a black box to which messages are sent. They take the place of
+  Channels are black boxes to which messages are sent. They take the place of
   addresses in actor languages or objects in OO languages. In a sense they are
-  write only, but they never actually change.
+  write only, but they never actually change because they;re just reception
+  points.
 
   A stream is a lazy, potentially unbounded, sequential data structure. A stream
   is a value, but it might not yet be known. Reading the first element off of a
@@ -361,8 +394,18 @@ This is largely an aid to my own memory so bear with me.
   runtime know that all messages sent from a given μ have been received before
   cleaning up and moving on.
 
-  A stream is a pseudo value. It can be passed as an argument, but it cannot be
-  emitted, hence cannot be returned.
+  Default (syntactic) return, under the hood, emits to a channel named :return.
+  :return is always a channel and so anything that can return really has a
+  return ~stream~, not a return ~value~. But having to read the first element of
+  the return stream every time a subprocess is invoked is painful and error
+  prone.
+
+  So a convention: application of a μ to arguments creates a return channel,
+  sets up the computation and returns the first value from the return stream to
+  the syntactic return position. Application of a ν to arguments creates a
+  return channel, sets up the computation and returns the return stream itself.
+
+  These are my current thoughts on the matter but might change.
 
   A channel/stream pair can be created explicitly within a ν. When passed as a
   value, the stream part is passed, when passed in a continuation map, the
@@ -572,8 +615,9 @@ This is largely an aid to my own memory so bear with me.
   #+BEGIN_SRC clojure
     (defn accumulate [rf init]
       (ν [xs] ccs
-         ;; a read on a last-chan always returns the last thing written. They are atomic.
-         ;; Semantically it is just (last (chan)), but is builtin to make life easier.
+         ;; a read on a last-chan always returns the last thing written. They
+         ;; are sequentially consistent. Semantically it is just (last (chan)),
+         ;; but is builtin to make life easier.
          (let [state (last-chan init)]
            (seq
             ;; Using a state channel to pass output back to yourself is a common
@@ -881,3 +925,33 @@ This is largely an aid to my own memory so bear with me.
   - Do You Want to Enter the Area? — Charles Bukowski
     If you can't find that, try the posthumously watered down "So You Want to be
     a Writer?".
+
+* Footnotes
+[fn:2] But should it be?
+
+Part of me thinks that lexical capture should be impossible since even if you
+coopt a symbol, you can't coopt its environment and so your use of the symbol
+should work out to something different than that of the victim symbol.
+
+That would mean that the one instance of capture I've come across is a bug in my
+interpreter. Something which is more likely than not.
+
+[fn:1] Is this actually true?
+
+It is regarding arguments, but what would it mean to pass return values by name?
+It would introduce all kinds of scoping problems since symbols that should be
+internal to a function (local args) are now exposed to the caller.
+
+That seems like a horrible idea.
+
+But the symbol comes attached to its own environment, so there's no
+ambiguity. Also, when a μ returns a sexp, that sexp can be embedded in a larger
+application, or taken apart and the pieces used to construct something new, but
+the context in which the pieces are to be interpreted cannot change and the
+context of the return sexp cannot be hijacked since the context of code created
+within a μ is the local context of that μ — even though the parts of the
+constructed sexp might have their own contexts brought in from any number of
+places.
+
+Something seems very right about this even though I'm still trying to get my
+head around it. It's weird enough to be frightening though.

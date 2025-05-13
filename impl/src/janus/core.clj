@@ -490,6 +490,7 @@
           'Done #_@envatom
           (do
             (println "Evaluating: " form1)
+            (println "---")
             (print "result: ")
             (go! @env form1 (with-return conts println))
             (print "expected: " )
