@@ -48,6 +48,8 @@
         (do
           (trace! "declared" s)
           (ast/immediate s))
+        ;; REVIEW: I don't actually know how to do this properly as yet, but
+        ;; I've left the code in. I'll probably regret that.
         (if *fail-on-undeclared*
           (throw (RuntimeException. (str "Unbound symbol: " s)))
           (do
@@ -459,13 +461,20 @@
       (let [reader (r/read reader)
             form   (:form reader)]
         (if (= :eof form)
-          @envatom
+          'Done #_@envatom
           (do
             (go! @envatom form (with-return conts println))
             (recur reader)))))))
 
+(defn reload! [fname]
+  (reset! env base-env)
+  (loadfile env fname))
+
 (defmacro inspect [n]
   `(-> @env (get-in [:names (ast/symbol ~(clojure.core/name n))]) ast/inspect))
+
+(defn el [form name]
+  (lookup (get-env form) (ast/symbol name)))
 
 (defn check [s]
   (ast/inspect (:form (r/read (r/string-reader s) @env))))

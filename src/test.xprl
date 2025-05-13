@@ -6,7 +6,10 @@
 (nth [1 2 3] 1)                      1
 ((fn x (+ 1 x)) . 1)                 2
 (inc 6)                              7
-((fn [x y [z]] (+ x y z 1)) 2 3 [1]) 7
+(fn xs (nth xs 2) 1 2 3)             2
+
+((fn xs (+ (nth xs 1) (nth xs 2) (nth (nth xs 3) 1) 1)) 2 3 [1]) #_=> 7
+
 (if (= 1 0) 1 2)                     2
 
 ;; Here follow two different ways to quote a form to protect it from eval.
