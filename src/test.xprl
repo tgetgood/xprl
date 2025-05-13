@@ -9,17 +9,23 @@
 (inc 6)                              7
 (fn xs (nth xs 2) 1 2 3)             2
 
+
 ((μ x ~(+ ~(nth* ~x 1) 1)) 4)                        5
 ((μ y ~((μ x ~(+ ~(nth* ~x 1) 1)) ~(nth* ~y 1))) 4)  5
 ((μ y ~((μ z ~(+ (nth z 1) 1)) ~(nth* ~y 1))) 4)     5
 ((μ y ~((μ x ~(+ (nth x 1) 1)) ~(nth* ~y 1))) 4)     5
 
+;; Scope test
+;; Don't want dynamic scope to creep into the language just because we're using
+;; it in the implementation
+((fn x (((fn x x) . +) . x ((fn x (+ x 1)) . 2))) 5) #_=>  8
+
 ;; ((fn xs (+ (nth xs 1) (nth xs 2) (nth (nth xs 3) 1) 1)) 2 3 [1]) #_=> 7
 
 (if (= 1 0) 1 2)                     2
 
-;; Here follow two different ways to quote a form to protect it from eval.
-;; I don't advocate doing this unless you have good reason.
+;; This is hopw one would implement quote in xprl. I'm dubious that it's a good
+;; thing to put in the language, but there are some niche uses...
 ;; TODO: Add a special :ktest/skip value which disables the check.
 ;; REVIEW: Isn't that just running the lhs for side effects? That wasn't
 ;; supposed to be possible. Yet here we are.
@@ -29,12 +35,3 @@
 (g f)                                1
 
 (! 5)                                120
-
-;; Scope test
-;; Don't want dynamic scope to creep into the language just because we're using
-;; it in the implementation
-((fn [x] (((fn [x] x) +) x ((fn [x] (+ x 1)) 2))) 5) #_=>  8
-
-;; f and (map f) should always be the same in general, but testing functions for
-;; equality is something of a sore point at the moment...
-;; (map inc)                            inc

@@ -1,5 +1,5 @@
 (ns janus.core
-  (:refer-clojure :exclude [resolve run! binding name])
+  (:refer-clojure :exclude [resolve run! binding name test])
   (:import (java.util.concurrent ConcurrentLinkedDeque))
   (:require
    [clojure.set :as set]
@@ -433,7 +433,7 @@
 
 (def srcpath "../src/")
 (def recxprl (str srcpath "recur.xprl"))
-(def bootxprl (str srcpath "boot.xprl"))
+(def core (str srcpath "core.xprl"))
 (def testxprl (str srcpath "test.xprl"))
 
 (def env (atom base-env))
@@ -478,3 +478,20 @@
 
 (defn check [s]
   (ast/inspect (:form (r/read (r/string-reader s) @env))))
+
+(defn test []
+  (let [conts {(xkeys :env) (fn [[sym value]] (swap! env bind sym value))}]
+    (loop [reader (r/file-reader testxprl)]
+      (let [reader (r/read reader)
+            form1  (:form reader)
+            reader (r/read reader)
+            form2  (:form reader)]
+        (if (= :eof form)
+          'Done #_@envatom
+          (do
+            (println "Evaluating: " form1)
+            (print "result: ")
+            (go! @env form1 (with-return conts println))
+            (print "expected: " )
+            (go! @env form2 (with-return conts println))
+            (recur reader)))))))
