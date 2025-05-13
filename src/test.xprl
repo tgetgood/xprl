@@ -4,11 +4,17 @@
 (+ 4 5)                              9
 (+ (+ 1 2) (+ 3 (+ 4 5)))            15
 (nth [1 2 3] 1)                      1
+(nth (nth [1 [2]] 2) 1)              2
 ((fn x (+ 1 x)) . 1)                 2
 (inc 6)                              7
 (fn xs (nth xs 2) 1 2 3)             2
 
-((fn xs (+ (nth xs 1) (nth xs 2) (nth (nth xs 3) 1) 1)) 2 3 [1]) #_=> 7
+((μ x ~(+ ~(nth* ~x 1) 1)) 4)                        5
+((μ y ~((μ x ~(+ ~(nth* ~x 1) 1)) ~(nth* ~y 1))) 4)  5
+((μ y ~((μ z ~(+ (nth z 1) 1)) ~(nth* ~y 1))) 4)     5
+((μ y ~((μ x ~(+ (nth x 1) 1)) ~(nth* ~y 1))) 4)     5
+
+;; ((fn xs (+ (nth xs 1) (nth xs 2) (nth (nth xs 3) 1) 1)) 2 3 [1]) #_=> 7
 
 (if (= 1 0) 1 2)                     2
 
@@ -17,8 +23,8 @@
 ;; TODO: Add a special :ktest/skip value which disables the check.
 ;; REVIEW: Isn't that just running the lhs for side effects? That wasn't
 ;; supposed to be possible. Yet here we are.
-(def f (fn [x] 1))                   ((μ x ~x) . f)
-(def g (fn [x] (x x)))               ((μ [x] ~x) g)
+(def f (fn x 1))                     ((μ x ~x) . f)
+(def g (fn x ((nth x 1) (nth x 1)))) ((μ x ~x) . g)
 
 (g f)                                1
 
