@@ -1,4 +1,4 @@
-(ns janus.i2
+(ns janus.core
   (:refer-clojure :exclude [resolve run! binding name])
   (:import (java.util.concurrent ConcurrentLinkedDeque))
   (:require
