@@ -141,7 +141,8 @@
 
 (defn immediate
   [form]
-  (with-meta (->Immediate form) (meta form)))
+  (->Immediate form)
+  #_(with-meta (->Immediate form) (meta form)))
 
 (ps Immediate)
 
@@ -157,7 +158,8 @@
 
 (defn application
   [head tail]
-  (with-meta (->Application head tail) (meta head)))
+  (->Application head tail)
+  #_(with-meta (->Application head tail) (meta head)))
 
 (ps Application)
 
