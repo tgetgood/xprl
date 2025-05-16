@@ -13,6 +13,7 @@
     `(println ~@args)))
 
 (declare walk)
+(declare locals)
 
 ;;;;; Environment
 
@@ -20,6 +21,9 @@
   ;; REVIEW: One sanity check on a namespace is that the set of declared (but
   ;; not instantiated) names must be empty by the time we finish reading it in.
   {:names {} :declared #{}})
+
+(defn syms [ns]
+  (sort-by :names (keys (:names ns))))
 
 (defn lookup [env sym]
   (get-in env [:names sym]))
@@ -47,6 +51,8 @@
         (ast/immediate s)))))
 
 (defn bind [env s val]
+  (when-not (contains? (decls env) s)
+    (trace! "binding undeclared name:" s "to" val))
   (-> env
       (assoc-in [:names s] val)
       (update :declared disj s)))
@@ -115,9 +121,7 @@
   (let [body (body μ)
         env (bind (get-env body) (params μ) args)
         env (if (name μ) (bind env (name μ) μ) env)]
-    (trace! "binding params:" (params μ) (name μ)
-            "\ndefined:" (sort-by :names (keys (:names env)))
-            "\ndeclared:" (sort-by :names (decls env)))
+    (trace! "binding params:" (params μ) (name μ) (locals env))
     (set-env body env)))
 
 (defn μ-call [μ args]
@@ -166,9 +170,7 @@
   (let [body (body μ)
         env (μ-declare-1 (get-env body) (params μ))
         env (if (name μ) (μ-declare-1 env (name μ)) env)]
-    (trace! "declaring params:" (params μ) (name μ)
-            "\ndefined:" (sort-by :names (keys (:names env)))
-            "\ndeclared:" (sort-by :names (decls env)))
+    (trace! "declaring params:" (params μ) (name μ) (locals env))
     (set-env body env)))
 
 (defn walk-μ [μ]
@@ -285,7 +287,7 @@
 
 (defn walk [sexp]
   (let [[rule f] (walk1 sexp)
-        _        (trace! "rule match:" rule sexp)
+        _        (trace! "rule match:" rule sexp (locals (get-env sexp)))
         v        (smart-call f sexp)]
     (trace! "result:" rule "\n" sexp "\n->\n" v)
     v))
@@ -425,6 +427,11 @@
 (def testxprl (str srcpath "test.xprl"))
 
 (def env (atom base-env))
+
+(defn locals [e]
+  (str "\n  defined: "
+       (into [] (remove #(contains? (:names @env) %) (syms e)))
+       " declared: " (decls e)))
 
 (defn go!
   ([env f]
