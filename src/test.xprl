@@ -7,7 +7,7 @@
 (nth (nth [1 [2]] 2) 1)              2
 ((fn x (+ 1 x)) . 1)                 2
 (inc 6)                              7
-(fn xs (nth xs 2) 1 2 3)             2
+((fn xs (nth xs 2)) 1 2 3)           2
 
 
 ((μ x ~(+ ~(nth* ~x 1) 1)) 4)                        5

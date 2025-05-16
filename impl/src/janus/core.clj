@@ -293,7 +293,9 @@
 ;;;;; Builtins
 
 (defn createμ [args]
-  (let [[name params body] (if (= 3 (count args)) args `[nil ~@args])]
+  (let [[name params body] (case (count args)
+                             3 args
+                             2 `[nil ~@args])]
     (walk (with-meta (ast/μ name params body) (meta args)))))
 
 (defn emit [kvs]
