@@ -14,8 +14,6 @@
 
 (declare walk)
 
-(def ^:dynamic *fail-on-undeclared* false)
-
 ;;;;; Environment
 
 (defn empty-ns []
@@ -44,17 +42,9 @@
       (do
         (trace! "resolve" s ":" ref)
         (walk ref))
-      (if (contains? (decls env) s)
-        (do
-          (trace! "declared" s)
-          (ast/immediate s))
-        ;; REVIEW: I don't actually know how to do this properly as yet, but
-        ;; I've left the code in. I'll probably regret that.
-        (if *fail-on-undeclared*
-          (throw (RuntimeException. (str "Unbound symbol: " s)))
-          (do
-            (trace! "exceptionally undeclared:" s)
-            (ast/immediate s)))))))
+      (do
+        (trace! (if (contains? (decls env) s) "declared" "undeclared") s)
+        (ast/immediate s)))))
 
 (defn bind [env s val]
   (-> env
@@ -68,12 +58,29 @@
 
 (defn bind-decls [inner outer]
   (when (seq inner)
-    ;; (println inner)
-    ;; (println outer)
-    (let [extra-decls (set/difference
-                       (decls outer)
-                       (set/union (decls inner) (into #{} (keys (:names inner)))))]
-      (update (reduce (fn [e sym] (if-let [val (lookup outer sym)] (bind e sym val) e))
+    ;; REVIEW: this is ugly and so likely wrong.
+    ;;
+    ;; Defined symbols can't "bleed down" into a contained subcontext. But
+    ;; declarations can. Why?
+    ;;
+    ;; The only impetus right now is indirectly defined μs where the body is
+    ;; initially walked in a context where the μ of which it will eventually be
+    ;; part does not yet exist. In this case, when we later create the outer μ
+    ;; and walk ~it~, the body needs to be walked in a new context that didn't
+    ;; exist when it was walked the first time. The only difference between
+    ;; these contexts *should* be the declaration of the parameter (and any
+    ;; others if we have a stack of such μs above us),
+    ;;
+    ;; BUT: can we prove that a μ so constructed will always be reduced ~as a μ~
+    ;; before arguments are applied to it? If not, then the applied args will
+    ;; never get set because their parameters haven't yet been declared.
+    (let [extra-decls (set/difference (decls outer)
+                                      (decls inner)
+                                      (into #{} (keys (:names inner))))]
+      (update (reduce (fn [e sym]
+                        (if-let [val (lookup outer sym)]
+                          (bind e sym val)
+                          e))
                       inner
                       (decls inner))
               :declared set/union extra-decls))))
@@ -109,7 +116,7 @@
         env (bind (get-env body) (params μ) args)
         env (if (name μ) (bind env (name μ) μ) env)]
     (trace! "binding params:" (params μ) (name μ)
-            "\nenv:" (sort-by :names (keys (:names env)))
+            "\ndefined:" (sort-by :names (keys (:names env)))
             "\ndeclared:" (sort-by :names (decls env)))
     (set-env body env)))
 
@@ -137,17 +144,17 @@
       (ast/application head args))))
 
 (defn macro-call [head tail]
-  ;; Macros can't be applied if they don't even have syntactic args.
+  ;; Even macros can't be applied if they don't have syntactic args.
   (let [args (if (vector? tail) tail (walk tail))]
     (if (vector? args)
       ((:f head) args)
       (ast/application head args))))
 
 (defn error-call [h t]
-  (throw (RuntimeException. (str h " is not applicable, But was called with " t))))
+  (throw (RuntimeException. (str h " is not applicable, but was called with " t))))
 
 (defn apply-head [h t]
-  (let [h' (walk h)
+  (let [h'  (walk h)
         app (ast/application h' t)]
     (if (evaluated? h')
       (walk app)
@@ -160,27 +167,15 @@
         env (μ-declare-1 (get-env body) (params μ))
         env (if (name μ) (μ-declare-1 env (name μ)) env)]
     (trace! "declaring params:" (params μ) (name μ)
-            "\nenv:" (sort-by :names (keys (:names env)))
+            "\ndefined:" (sort-by :names (keys (:names env)))
             "\ndeclared:" (sort-by :names (decls env)))
     (set-env body env)))
 
 (defn walk-μ [μ]
-  (let [n   (name μ)
-        n   (when n (walk n))
-        p   (walk (params μ))
-        _   (trace! "=== suspending unbound error ===")
-        out (ast/μ n p (with-bindings {#'*fail-on-undeclared* false}
-                         (walk (body μ))))]
-    (trace! "=== restoring unbound error ===")
-    out))
+  (let [n (name μ)]
+    (ast/μ (when n (walk n)) (walk (params μ)) (walk (body μ)))))
 
 (defn μ-reduce [μ]
-  #_(trace! "reduce μ" μ "in"
-            "\nenv:" (sort-by :names (keys (:names (get-env μ))))
-            "\ndeclared:" (sort-by :names (decls (get-env μ)))
-            "\nparamsenv:" (sort-by :names (keys (:names (get-env (params μ)))))
-            "\ndeclared:" (sort-by :names (decls (get-env (params μ))))
-            "\n " (type (params μ)) (get-env (xnth (tail (params μ)) 0)))
   (let [μ' (if (partial? μ) (walk-μ μ) μ)]
     (if (partial? μ')
       μ'
@@ -190,9 +185,7 @@
   (ast/emission (walk (kvs x))))
 
 (defn list-xform [f xs]
-  (reduce (fn [acc i]
-            (conj acc (f (xnth xs i))))
-          [] (range (count xs))))
+  (reduce (fn [acc i] (conj acc (f (xnth xs i)))) [] (range (count xs))))
 
 (defn list-reduce [xs]
   (list-xform walk xs))
@@ -205,18 +198,11 @@
 (defn eval-pair [p]
   (walk (ast/application (ast/immediate (head p)) (tail p))))
 
-(defn eval-eval [x]
+(defn eval-step [x]
   (let [inner (walk x)]
     (if (evaluated? inner)
       (walk (ast/immediate inner))
       (ast/immediate inner))))
-
-(defn eval-apply [x]
-  (let [app (walk x)
-        res (ast/immediate app)]
-    (if (evaluated? app)
-      (walk res)
-      res)))
 
 ;;;;; Tree walker
 
@@ -238,8 +224,8 @@
   {[:I :S] resolve   ; env lookup
    [:I :P] eval-pair ; (I (P x y)) => (A (I x) y)
    [:I :L] eval-list ; (I (L x y ...)) => (L (I x) (I y) ...)
-   [:I :I] eval-eval
-   [:I :A] eval-apply
+   [:I :I] eval-step
+   [:I :A] eval-step
    :I      identity  ; (I V) => V. values eval to themselves
 
    ;; In general we cannot walk into structures. These are the exceptions.
