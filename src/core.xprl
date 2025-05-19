@@ -20,12 +20,6 @@
   (defμ ~(nth* ~x 1) args
     ((μ ~(nth* ~x 2) ~~(nth* ~x 3)) . ~~args)))
 
-(def defn2
-  (μ params
-     ~(def ~(nth* ~params 1)
-        (μ ~(nth* ~params 1) x
-           ~((μ ~(nth* ~params 2) ~~(nth* ~params 3)) . ~~x)))))
-
 (defμ if x
   ~~(select ~~(nth* ~x 1) ~(nth* ~x 2) ~(nth* ~x 3)))
 
@@ -89,7 +83,7 @@
     1
     (* n (!4 . ~(- n 1)))))
 
-(defn2 !5 n
+(defn !5 n
   (if (= n 0)
     1
     (* n (!5 . (- n 1)))))
