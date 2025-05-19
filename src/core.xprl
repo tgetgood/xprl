@@ -17,16 +17,17 @@
      ~((μ ~(nth* ~x 1) ~~(nth* ~x 2)) . ~~args)))
 
 (defμ defn x
-  (defμ ~(nth* ~x 1) args#
-    ((μ ~(nth* ~x 1) ~(nth* ~x 2) ~~(nth* ~x 3)) . ~~args#)))
+  (defμ ~(nth* ~x 1) args
+    ((μ ~(nth* ~x 2) ~~(nth* ~x 3)) . ~~args)))
 
-(def fn2
-  (μ x
-     ~(μ args
-         ~((μ ~(nth* ~x 1) ~~(nth* ~x 2)) . ~~args))))
+(def defn2
+  (μ params
+     ~(def ~(nth* ~params 1)
+        (μ ~(nth* ~params 1) x
+           ~((μ ~(nth* ~params 2) ~~(nth* ~params 3)) . ~~x)))))
 
 (defμ if x
-  ~(select ~~(nth* ~x 1) ~(nth* ~x 2) ~(nth* ~x 3)))
+  ~~(select ~~(nth* ~x 1) ~(nth* ~x 2) ~(nth* ~x 3)))
 
 ;; (defμ cond body
 ;;   ~~(select ~~(<* ~(count* ~body) 1)
@@ -68,16 +69,32 @@
 
 (defn inc x (+ 1 (nth x 1)))
 
-(def !!
-  (μ !! n
+(def !1
+  (μ !1 n
      ~~(select ~(=* ~n 0)
               1
-              (** ~n ~(!! . ~(-* ~n 1))))))
-(defμ !!! n
+              (** ~n ~(!1 . ~(-* ~n 1))))))
+(defμ !2 n
   ~~(select ~(=* ~n 0)
               1
-              (** ~n ~(!!! . ~(-* ~n 1)))))
-(defn ! n
+              (** ~n ~(!2 . ~(-* ~n 1)))))
+
+(defμ !3 n
+  (if (< n 2)
+    1
+    (* n (!3 . ~(- n 1)))))
+
+(defμ !4 n
   (if (= n 0)
     1
-    (* n (! . (- n 1)))))
+    (* n (!4 . ~(- n 1)))))
+
+(defn2 !5 n
+  (if (= n 0)
+    1
+    (* n (!5 . (- n 1)))))
+
+(defn !6 n
+  (if (< n 2)
+    1
+    (* n (!6 . (- n 1)))))

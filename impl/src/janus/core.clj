@@ -6,7 +6,7 @@
    [janus.ast :as ast]
    [janus.reader :as r]))
 
-(def verbose false)
+(def verbose true)
 
 (defmacro trace! [& args]
   (when verbose
@@ -50,9 +50,16 @@
         (trace! (if (contains? (decls env) s) "declared" "undeclared") s)
         (ast/immediate s)))))
 
+(defn ns-bind [ns s val]
+  "Like `bind`, but skips the declaration check since forms interned into a
+  namespace don't need to be declared first (but they can be, so we still need
+  to clear declarations)."
+  (-> ns
+      (assoc-in [:names s] val)
+      (update :declared disj s)))
+
 (defn bind [env s val]
-  (when-not (contains? (decls env) s)
-    (trace! "binding undeclared name:" s "to" val))
+  (assert (contains? (decls env) s) (str "binding undeclared name:" s "to" val))
   (-> env
       (assoc-in [:names s] val)
       (update :declared disj s)))
@@ -118,11 +125,15 @@
   (not (and (or (nil? (name μ)) (ast/symbol? (name μ))) (ast/symbol? (params μ)))))
 
 (defn μ-bind [μ args]
-  (let [body (body μ)
-        env (bind (get-env body) (params μ) args)
-        env (if (name μ) (bind env (name μ) μ) env)]
-    (trace! "binding params:" (params μ) (name μ) (locals env))
-    (set-env body env)))
+  (let [body (body μ)]
+    (if-not (instance? clojure.lang.IMeta body)
+      (do
+        (trace! "Primitive μ body detected, not binding params.")
+        body)
+      (let [env (bind (get-env body) (params μ) args)
+            env (if (name μ) (bind env (name μ) μ) env)]
+        (trace! "binding params:" (params μ) (name μ) (locals env))
+        (set-env body env)))))
 
 (defn μ-call [μ args]
   (trace! "invoke" μ "with" args)
@@ -181,7 +192,8 @@
   (let [μ' (if (partial? μ) (walk-μ μ) μ)]
     (if (partial? μ')
       μ'
-      (assoc μ' :body (walk (μ-declare μ'))))))
+      (let [body (μ-declare μ')]
+        (set-env (assoc μ' :body (walk body)) (get-env body))))))
 
 (defn emit-reduce [x]
   (ast/emission (walk (kvs x))))
@@ -355,7 +367,7 @@
   (into {} (map (tagged f)) x))
 
 (def base-env
-  (reduce (fn [acc [sym val]] (bind acc sym val)) (empty-ns)
+  (reduce (fn [acc [sym val]] (ns-bind acc sym val)) (empty-ns)
           (concat
            (map (tagged ast/macro) macros)
            (map (tagged ast/pfn) fns))))
@@ -447,7 +459,7 @@
   (ast/inspect (ev s)))
 
 (defn loadfile [envatom fname]
-  (let [conts {(xkeys :env)    (fn [[sym value]] (swap! envatom bind sym value))
+  (let [conts {(xkeys :env)    (fn [[sym value]] (swap! envatom ns-bind sym value))
                ;; FIXME: This should log a warning. It's not a fatal error
                (xkeys :return) #(throw (RuntimeException. "return to top level!"))
                (xkeys :error)  (fn [x]
@@ -475,13 +487,13 @@
   (ast/inspect (:form (r/read (r/string-reader s) @env))))
 
 (defn test []
-  (let [conts {(xkeys :env) (fn [[sym value]] (swap! env bind sym value))}]
+  (let [conts {(xkeys :env) (fn [[sym value]] (swap! env ns-bind sym value))}]
     (loop [reader (r/file-reader testxprl)]
       (let [reader (r/read reader)
             form1  (:form reader)
             reader (r/read reader)
             form2  (:form reader)]
-        (if (= :eof form)
+        (if (= :eof form1)
           'Done #_@envatom
           (do
             (println "Evaluating: " form1)
