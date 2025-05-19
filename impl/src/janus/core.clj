@@ -132,7 +132,7 @@
         body)
       (let [env (bind (get-env body) (params μ) args)
             env (if (name μ) (bind env (name μ) μ) env)]
-        (trace! "binding params:" (params μ) (name μ) (locals env))
+        (trace! "binding params:" (params μ) "to" args (locals env))
         (set-env body env)))))
 
 (defn μ-call [μ args]
@@ -299,7 +299,7 @@
 
 (defn walk [sexp]
   (let [[rule f] (walk1 sexp)
-        _        (trace! "rule match:" rule sexp (locals (get-env sexp)))
+        _        (trace! "rule match:" rule sexp (locals (merge-env sexp (step sexp))))
         v        (smart-call f sexp)]
     (trace! "result:" rule "\n" sexp "\n->\n" v)
     v))
