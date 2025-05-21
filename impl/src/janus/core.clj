@@ -7,7 +7,7 @@
    [janus.reader :as r]
    [janus.runtime :as rt]))
 
-;;;;; Boilerplate
+;;;;; Builtins
 
 (def macros
   {"μ"      i/createμ
@@ -36,8 +36,6 @@
 
    "count*" count
    "nth*"   nth* ; Base 1 indexing
-
-   ;; "select" select
    })
 
 (defn tagged [f]
@@ -76,15 +74,14 @@
 
 (defn loadfile [envatom fname]
   (let [conts {(ast/xkeys :env)    (fn [[sym value]] (swap! envatom env/ns-bind sym value))
-               ;; FIXME: This should log a warning. It's not a fatal error
                (ast/xkeys :return) #(throw (RuntimeException. "return to top level!"))
                (ast/xkeys :error)  (fn [x]
-                                 (println "Error: " x))}]
+                                     (println "Error: " x))}]
     (loop [reader (r/file-reader fname)]
       (let [reader (r/read reader)
             form   (:form reader)]
         (if (= :eof form)
-          'Done #_@envatom
+          'EOF
           (do
             (go! @envatom form (rt/with-return conts println))
             (recur reader)))))))
@@ -110,7 +107,7 @@
             reader (r/read reader)
             form2  (:form reader)]
         (if (= :eof form1)
-          'Done #_@envatom
+          'EOF
           (do
             (println "Evaluating: " form1)
             (println "---")
