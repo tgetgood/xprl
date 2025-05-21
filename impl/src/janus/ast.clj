@@ -1,9 +1,10 @@
 (ns janus.ast
-  (:refer-clojure :exclude [reduced? symbol symbol? keyword keyword? destructure delay])
+  (:refer-clojure
+   :exclude
+   [reduced? symbol symbol? keyword keyword? destructure delay type])
   (:require
    [clojure.pprint :as pp]
-   [clojure.string :as str]
-   [taoensso.telemere :as t])
+   [clojure.string :as str])
   (:import
    (java.io Writer)))
 
@@ -372,3 +373,26 @@
 
 (defn inspect [x]
   (insp x *out* 0))
+
+;;;;; Sugar
+
+(def type-table
+  {clojure.lang.PersistentVector :L
+   janus.ast.Immediate           :I
+   janus.ast.Pair                :P
+   janus.ast.Symbol              :S
+   janus.ast.Application         :A
+   janus.ast.Primitive           :F
+   janus.ast.Macro               :M
+   janus.ast.Mu                  :μ
+   janus.ast.Emission            :E})
+
+(defn type [x]
+  ;; There's nothing to gain in wrapping value types.
+  (get type-table (clojure.core/type x) :V))
+
+(def xkeys
+  {:return  (keyword "return")
+   :error   (keyword "error")
+   :unbound (keyword "unbound")
+   :env     (keyword "env")})
