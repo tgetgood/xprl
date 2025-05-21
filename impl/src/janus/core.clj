@@ -1,146 +1,30 @@
 (ns janus.core
-  (:refer-clojure :exclude [resolve run! binding name test])
+  (:refer-clojure :exclude [name test run!])
   (:import (java.util.concurrent ConcurrentLinkedDeque))
   (:require
-   [clojure.set :as set]
    [janus.ast :as ast]
-   [janus.reader :as r]))
-
-(def verbose true)
-
-(defmacro trace! [& args]
-  (when verbose
-    `(println ~@args)))
+   [janus.env :as env :refer [name params body head tail form kvs xnth]]
+   [janus.reader :as r]
+   [janus.telemetry :refer [trace!]]))
 
 (declare walk)
-(declare locals)
 
 ;;;;; Environment
 
-(defn empty-ns []
-  ;; REVIEW: One sanity check on a namespace is that the set of declared (but
-  ;; not instantiated) names must be empty by the time we finish reading it in.
-  {:names {} :declared #{}})
-
-(defn syms [ns]
-  (sort-by :names (keys (:names ns))))
-
-(defn lookup [env sym]
-  (get-in env [:names sym]))
-
-(defn decls [env]
-  (:declared env))
-
-(defn get-env [x]
-  (when (instance? clojure.lang.IMeta x)
-    (::env (meta x))))
-
-(defn set-env [x env]
-  (if (instance? clojure.lang.IMeta x)
-    (with-meta x (assoc (meta x) ::env env))
-    x))
-
-(defn resolve [s]
-  (let [env (get-env s)]
-    (if-let [ref (lookup env s)]
-      (do
-        (trace! "resolve" s ":" ref)
-        (walk ref))
-      (do
-        (trace! (if (contains? (decls env) s) "declared" "undeclared") s)
-        (ast/immediate s)))))
-
-(defn ns-bind [ns s val]
-  "Like `bind`, but skips the declaration check since forms interned into a
-  namespace don't need to be declared first (but they can be, so we still need
-  to clear declarations)."
-  (-> ns
-      (assoc-in [:names s] val)
-      (update :declared disj s)))
-
-(defn bind [env s val]
-  (assert (contains? (decls env) s) (str "binding undeclared name:" s "to" val))
-  (-> env
-      (assoc-in [:names s] val)
-      (update :declared disj s)))
-
-(defn μ-declare-1 [env s]
-  (-> env
-      (update :declared (fnil conj #{}) s)
-      (update :names dissoc s)))
-
-(defn bind-decls [inner outer]
-  (when (seq inner)
-    ;; REVIEW: this is ugly and so likely wrong.
-    ;;
-    ;; Defined symbols can't "bleed down" into a contained subcontext. But
-    ;; declarations can. Why?
-    ;;
-    ;; The only impetus right now is indirectly defined μs where the body is
-    ;; initially walked in a context where the μ of which it will eventually be
-    ;; part does not yet exist. In this case, when we later create the outer μ
-    ;; and walk ~it~, the body needs to be walked in a new context that didn't
-    ;; exist when it was walked the first time. The only difference between
-    ;; these contexts *should* be the declaration of the parameter (and any
-    ;; others if we have a stack of such μs above us),
-    ;;
-    ;; BUT: can we prove that a μ so constructed will always be reduced ~as a μ~
-    ;; before arguments are applied to it? If not, then the applied args will
-    ;; never get set because their parameters haven't yet been declared.
-    (let [extra-decls (set/difference (decls outer)
-                                      (decls inner)
-                                      (into #{} (keys (:names inner))))]
-      (update (reduce (fn [e sym]
-                        (if-let [val (lookup outer sym)]
-                          (bind e sym val)
-                          e))
-                      inner
-                      (decls inner))
-              :declared set/union extra-decls))))
-
-(defn merge-env [x y]
-  (let [outer (or (get-env x) nil)
-        inner (or (get-env y) outer)]
-    (bind-decls inner outer)))
-
-(defn nearest-env [x k]
-  (let [v (get x k)
-        e (merge-env x v)]
-    (set-env v e)))
-
 ;;;;; Accessors
 
-(defn params [x] (nearest-env x :params))
-(defn name   [x] (nearest-env x :name))
-(defn body   [x] (nearest-env x :body))
-(defn head   [x] (nearest-env x :head))
-(defn tail   [x] (nearest-env x :tail))
-(defn form   [x] (nearest-env x :form))
-(defn kvs    [x] (nearest-env x :kvs))
-(defn xnth [x n] (nearest-env x n))
 
 ;;;;; Application
 
 (defn partial? [μ]
   (not (and (or (nil? (name μ)) (ast/symbol? (name μ))) (ast/symbol? (params μ)))))
 
-(defn μ-bind [μ args]
-  (let [body (body μ)]
-    (if-not (instance? clojure.lang.IMeta body)
-      (do
-        (trace! "Primitive μ body detected, not binding params.")
-        body)
-      (let [env (bind (get-env body) (params μ) args)
-            env (if (name μ) (bind env (name μ) μ) env)]
-        (trace! "binding params:" (params μ) "to" args (locals env))
-        (set-env body env)))))
-
 (defn μ-call [μ args]
   (trace! "invoke" μ "with" args)
   (let [μ' (if (partial? μ) (walk μ) μ)]
     (if (partial? μ')
       (ast/application μ' args)
-      (walk (μ-bind μ' args)))))
+      (walk (env/μ-bind μ' args)))))
 
 (defn evaluated? [x]
   (cond
@@ -177,13 +61,6 @@
 
 ;;;;; Reduction
 
-(defn μ-declare [μ]
-  (let [body (body μ)
-        env (μ-declare-1 (get-env body) (params μ))
-        env (if (name μ) (μ-declare-1 env (name μ)) env)]
-    (trace! "declaring params:" (params μ) (name μ) (locals env))
-    (set-env body env)))
-
 (defn walk-μ [μ]
   (let [n (name μ)]
     (ast/μ (when n (walk n)) (walk (params μ)) (walk (body μ)))))
@@ -192,8 +69,9 @@
   (let [μ' (if (partial? μ) (walk-μ μ) μ)]
     (if (partial? μ')
       μ'
-      (let [body (μ-declare μ')]
-        (set-env (assoc μ' :body (walk body)) (get-env body))))))
+      ;; FIXME: This ought to be handled by the env subsystem
+      (let [body (env/μ-declare μ')]
+        (env/set-env (assoc μ' :body (walk body)) (env/get-env body))))))
 
 (defn emit-reduce [x]
   (ast/emission (walk (kvs x))))
@@ -205,6 +83,16 @@
   (list-xform walk xs))
 
 ;;;;; Eval
+
+(defn eval-symbol [s]
+  (let [env (env/get-env s)]
+    (if-let [ref (env/lookup env s)]
+      (do
+        (trace! "resolve" s ":" ref)
+        (walk ref))
+      (do
+        (trace! (if (contains? (env/decls env) s) "declared" "undeclared") s)
+        (ast/immediate s)))))
 
 (defn eval-list [xs]
   (walk (list-xform ast/immediate xs)))
@@ -235,25 +123,25 @@
   (get type-table (type x) :V))
 
 (def rules
-  {[:I :S] resolve   ; env lookup
-   [:I :P] eval-pair ; (I (P x y)) => (A (I x) y)
-   [:I :L] eval-list ; (I (L x y ...)) => (L (I x) (I y) ...)
-   [:I :I] eval-step
-   [:I :A] eval-step
-   :I      identity  ; (I V) => V. values eval to themselves
+  {[:I :S] eval-symbol ; env lookup
+   [:I :P] eval-pair   ; (I (P x y)) => (A (I x) y)
+   [:I :L] eval-list   ; (I (L x y ...)) => (L (I x) (I y) ...)
+   [:I :I] eval-step   ; eval inner form and recur
+   [:I :A] eval-step   ; "
+   :I      identity    ; (I V) => V. values eval to themselves
 
    ;; In general we cannot walk into structures. These are the exceptions.
    :L list-reduce
    :μ μ-reduce
    :E emit-reduce
 
-   [:A :I] apply-head
-   [:A :A] apply-head
+   [:A :I] apply-head ; (apply x args) => (apply (walk x) args)
+   [:A :A] apply-head ; iff x is unevaluated.
 
    ;; An emission which includes a message to :return can trigger off the
    ;; application. But the connection logic isn't sophisticated enough for this
    ;; yet.
-   ;; [:A :E] apply-head
+   ;; [:A :E] apply-emit
 
    ;; Three kinds of operators are built in. I don't think we need any others,
    ;; but that might change.
@@ -299,7 +187,7 @@
 
 (defn walk [sexp]
   (let [[rule f] (walk1 sexp)
-        _        (trace! "rule match:" rule sexp (locals (merge-env sexp (step sexp))))
+        _        (trace! "rule match:" rule sexp (env/locals (env/merge-env sexp (step sexp))))
         v        (smart-call f sexp)]
     (trace! "result:" rule "\n" sexp "\n->\n" v)
     v))
@@ -367,7 +255,7 @@
   (into {} (map (tagged f)) x))
 
 (def base-env
-  (reduce (fn [acc [sym val]] (ns-bind acc sym val)) (empty-ns)
+  (reduce (fn [acc [sym val]] (env/ns-bind acc sym val)) (env/empty-ns)
           (concat
            (map (tagged ast/macro) macros)
            (map (tagged ast/pfn) fns))))
@@ -438,28 +326,23 @@
 (def core (str srcpath "core.xprl"))
 (def testxprl (str srcpath "test.xprl"))
 
-(def env (atom base-env))
-
-(defn locals [e]
-  (str "\n  defined: "
-       (into [] (remove #(contains? (:names @env) %) (syms e)))
-       " declared: " (decls e)))
+;; (def env (atom base-env))
 
 (defn go!
   ([env f]
-   (walk (set-env (ast/immediate f) env)))
+   (walk (env/set-env (ast/immediate f) env)))
   ([env f ccs]
    (schedule [(fn [_] (connect (go! env f) ccs))])
    (run!)))
 
 (defn ev [s]
-  (go! @env (:form (r/read (r/string-reader s)))))
+  (go! @env/env (:form (r/read (r/string-reader s)))))
 
 (defn iev [s]
   (ast/inspect (ev s)))
 
 (defn loadfile [envatom fname]
-  (let [conts {(xkeys :env)    (fn [[sym value]] (swap! envatom ns-bind sym value))
+  (let [conts {(xkeys :env)    (fn [[sym value]] (swap! envatom env/ns-bind sym value))
                ;; FIXME: This should log a warning. It's not a fatal error
                (xkeys :return) #(throw (RuntimeException. "return to top level!"))
                (xkeys :error)  (fn [x]
@@ -474,20 +357,20 @@
             (recur reader)))))))
 
 (defn reload! [fname]
-  (reset! env base-env)
-  (loadfile env fname))
+  (alter-var-root #'env/env (constantly (atom base-env)))
+  (loadfile env/env fname))
 
 (defmacro inspect [n]
   `(-> @env (get-in [:names (ast/symbol ~(clojure.core/name n))]) ast/inspect))
 
 (defn el [form name]
-  (lookup (get-env form) (ast/symbol name)))
+  (env/lookup (env/get-env form) (ast/symbol name)))
 
 (defn check [s]
-  (ast/inspect (:form (r/read (r/string-reader s) @env))))
+  (ast/inspect (:form (r/read (r/string-reader s) @env/env))))
 
 (defn test []
-  (let [conts {(xkeys :env) (fn [[sym value]] (swap! env ns-bind sym value))}]
+  (let [conts {(xkeys :env) (fn [[sym value]] (swap! env/env env/ns-bind sym value))}]
     (loop [reader (r/file-reader testxprl)]
       (let [reader (r/read reader)
             form1  (:form reader)
@@ -499,7 +382,7 @@
             (println "Evaluating: " form1)
             (println "---")
             (print "result: ")
-            (go! @env form1 (with-return conts println))
+            (go! @env/env form1 (with-return conts println))
             (print "expected: " )
-            (go! @env form2 (with-return conts println))
+            (go! @env/env form2 (with-return conts println))
             (recur reader)))))))
