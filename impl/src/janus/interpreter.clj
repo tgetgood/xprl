@@ -173,12 +173,50 @@
 
 ;;;;; Builtins
 
+;; REVIEW: `μ` needs to be a macro if we want to insist that an undefined symbol
+;; cannot be present in a valid sexp.
+;;
+;; If we allow unbound symbols and just defer evaluation of them, then there's
+;; no reason `createμ` is a predicate primitive which delays until its first two
+;; arguments are reduced to symbols.
+;;
+;; We wouldn't need the partial μ logic above in this case.
+;;
+;; The soul of the language is the idea that a symbol cannot change its meaning
+;; during a computation. That doesn't mean a symbol can't have no known meaning,
+;; does it? It just means that once we establish the meaning of a symbol, that's
+;; it.
+;;
+;; of course I'm allowing shadowing, so even that above statement isn't really
+;; true unless you accept the conceit that different names can have the same
+;; name. That isn't controversial in mathematics where most functions use x,y,z
+;; as variables and we rename them willy nilly when it behooves us.
+;;
+;; Static single assignment is a great idea in llvm, but it only holds within a
+;; given block for a reason: global uniqueness would make modularity impossible.
+;;
+;; This language I'm building is reflective down to its roots, so if you look at
+;; code built by deeply nested μs, everything is an `x`, but those `x`s are all
+;; different. We track the context in which that `x` was used and so we
+;; effectively have subscripts on all of the `x`s that make them unique.
+;;
+;; I'm rambling, but sometimes its useful to overthink things out loud.
 (defn createμ [args]
   (let [[name params body] (case (count args)
                              3 args
                              2 `[nil ~@args])]
     (walk (with-meta (ast/μ name params body) (meta args)))))
 
+;; REVIEW: does `emit`` need to be a macro? We want to modify the keys (channel
+;; names) by evaluating them, but so long as AST constructors and `walk` itself
+;; are functions, `emit` can just be a normal primitive function, can it not?
+;;
+;; We wouldn't need special rules to reduce and apply Emissions in this case.
+;; But we would still need special logic ~somewhere~ to connect to a buried
+;; emission and resume the computation if it emits to :return.
+;;
+;; I think I should get ν incorporated into the language before worrying about
+;; that.
 (defn emit [kvs]
   (assert (even? (count kvs)))
   (walk
@@ -186,6 +224,16 @@
      (ast/emission (into [] (map (fn [[k v]] [(ast/immediate k) v])) (partition 2 kvs)))
      (meta kvs))))
 
+;; REVIEW: Does `select` really need to be a macro? We're not preventing the
+;; walking of subforms; both `t` & `f` get walked whatever happens.
+;;
+;; One issue is pruning. We can and should apply the select as soon as `p` is
+;; reduced, without waiting for both `t` & `f`. A Primitive would wait for all
+;; args to be evaluated before applying.
+;;
+;; Instead of two kinds of primitives, maybe we want instead to think about
+;; having just one kind which parametrises on when it can run. A predicate for
+;; deciding whether to run the primitive or delay would suffice.
 (defn select {:name "select"} [args]
   (let [[p t f] (map #(walk (xnth args %)) (range 3))]
     (cond
