@@ -4,20 +4,29 @@
    [reduced? symbol symbol? keyword keyword? destructure delay type])
   (:require
    [clojure.pprint :as pp]
+   [clojure.set :as set]
    [clojure.string :as str])
   (:import
    (java.io Writer)))
 
-;; Boilerplate reducer.
-(defmacro ps [type]
-  `(do (defmethod print-method ~type [o# ^Writer w#]
-         (.write w# (str o#)))))
+;;;;; Context
 
-;; TODO: pp/simple-dispatch overrides how code is displayed in the repl.
-;; TODO: and what does pp/code-dispatch do? Not 100% clear
+(defn ctx []
+  {})
 
-;;;;; Base types
+(defn with-provenance [ctx p]
+  (assoc ctx :provenance p))
 
+(defn ctx-symbol [ctx s]
+  (update ctx :symbols (fnil conj #{}) s))
+
+(defn syms
+  ([ctx] (:symbols ctx))
+  ([c1 c2] (set/union (:symbols c1) (:symbols c2))))
+
+;;;;; AST
+
+;; Keywords are values, which is to say they're context free
 (defrecord Keyword [names]
   Object
   (toString [_]
@@ -26,35 +35,33 @@
 (defn keyword? [k]
   (instance? Keyword k))
 
-(defmethod pp/simple-dispatch Keyword [o]
-  (pp/write-out (clojure.core/keyword (subs (str o) 1))))
 
-(ps Keyword)
-
-(defrecord Symbol [names]
+(defrecord Symbol [names ctx]
   Object
   (toString [_]
     (transduce (interpose ".") str "" names)))
-
-(defmethod pp/simple-dispatch Symbol [o]
-  (pp/write-out (clojure.core/symbol (str o))))
-
-(ps Symbol)
 
 (defn split-symbolic [s]
   (if (str/includes? s ".")
     (str/split s #"\.")
     [s]))
 
-(defonce dot (->Symbol "."))
+(defonce dot (->Symbol "." (ctx)))
 
 (defn symbol
-  [s]
-  (cond
-    ;; TODO: Intern symbols
-    (= s ".")            dot
-    (re-find #"^\.+$" s) (->Symbol s)
-    :else                (->Symbol (split-symbolic s))))
+  ([s] (symbol s nil))
+  ([s p]
+   (let [s   (cond
+               ;; TODO: Intern symbols
+               (= s ".")            dot
+               (re-find #"^\.+$" s) (->Symbol s (ctx))
+               :else                (->Symbol (split-symbolic s) (ctx)))
+         ctx (with-provenance (ctx-symbol (ctx) s) p)]
+     ;; REVIEW: Self reference!!! I was trying to avoid this...
+     ;;
+     ;; Do symbols need to contain a list of referred symbols which is just
+     ;; themselves? That seems a pretty dumb reason for such complexity.
+     (-> Symbol s ctx))))
 
 (defn symbol? [s]
   (instance? Symbol s))
@@ -62,9 +69,8 @@
 (defn keyword [s]
   (->Keyword (split-symbolic s)))
 
-;;;;; Reader AST
 
-(defrecord Pair [head tail]
+(defrecord Pair [head tail ctx]
   Object
   (toString [_]
     (str "(" (str head) " "
@@ -72,6 +78,103 @@
            (transduce (comp (map str) (interpose " ")) str "" tail)
            (str ". " (str tail)))
          ")")))
+
+(defn pair [head tail]
+  (->Pair head tail {}))
+
+(defrecord Immediate [form ctx]
+  Object
+  (toString [_]
+    (str "~" form)))
+
+(defn immediate
+  [form]
+  (->Immediate form {})
+  #_(with-meta (->Immediate form) (meta form)))
+
+
+(defrecord Application [head tail]
+  Object
+  (toString [_]
+    (str "#" (str (->Pair head tail)))))
+
+(defn application
+  [head tail]
+  (->Application head tail)
+  #_(with-meta (->Application head tail) (meta head)))
+
+
+(defrecord Mu [name params body]
+  Object
+  (toString [_]
+    (str "(#μ " params " " body ")")))
+
+(defn μ [name params body]
+  (->Mu name params body))
+
+(defn μ? [x]
+  (instance? Mu x))
+
+(defn fname [f]
+  (or (:name (meta f)) (str f)))
+
+
+(defrecord Primitive [f]
+  Object
+  (toString [_]
+    (str "#F[" (fname f) "]")))
+
+(defn pfn [f]
+  (->Primitive f))
+
+
+(defrecord Macro [f]
+  Object
+  (toString [_]
+    (str "#M[" (fname f) "]")))
+
+(defn macro [f]
+  (->Macro f))
+
+
+(defrecord Nu [name params body]
+  Object
+  (toString [_]
+    (str "(#ν " params " " body ")")))
+
+
+(defrecord Emission [kvs]
+  Object
+  (toString [_]
+    (str "#E" kvs)))
+
+(defn emission [kvs]
+  (->Emission kvs))
+
+;;;;; Pretty Printing
+;;
+;; This comprises so much messy logic that I'm going to dump it all here to keep
+;; it out of the way.
+
+;; Boilerplate reducer.
+(defmacro ps [type]
+  `(do (defmethod print-method ~type [o# ^Writer w#]
+         (.write w# (str o#)))))
+;;; Symbol
+
+(ps Symbol)
+
+(defmethod pp/simple-dispatch Symbol [o]
+  (pp/write-out (clojure.core/symbol (str o))))
+
+;;; Keyword
+
+(ps Keyword)
+
+(defmethod pp/simple-dispatch Keyword [o]
+  (pp/write-out (clojure.core/keyword (subs (str o) 1))))
+
+;;; Pair
 
 (defmethod print-method Pair [o ^Writer w]
   (.write w "(")
@@ -135,15 +238,7 @@
        (.write ^Writer *out* " . ")
        (pp/write-out tail)))))
 
-(defrecord Immediate [form]
-  Object
-  (toString [_]
-    (str "~" form)))
-
-(defn immediate
-  [form]
-  (->Immediate form)
-  #_(with-meta (->Immediate form) (meta form)))
+;;; Immediate
 
 (ps Immediate)
 
@@ -152,15 +247,7 @@
   (.write ^Writer *out* "~")
   (pp/write-out (:form i)))
 
-(defrecord Application [head tail]
-  Object
-  (toString [_]
-    (str "#" (str (->Pair head tail)))))
-
-(defn application
-  [head tail]
-  (->Application head tail)
-  #_(with-meta (->Application head tail) (meta head)))
+;;; Application
 
 (ps Application)
 
@@ -169,16 +256,7 @@
   (.write ^Writer *out* "#")
   (pp/simple-dispatch (->Pair head tail)))
 
-(defrecord Mu [name params body]
-  Object
-  (toString [_]
-    (str "(#μ " params " " body ")")))
-
-(defn μ [name params body]
-  (->Mu name params body))
-
-(defn μ? [x]
-  (instance? Mu x))
+;;; μ
 
 (ps Mu)
 
@@ -188,16 +266,7 @@
    (pp/write-out (symbol "#μ"))
    (format-pair (symbol "#μ") [params body])))
 
-(defn fname [f]
-  (or (:name (meta f)) (str f)))
-
-(defrecord Primitive [f]
-  Object
-  (toString [_]
-    (str "#F[" (fname f) "]")))
-
-(defn pfn [f]
-  (->Primitive f))
+;;; Primitive
 
 (defmethod print-method Primitive [{:keys [f]} ^Writer w]
   (.write w "#F[")
@@ -213,13 +282,7 @@
      (pp/write-out name)
      (pp/write-out f))))
 
-(defrecord Macro [f]
-  Object
-  (toString [_]
-    (str "#M[" (fname f) "]")))
-
-(defn macro [f]
-  (->Macro f))
+;;; Macro
 
 (defmethod print-method Macro [{:keys [f]} ^Writer w]
   (.write w "#M[")
@@ -235,20 +298,7 @@
      (pp/write-out name)
      (pp/write-out f))))
 
-(defrecord Nu [name params body]
-  Object
-  (toString [_]
-    (str "(#ν " params " " body ")")))
-
-(defn nest-eval [base n]
-  (if (pos? n)
-    (immediate (nest-eval base (dec n)))
-    base))
-
-(defrecord Emission [kvs]
-  Object
-  (toString [_]
-    (str "#E" kvs)))
+;;; Emission
 
 (defmethod print-method Emission [{:keys [kvs]} ^Writer w]
   (.write w "#E")
@@ -258,10 +308,11 @@
   (pp/write-out (symbol "#E"))
   (pp/simple-dispatch kvs))
 
-(defn emission [kvs]
-  (->Emission kvs))
-
 ;;;;; Destructuring
+;;
+;; Destructuring is no longer implemented around the language. But I'm keeping
+;; this around as reference for the implementation of destructuing ~in~ xprl at
+;; some point.
 
 (defprotocol Destructurable
   (binding? [this] "Is this form an admissible lhs to bind?")

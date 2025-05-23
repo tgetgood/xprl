@@ -118,8 +118,13 @@
           (recur fs)
           v)))))
 
-(defn parse-symbol [{:keys [token gensyms]}]
+(defn parse-symbol [{:keys [token gensyms] :as r}]
   ;; reader gensyms are global to the form being read but unique between forms.
+  ;; REVIEW: I'm not clear that we *need* gensyms for hygiene. In fact my
+  ;; thinking is that if they're needed, that's an indication something is wrong
+  ;; with the context handling logic.
+  ;;
+  ;; But I'm not sure yet, so we still have them.
   (if (str/ends-with? token "#")
     (let [s (apply str (butlast token))]
       (if-let [sym (get @gensyms s)]
@@ -127,7 +132,7 @@
         (let [sym (ast/symbol (name (gensym (str s "_"))))]
           (swap! gensyms assoc s sym)
           sym)))
-    (ast/symbol token)))
+    (ast/symbol token (clean-meta r))))
 
 (defn interpret [r]
   (let [s (:token r)]
