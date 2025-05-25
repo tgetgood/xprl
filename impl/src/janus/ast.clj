@@ -6,25 +6,42 @@
    [clojure.pprint :as pp]
    [clojure.set :as set]
    [clojure.string :as str])
+
   (:import
    (java.io Writer)))
 
 ;;;;; Context
 
-(defn ctx []
-  {})
+(defprotocol Contextual)
 
-(defn with-provenance [ctx p]
-  (assoc ctx :provenance p))
+(defn contextual? [x]
+  (instance? janus.ast.Contextual x))
 
-(defn ctx-symbol [ctx s]
-  (update ctx :symbols (fnil conj #{}) s))
+(defn ctx
+  ([] {})
+  ([x]
+   (when (contextual? x) (:ctx x))))
 
-(defn syms
-  ([ctx] (:symbols ctx))
-  ([c1 c2] (set/union (:symbols c1) (:symbols c2))))
+(defn with-ctx [x ctx]
+  (if (contextual? x)
+    (assoc x :ctx ctx)
+    x))
+
+(defn with-symbols [ctx syms]
+  (assoc ctx ::symbols syms))
+
+(declare symbols)
+
+(defn build-ctx
+  ([& subforms]
+   (with-symbols (ctx) (apply set/union (map symbols subforms)))))
 
 ;;;;; AST
+
+(defn split-symbolic [s]
+  (if (str/includes? s ".")
+    (str/split s #"\.")
+    [s]))
 
 ;; Keywords are values, which is to say they're context free
 (defrecord Keyword [names]
@@ -35,42 +52,39 @@
 (defn keyword? [k]
   (instance? Keyword k))
 
-
-(defrecord Symbol [names ctx]
-  Object
-  (toString [_]
-    (transduce (interpose ".") str "" names)))
-
-(defn split-symbolic [s]
-  (if (str/includes? s ".")
-    (str/split s #"\.")
-    [s]))
-
-(defonce dot (->Symbol "." (ctx)))
-
-(defn symbol
-  ([s] (symbol s nil))
-  ([s p]
-   (let [s   (cond
-               ;; TODO: Intern symbols
-               (= s ".")            dot
-               (re-find #"^\.+$" s) (->Symbol s (ctx))
-               :else                (->Symbol (split-symbolic s) (ctx)))
-         ctx (with-provenance (ctx-symbol (ctx) s) p)]
-     ;; REVIEW: Self reference!!! I was trying to avoid this...
-     ;;
-     ;; Do symbols need to contain a list of referred symbols which is just
-     ;; themselves? That seems a pretty dumb reason for such complexity.
-     (-> Symbol s ctx))))
-
-(defn symbol? [s]
-  (instance? Symbol s))
-
 (defn keyword [s]
   (->Keyword (split-symbolic s)))
 
 
+(defrecord Symbol [names ctx]
+  Contextual
+  Object
+  (toString [_]
+    (transduce (interpose ".") str "" names)))
+
+(defonce dot (->Symbol "." (ctx)))
+
+(defn symbol [s]
+  (cond
+    ;; TODO: Intern symbols
+    (= s ".")            dot
+    (re-find #"^\.+$" s) (->Symbol s (build-ctx))
+    :else                (->Symbol (split-symbolic s) (build-ctx))))
+
+(defn symbol? [s]
+  (instance? Symbol s))
+
+(defn symbols
+  "Returns set of symbols mentioned in sexp."
+  [x]
+  (cond
+    (symbol? x)     #{x}               ; symbols needn't track self mention.
+    (contextual? x) (::symbols (ctx x))
+    true            #{}))
+
+
 (defrecord Pair [head tail ctx]
+  Contextual
   Object
   (toString [_]
     (str "(" (str head) " "
@@ -80,37 +94,43 @@
          ")")))
 
 (defn pair [head tail]
-  (->Pair head tail {}))
+  (->Pair head tail (build-ctx head tail)))
+
 
 (defrecord Immediate [form ctx]
+  Contextual
   Object
   (toString [_]
     (str "~" form)))
 
-(defn immediate
-  [form]
-  (->Immediate form {})
-  #_(with-meta (->Immediate form) (meta form)))
+(defn immediate [form p]
+  (->Immediate form (build-ctx form)))
 
 
-(defrecord Application [head tail]
+(defrecord Application [head tail ctx]
+  Contextual
   Object
   (toString [_]
-    (str "#" (str (->Pair head tail)))))
+    (str "#" (str (pair head tail)))))
 
-(defn application
-  [head tail]
-  (->Application head tail)
-  #_(with-meta (->Application head tail) (meta head)))
+(defn application [head tail]
+  (->Application head tail (build-ctx head tail)))
 
 
-(defrecord Mu [name params body]
+(defrecord Mu [name params body ctx]
+  Contextual
   Object
   (toString [_]
     (str "(#μ " params " " body ")")))
 
-(defn μ [name params body]
-  (->Mu name params body))
+(defn μ
+  ([name params body] (μ name params body (or (provenance name) (provenance params))))
+  ([name params body p]
+   ;; REVIEW: Can μ be called if params *isn't* a symbol?
+   ;; That depends on the interpreter, so let's not assume anything here.
+   (let [syms (if (symbol? params) (conj (symbols body) params) (symbols body))
+         syms (if (symbol? name) (conj syms name) syms)]
+     (->Mu name params body (with-symbols (build-ctx p) syms)))))
 
 (defn μ? [x]
   (instance? Mu x))
@@ -137,13 +157,15 @@
   (->Macro f))
 
 
-(defrecord Nu [name params body]
+(defrecord Nu [name params body ctx]
+  Contextual
   Object
   (toString [_]
     (str "(#ν " params " " body ")")))
 
 
 (defrecord Emission [kvs]
+  Contextual
   Object
   (toString [_]
     (str "#E" kvs)))

@@ -8,6 +8,7 @@
 
 (defn string-reader [^String s]
   {:reader (PushbackReader. (StringReader. s))
+   :origin ::string
    :string s
    :until  '()
    :line   1
@@ -15,6 +16,7 @@
 
 (defn file-reader [^String fname]
   {:reader (-> fname File. FileReader. PushbackReader.)
+   :origin ::file
    :file   fname
    :until  '()
    :line   1
@@ -22,10 +24,10 @@
 
 (defn stdin-reader []
   {:reader *in*
-   :file "stdin"
-   :until '()
-   :col 1
-   :line 1})
+   :origin ::stdin
+   :until  '()
+   :col    1
+   :line   1})
 
 (defn clean-meta [r]
   (dissoc r :token :until :result :reader :gensyms))
