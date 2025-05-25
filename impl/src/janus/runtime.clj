@@ -3,7 +3,7 @@
   (:require
    [janus.ast :as ast]
    [janus.env :as env]
-   [janus.telemetry :refer [trace!]])
+   [janus.debug :refer [trace!]])
   (:import
    (java.util.concurrent ConcurrentLinkedDeque)))
 

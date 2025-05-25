@@ -1,4 +1,4 @@
-(ns janus.telemetry)
+(ns janus.debug)
 
 (def ^:dynamic *verbose* false)
 

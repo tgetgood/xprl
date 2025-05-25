@@ -2,7 +2,8 @@
   (:refer-clojure :exclude [name])
   (:require
    [clojure.set :as set]
-   [janus.telemetry :refer [trace!]]))
+   [janus.ast :as ast]
+   [janus.debug :refer [trace!]]))
 
 (defn empty-ns []
   ;; REVIEW: One sanity check on a namespace is that the set of declared (but

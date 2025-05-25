@@ -3,7 +3,7 @@
   (:require
    [janus.ast :as ast]
    [janus.env :as env :refer [body form head kvs name params tail xnth]]
-   [janus.telemetry :refer [trace!]]))
+   [janus.debug :refer [trace!]]))
 
 (declare walk)
 
