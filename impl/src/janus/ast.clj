@@ -1,7 +1,7 @@
 (ns janus.ast
   (:refer-clojure
    :exclude
-   [reduced? symbol symbol? keyword keyword? destructure delay type])
+   [reduced? symbol symbol? keyword keyword? destructure delay type list List])
   (:require
    [clojure.pprint :as pp]
    [clojure.set :as set]
@@ -123,21 +123,28 @@
   (toString [_]
     (str "(#μ " params " " body ")")))
 
-(defn μ
-  ([name params body] (μ name params body (or (provenance name) (provenance params))))
-  ([name params body p]
-   ;; REVIEW: Can μ be called if params *isn't* a symbol?
-   ;; That depends on the interpreter, so let's not assume anything here.
-   (let [syms (if (symbol? params) (conj (symbols body) params) (symbols body))
-         syms (if (symbol? name) (conj syms name) syms)]
-     (->Mu name params body (with-symbols (build-ctx p) syms)))))
+(defn μ [name params body]
+  ;; REVIEW: Can μ be called if params *isn't* a symbol?
+  ;; That depends on the interpreter, so let's not assume anything here.
+  (let [syms (if (symbol? params) (conj (symbols body) params) (symbols body))
+        syms (if (symbol? name) (conj syms name) syms)]
+    (->Mu name params body (with-symbols (build-ctx) syms))))
 
 (defn μ? [x]
   (instance? Mu x))
 
+
+(defrecord List [elements ctx]
+  Contextual
+  Object
+  (toString [_] (str elements)))
+
+(defn list [xs]
+  (->List xs (apply build-ctx xs)))
+
+
 (defn fname [f]
   (or (:name (meta f)) (str f)))
-
 
 (defrecord Primitive [f]
   Object
@@ -164,14 +171,14 @@
     (str "(#ν " params " " body ")")))
 
 
-(defrecord Emission [kvs]
+(defrecord Emission [kvs ctx]
   Contextual
   Object
   (toString [_]
     (str "#E" kvs)))
 
 (defn emission [kvs]
-  (->Emission kvs))
+  (->Emission kvs (build-ctx kvs)))
 
 ;;;;; Pretty Printing
 ;;
@@ -406,11 +413,11 @@
     (insp (:head form) w (inc level))
     (insp (:tail form) w (inc level)))
 
-  clojure.lang.PersistentVector
+  List
   (insp [form ^Writer w level]
     (spacer w level)
     (.write w "L\n")
-    (dorun (map #(insp % w (inc level)) form)))
+    (dorun (map #(insp % w (inc level)) (:elements form))))
 
   Macro
   (insp [form ^Writer w level]
@@ -450,15 +457,15 @@
 ;;;;; Sugar
 
 (def type-table
-  {clojure.lang.PersistentVector :L
-   janus.ast.Immediate           :I
-   janus.ast.Pair                :P
-   janus.ast.Symbol              :S
-   janus.ast.Application         :A
-   janus.ast.Primitive           :F
-   janus.ast.Macro               :M
-   janus.ast.Mu                  :μ
-   janus.ast.Emission            :E})
+  {janus.ast.List        :L
+   janus.ast.Immediate   :I
+   janus.ast.Pair        :P
+   janus.ast.Symbol      :S
+   janus.ast.Application :A
+   janus.ast.Primitive   :F
+   janus.ast.Macro       :M
+   janus.ast.Mu          :μ
+   janus.ast.Emission    :E})
 
 (defn type [x]
   ;; There's nothing to gain in wrapping value types.
