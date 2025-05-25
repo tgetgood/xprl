@@ -103,7 +103,7 @@
   (toString [_]
     (str "~" form)))
 
-(defn immediate [form p]
+(defn immediate [form]
   (->Immediate form (build-ctx form)))
 
 
@@ -140,7 +140,7 @@
   (toString [_] (str elements)))
 
 (defn list [xs]
-  (->List xs (apply build-ctx xs)))
+  (->List (into [] xs) (apply build-ctx xs)))
 
 
 (defn fname [f]
@@ -457,15 +457,15 @@
 ;;;;; Sugar
 
 (def type-table
-  {janus.ast.List        :L
-   janus.ast.Immediate   :I
-   janus.ast.Pair        :P
-   janus.ast.Symbol      :S
-   janus.ast.Application :A
-   janus.ast.Primitive   :F
-   janus.ast.Macro       :M
-   janus.ast.Mu          :μ
-   janus.ast.Emission    :E})
+  {List        :L
+   Immediate   :I
+   Pair        :P
+   Symbol      :S
+   Application :A
+   Primitive   :F
+   Macro       :M
+   Mu          :μ
+   Emission    :E})
 
 (defn type [x]
   ;; There's nothing to gain in wrapping value types.

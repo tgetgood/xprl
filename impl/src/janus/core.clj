@@ -61,7 +61,7 @@
 
 (defn go!
   ([env f]
-   (i/walk (env/set-env (ast/immediate f) env)))
+   (i/walk (env/with-env (ast/immediate f) env)))
   ([env f ccs]
    (rt/schedule [(fn [_] (rt/connect (go! env f) ccs))])
    (rt/run!)))

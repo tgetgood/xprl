@@ -3,7 +3,8 @@
   (:refer-clojure :exclude [read])
   (:require [clojure.string :as str]
             [clojure.set :as s]
-            [janus.ast :as ast])
+            [janus.ast :as ast]
+            [janus.debug :as debug])
   (:import [java.io PushbackReader StringReader File FileReader EOFException]))
 
 (defn string-reader [^String s]
@@ -134,7 +135,7 @@
         (let [sym (ast/symbol (name (gensym (str s "_"))))]
           (swap! gensyms assoc s sym)
           sym)))
-    (ast/symbol token (clean-meta r))))
+    (ast/symbol token)))
 
 (defn interpret [r]
   (let [s (:token r)]
@@ -161,22 +162,25 @@
         n     (count res)]
     (assoc forms :result
            (cond
-             (= 1 n) (ast/->Pair (first res) (with-meta [] (clean-meta r)))
+             (= 1 n) (ast/pair (first res) (debug/with-provenance (ast/list [])
+                                             (clean-meta r)))
 
              (= ast/dot (nth res (- n 2)))
              (if (= n 3)
-               (ast/->Pair (first res) (last res))
-               (ast/->Pair (first res)
-                           (with-meta
-                             (into [] (concat (subvec res 1 (- n 2)) (last res)))
-                             (clojure.core/meta (second res)))))
+               (ast/pair (first res) (last res))
+               (ast/pair (first res)
+                           (debug/with-provenance
+                             (ast/list
+                              (concat (subvec res 1 (- n 2)) (last res)))
+                             (debug/provenance (second res)))))
 
-             :else (ast/->Pair (first res) (with-meta
-                                             (into [] (rest res))
-                                             (clojure.core/meta (second res))))))))
+             :else (ast/pair (first res) (debug/with-provenance
+                                           (ast/list (rest res))
+                                           (debug/provenance (second res))))))))
 
 (defn readvector [r]
-  (read-until \] r))
+  (update (read-until \] r) :result #(debug/with-provenance (ast/list %)
+                                       (debug/provenance r))))
 
 (defn readset [r]
   (let [forms (read-until \} r)]
@@ -252,10 +256,6 @@
    \" readstring
    \# readdispatch
    \; readlinecomment
-   ;; \^ readmeta
-   ;; REVIEW: Will I be pinning metadata to objects like clj? I think I'll need
-   ;; to store metadata out of band somehow. But I do want to use ^T for type
-   ;; annotations, whether that translates to metadata or not.
    \~ readimmediate})
 
 (defn readinner [r]
@@ -278,12 +278,9 @@
   (let [w (consumewhitespace (assoc r :token ""))
         m (clean-meta w)
         o (readinner w)]
-    (cond
-      (not (contains? o :result))               (recur o)
-      (instance? clojure.lang.IObj (:result o)) (update o :result
-                                                        #(with-meta %
-                                                           (merge (meta %) m)))
-      :else                                     o)))
+    (if (not (contains? o :result))
+      (recur o)
+      (update o :result debug/with-provenance m))))
 
 (defn read [reader]
   (s/rename-keys (read* (assoc reader :gensyms (atom {}))) {:result :form}))

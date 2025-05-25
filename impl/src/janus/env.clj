@@ -20,18 +20,17 @@
   (:declared env))
 
 (defn get-env [x]
-  (when (instance? clojure.lang.IMeta x)
-    (::env (meta x))))
+  (::env (ast/ctx x)))
 
-(defn set-env [x env]
-  (if (instance? clojure.lang.IMeta x)
-    (with-meta x (assoc (meta x) ::env env))
-    x))
+(defn with-env [x env]
+  (ast/with-ctx x
+    (assoc (ast/ctx x) ::env env)))
 
-(defn ns-bind [ns s val]
+(defn ns-bind
   "Like `bind`, but skips the declaration check since forms interned into a
   namespace don't need to be declared first (but they can be, so we still need
   to clear declarations)."
+  [ns s val]
   (-> ns
       (assoc-in [:names s] val)
       (update :declared disj s)))
@@ -93,7 +92,7 @@
 (defn nearest-env [x k]
   (let [v (get x k)
         e (merge-env x v)]
-    (set-env v e)))
+    (with-env v e)))
 
 (defn params [x] (nearest-env x :params))
 (defn name   [x] (nearest-env x :name))
@@ -102,7 +101,8 @@
 (defn tail   [x] (nearest-env x :tail))
 (defn form   [x] (nearest-env x :form))
 (defn kvs    [x] (nearest-env x :kvs))
-(defn xnth [x n] (nearest-env x n))
+(defn els    [x] (nearest-env x :elements))
+(defn xnth [x n] (nearest-env (els x) n))
 
 ;;;;; μ specfics
 
@@ -111,15 +111,15 @@
         env (μ-declare-1 (get-env body) (params μ))
         env (if (name μ) (μ-declare-1 env (name μ)) env)]
     (trace! "declaring params:" (params μ) (name μ) (locals env))
-    (set-env body env)))
+    (with-env body env)))
 
 (defn μ-bind [μ args]
   (let [body (body μ)]
-    (if-not (instance? clojure.lang.IMeta body)
+    (if-not (ast/contextual? body)
       (do
         (trace! "Primitive μ body detected, not binding params.")
         body)
       (let [env (bind (get-env body) (params μ) args)
             env (if (name μ) (bind env (name μ) μ) env)]
         (trace! "binding params:" (params μ) "to" args (locals (get-env args)))
-        (set-env body env)))))
+        (with-env body env)))))

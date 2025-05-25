@@ -64,13 +64,13 @@
       μ'
       ;; FIXME: This ought to be handled by the env subsystem
       (let [body (env/μ-declare μ')]
-        (env/set-env (assoc μ' :body (walk body)) (env/get-env body))))))
+        (env/with-env (assoc μ' :body (walk body)) (env/get-env body))))))
 
 (defn emit-reduce [x]
   (ast/emission (walk (kvs x))))
 
 (defn list-xform [f xs]
-  (reduce (fn [acc i] (conj acc (f (xnth xs i)))) [] (range (count xs))))
+  (ast/list (reduce (fn [acc i] (conj acc (f (xnth xs i)))) [] (range (count xs)))))
 
 (defn list-reduce [xs]
   (list-xform walk xs))
@@ -221,7 +221,9 @@
   (assert (even? (count kvs)))
   (walk
    (with-meta
-     (ast/emission (into [] (map (fn [[k v]] [(ast/immediate k) v])) (partition 2 kvs)))
+     (ast/emission
+      (ast/list
+       (into [] (map (fn [[k v]] [(ast/immediate k) v])) (partition 2 kvs))))
      (meta kvs))))
 
 ;; REVIEW: Does `select` really need to be a macro? We're not preventing the
