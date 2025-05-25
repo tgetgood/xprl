@@ -147,7 +147,7 @@
     (instance? janus.ast.Application x) (head x)
     true                                nil))
 
-(defn walk1 [sexp]
+(defn rule-match [sexp]
   (let [t1 (ast/type sexp)]
     (if-let [subtree (get rule-tree t1)]
       (let [subexp (step sexp)
@@ -165,7 +165,7 @@
     true                                (f x)))
 
 (defn walk [sexp]
-  (let [[rule f] (walk1 sexp)
+  (let [[rule f] (rule-match sexp)
         _        (trace! "rule match:" rule sexp (env/locals (env/merge-env sexp (step sexp))))
         v        (smart-call f sexp)]
     (trace! "result:" rule "\n" sexp "\n->\n" v)
