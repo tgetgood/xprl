@@ -283,7 +283,7 @@
 (defmethod pp/simple-dispatch Application [{:keys [head tail]}]
   ;; REVIEW: Is this advisable?
   (.write ^Writer *out* "#")
-  (pp/simple-dispatch (->Pair head tail)))
+  (pp/simple-dispatch (pair head tail)))
 
 ;;; μ
 
