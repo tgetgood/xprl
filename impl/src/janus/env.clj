@@ -106,11 +106,10 @@
 
 ;;;;; μ specfics
 
-(defn μ-declare [μ]
-  (let [body (body μ)
-        env (μ-declare-1 (get-env body) (params μ))
-        env (if (name μ) (μ-declare-1 env (name μ)) env)]
-    (trace! "declaring params:" (params μ) (name μ) (locals env))
+(defn μ-declare [name params body]
+  (let [env (μ-declare-1 (get-env body) params)
+        env (if name (μ-declare-1 env name) env)]
+    (trace! "declaring params:" params name (locals env))
     (with-env body env)))
 
 (defn μ-bind [μ args]

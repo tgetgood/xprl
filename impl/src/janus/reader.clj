@@ -165,14 +165,14 @@
              (= 1 n) (ast/pair (first res) (debug/with-provenance (ast/list [])
                                              (clean-meta r)))
 
-             (= ast/dot (nth res (- n 2)))
+             (= (ast/symbol ".") (nth res (- n 2)))
              (if (= n 3)
                (ast/pair (first res) (last res))
                (ast/pair (first res)
-                           (debug/with-provenance
-                             (ast/list
-                              (concat (subvec res 1 (- n 2)) (last res)))
-                             (debug/provenance (second res)))))
+                         (debug/with-provenance
+                           (ast/list
+                            (concat (subvec res 1 (- n 2)) (last res)))
+                           (debug/provenance (second res)))))
 
              :else (ast/pair (first res) (debug/with-provenance
                                            (ast/list (rest res))

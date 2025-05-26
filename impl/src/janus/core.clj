@@ -9,48 +9,55 @@
 
 ;;;;; Builtins
 
-(def macros
-  {"μ"      i/createμ
-   ;;   "ν"       createν
-   "emit"   i/emit
-   "select" i/select
-   ;; "first*" first*
-   ;; "rest*"  rest*
-   })
+
+(defn primitive [p f]
+  (with-meta (ast/primitive p f) (meta f)))
+
+(defn primitives [p m]
+  (reduce (fn [acc [k v]] (assoc acc (ast/symbol k) (primitive p v))) {} m))
+
+(defn macros [m]
+  (reduce (fn [acc [k [p f]]] (assoc acc (ast/symbol k) (primitive p f))) {} m))
+
+(def special
+  "Things that would traditionally be special forms."
+  (macros
+   {"μ"      [i/partial? i/createμ]
+    ;;   "ν"       createν
+    "emit"   [(constantly true) i/emit]
+    "select" [i/check-select i/select]
+    ;; "first*" first*
+    ;; "rest*"  rest*
+    }))
 
 (defn nth* [c i]
   (nth c (dec i)))
 
+(defn fn-reduced? [args]
+  (every? i/evaluated? (env/els args)))
+
 (def fns
-  {"+*"   +
-   "**"   *
-   "-*"   -
-   "/*"   /
-   ">*"   >
-   "<*"   <
-   "=*"   =
-   "mod*" mod
+  (primitives
+   fn-reduced?
+   {"+*"   +
+    "**"   *
+    "-*"   -
+    "/*"   /
+    ">*"   >
+    "<*"   <
+    "=*"   =
+    "mod*" mod
 
-   "first*" first
-   "rest*"  #(into [] (rest %)) ; We don't deal with seqs
+    "first*" first
+    "rest*"  #(into [] (rest %)) ; We don't deal with seqs
 
-   "count*" count
-   "nth*"   nth* ; Base 1 indexing
-   })
+    "count*" count
+    "nth*"   nth* ; Base 1 indexing
+    }))
 
-(defn tagged [f]
-  (fn [[k v]]
-    (let [k' (ast/symbol k)]
-      [k' (f (with-meta v {:name k'}))])))
-
-(defn tag-primitives [x f]
-  (into {} (map (tagged f)) x))
 
 (def base-env
-  (reduce (fn [acc [sym val]] (env/ns-bind acc sym val)) (env/empty-ns)
-          (concat
-           (map (tagged ast/macro) macros)
-           (map (tagged ast/pfn) fns))))
+  (merge special fns))
 
 ;;;;; UI
 
@@ -100,7 +107,8 @@
   (ast/inspect (:form (r/read (r/string-reader s) @env/env))))
 
 (defn test []
-  (let [conts {(ast/xkeys :env) (fn [[sym value]] (swap! env/env env/ns-bind sym value))}]
+  (let [conts {(ast/xkeys :env) (fn [[sym value]]
+                                  (swap! env/env env/ns-bind sym value))}]
     (loop [reader (r/file-reader testxprl)]
       (let [reader (r/read reader)
             form1  (:form reader)

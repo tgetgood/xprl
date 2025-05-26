@@ -9,15 +9,9 @@
 
 ;;;;; Application
 
-(defn partial? [μ]
-  (not (and (or (nil? (name μ)) (ast/symbol? (name μ))) (ast/symbol? (params μ)))))
-
-(defn μ-call [μ args]
+(defn apply-μ [μ args]
   (trace! "invoke" μ "with" args)
-  (let [μ' (if (partial? μ) (walk μ) μ)]
-    (if (partial? μ')
-      (ast/application μ' args)
-      (walk (env/μ-bind μ' args)))))
+  (walk (env/μ-bind μ args)))
 
 (defn evaluated? [x]
   (cond
@@ -25,24 +19,16 @@
     (instance? janus.ast.Application x) false
     true                                true))
 
-(defn primitive-reduced? [x]
-  (and (vector? x) (every? evaluated? x)))
-
-(defn primitive-call [head tail]
+(defn apply-primitive [head tail]
   (let [args (walk tail)]
     (trace! "pcall" head args)
-    (if (primitive-reduced? args)
-      (apply (:f head) args)
+    ;; REVIEW: This assumes that all primitives take a list as args.
+    ;; That seems innocuous, but what are the ramifications?
+    (if (and (ast/list? args) (:check head) args)
+      (apply (:fn head) args)
       (ast/application head args))))
 
-(defn macro-call [head tail]
-  ;; Even macros can't be applied if they don't have syntactic args.
-  (let [args (if (vector? tail) tail (walk tail))]
-    (if (vector? args)
-      ((:f head) args)
-      (ast/application head args))))
-
-(defn error-call [h t]
+(defn apply-error [h t]
   (throw (RuntimeException. (str h " is not applicable, but was called with " t))))
 
 (defn apply-head [h t]
@@ -54,25 +40,22 @@
 
 ;;;;; Reduction
 
-(defn walk-μ [μ]
-  (let [n (name μ)]
-    (ast/μ (when n (walk n)) (walk (params μ)) (walk (body μ)))))
+(defn reduce-μ [μ]
+  (let [n (name μ)
+        n (when n (if (ast/symbol? n) n (walk n)))
+        p (params μ)
+        p (if (ast/symbol? p) p (walk p))
+        b (body μ)
+        b (if (ast/symbol? p) (walk (env/μ-declare n p b)) (walk b))]
+    (ast/μ n p b)))
 
-(defn μ-reduce [μ]
-  (let [μ' (if (partial? μ) (walk-μ μ) μ)]
-    (if (partial? μ')
-      μ'
-      ;; FIXME: This ought to be handled by the env subsystem
-      (let [body (env/μ-declare μ')]
-        (env/with-env (assoc μ' :body (walk body)) (env/get-env body))))))
-
-(defn emit-reduce [x]
+(defn reduce-emit [x]
   (ast/emission (walk (kvs x))))
 
 (defn list-xform [f xs]
   (ast/list (reduce (fn [acc i] (conj acc (f (xnth xs i)))) [] (range (count xs)))))
 
-(defn list-reduce [xs]
+(defn reduce-list [xs]
   (list-xform walk xs))
 
 ;;;;; Eval
@@ -110,29 +93,24 @@
    :I      identity    ; (I V) => V. values eval to themselves
 
    ;; In general we cannot walk into structures. These are the exceptions.
-   :L list-reduce
-   :μ μ-reduce
-   :E emit-reduce
+   :L reduce-list
+   :μ reduce-μ
+   :E reduce-emit
 
    [:A :I] apply-head ; (apply x args) => (apply (walk x) args)
-   [:A :A] apply-head ; iff x is unevaluated.
+   [:A :A] apply-head ;   iff x is unevaluated.
 
    ;; An emission which includes a message to :return can trigger off the
    ;; application. But the connection logic isn't sophisticated enough for this
    ;; yet.
    ;; [:A :E] apply-emit
 
-   ;; Three kinds of operators are built in. I don't think we need any others,
-   ;; but that might change.
-   ;;
-   ;; In fact, I'm not 100% convinced we need to distinguish primitive fns from
-   ;; primitive macros as a language feature. It ought to be possible to
-   ;; implement a primitive fn as a primitive macro, but it has proven mightily
-   ;; inconvenient.
-   [:A :M] macro-call
-   [:A :F] primitive-call
-   [:A :μ] μ-call
-   :A      error-call})
+   ;; Two kinds of operators are built in. I don't think we need any others,
+   ;; but that might change. Should programmers be able to define new ones?
+   [:A :F] apply-primitive
+   [:A :μ] apply-μ
+
+   :A      apply-error})
 
 (defn make-tree [rules]
   (reduce (fn [acc [k v]]
@@ -165,79 +143,36 @@
     true                                (f x)))
 
 (defn walk [sexp]
-  (let [[rule f] (rule-match sexp)
-        _        (trace! "rule match:" rule sexp (env/locals (env/merge-env sexp (step sexp))))
-        v        (smart-call f sexp)]
-    (trace! "result:" rule "\n" sexp "\n->\n" v)
-    v))
+  (let [[rule f] (rule-match sexp)]
+    (trace! "rule match:" rule sexp (env/locals (env/merge-env sexp (step sexp))))
+    (let [v (smart-call f sexp)]
+      (trace! "result:" rule "\n" sexp "\n->\n" v)
+      v)))
 
 ;;;;; Builtins
 
-;; REVIEW: `μ` needs to be a macro if we want to insist that an undefined symbol
-;; cannot be present in a valid sexp.
-;;
-;; If we allow unbound symbols and just defer evaluation of them, then there's
-;; no reason `createμ` is a predicate primitive which delays until its first two
-;; arguments are reduced to symbols.
-;;
-;; We wouldn't need the partial μ logic above in this case.
-;;
-;; The soul of the language is the idea that a symbol cannot change its meaning
-;; during a computation. That doesn't mean a symbol can't have no known meaning,
-;; does it? It just means that once we establish the meaning of a symbol, that's
-;; it.
-;;
-;; of course I'm allowing shadowing, so even that above statement isn't really
-;; true unless you accept the conceit that different names can have the same
-;; name. That isn't controversial in mathematics where most functions use x,y,z
-;; as variables and we rename them willy nilly when it behooves us.
-;;
-;; Static single assignment is a great idea in llvm, but it only holds within a
-;; given block for a reason: global uniqueness would make modularity impossible.
-;;
-;; This language I'm building is reflective down to its roots, so if you look at
-;; code built by deeply nested μs, everything is an `x`, but those `x`s are all
-;; different. We track the context in which that `x` was used and so we
-;; effectively have subscripts on all of the `x`s that make them unique.
-;;
-;; I'm rambling, but sometimes its useful to overthink things out loud.
+(defn partial? [args]
+  (case (count args)
+    2 (ast/symbol? (first args))
+    3 (and (ast/symbol? (first args)) (ast/symbol? (second args)))))
+
 (defn createμ [args]
   (let [[name params body] (case (count args)
                              3 args
                              2 `[nil ~@args])]
     (walk (with-meta (ast/μ name params body) (meta args)))))
 
-;; REVIEW: does `emit`` need to be a macro? We want to modify the keys (channel
-;; names) by evaluating them, but so long as AST constructors and `walk` itself
-;; are functions, `emit` can just be a normal primitive function, can it not?
-;;
-;; We wouldn't need special rules to reduce and apply Emissions in this case.
-;; But we would still need special logic ~somewhere~ to connect to a buried
-;; emission and resume the computation if it emits to :return.
-;;
-;; I think I should get ν incorporated into the language before worrying about
-;; that.
 (defn emit [kvs]
   (assert (even? (count kvs)))
   (walk
    (with-meta
      (ast/emission
-      (ast/list
-       (into [] (map (fn [[k v]] [(ast/immediate k) v])) (partition 2 kvs))))
+      (ast/list (map (fn [[k v]] [(ast/immediate k) v]) (partition 2 kvs))))
      (meta kvs))))
 
-;; REVIEW: Does `select` really need to be a macro? We're not preventing the
-;; walking of subforms; both `t` & `f` get walked whatever happens.
-;;
-;; One issue is pruning. We can and should apply the select as soon as `p` is
-;; reduced, without waiting for both `t` & `f`. A Primitive would wait for all
-;; args to be evaluated before applying.
-;;
-;; Instead of two kinds of primitives, maybe we want instead to think about
-;; having just one kind which parametrises on when it can run. A predicate for
-;; deciding whether to run the primitive or delay would suffice.
-(defn select {:name "select"} [args]
-  (let [[p t f] (map #(walk (xnth args %)) (range 3))]
-    (cond
-      (boolean? p)         (if p t f)
-      (not (evaluated? p)) (ast/application (ast/macro #'select) [p t f]))))
+(defn check-select [args]
+  (boolean? (first args)))
+
+(defn select [[p t f]]
+  ;; `t` & `f` have already been walked, so we've nothing to do but pick one.
+  (if p t f))

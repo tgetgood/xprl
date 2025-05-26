@@ -1,7 +1,7 @@
 (ns janus.ast
   (:refer-clojure
    :exclude
-   [reduced? symbol symbol? keyword keyword? destructure delay type list List])
+   [reduced? symbol symbol? keyword keyword? destructure delay type list list? List])
   (:require
    [clojure.pprint :as pp]
    [clojure.set :as set]
@@ -64,7 +64,7 @@
     (transduce (interpose ".") str "" names)))
 
 (def symbol
-    (memoize (fn [s] (->Symbol (split-symbolic s) (build-ctx)))))
+    (memoize (fn [s] (->Symbol (split-symbolic s) (ctx)))))
 
 (defn symbol? [s]
   (instance? Symbol s))
@@ -137,17 +137,21 @@
 (defn list [xs]
   (->List (into [] xs) (apply build-ctx xs)))
 
+(defn list? [x]
+  (instance? List x))
+
 
 (defn fname [f]
   (or (:name (meta f)) (str f)))
 
-(defrecord Primitive [f]
+(defrecord Primitive [check fn]
   Object
   (toString [_]
-    (str "#F[" (fname f) "]")))
+    (str "#F[" (fname fn) "]")))
 
-(defn pfn [f]
-  (->Primitive f))
+(defn primitive [p f]
+  (->Primitive p f))
+
 
 
 (defrecord Macro [f]
