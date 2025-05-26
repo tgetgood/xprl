@@ -144,7 +144,7 @@
 
 (defn walk [sexp]
   (let [[rule f] (rule-match sexp)]
-    (trace! "rule match:" rule sexp (env/locals (env/merge-env sexp (step sexp))))
+    (trace! "rule match:" rule sexp (env/local-env (step sexp)))
     (let [v (smart-call f sexp)]
       (trace! "result:" rule "\n" sexp "\n->\n" v)
       v)))

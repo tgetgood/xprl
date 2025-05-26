@@ -48,10 +48,12 @@
 
 (def ^:dynamic env (atom (empty-ns)))
 
-(defn locals [e]
-  (str "\n  defined: "
-       (into {} (remove #(contains? (:names @env) (key %)) (:names e)))
-       " declared: " (decls e)))
+(defn local-env [form]
+  (let [env  (get-env form)
+        syms (ast/symbols form)]
+    (str "\n  defined: "
+         (into {} (filter #(contains? syms (key %)) (:names env)))
+         " declared: " (decls env))))
 
 ;;;;; env preserving ast traversal
 
@@ -109,7 +111,7 @@
 (defn μ-declare [name params body]
   (let [env (μ-declare-1 (get-env body) params)
         env (if name (μ-declare-1 env name) env)]
-    (trace! "declaring params:" params name (locals env))
+    (trace! "declaring params:" params name (local-env body))
     (with-env body env)))
 
 (defn μ-bind [μ args]
@@ -120,5 +122,5 @@
         body)
       (let [env (bind (get-env body) (params μ) args)
             env (if (name μ) (bind env (name μ) μ) env)]
-        (trace! "binding params:" (params μ) "to" args (locals (get-env args)))
+        (trace! "binding params:" (params μ) "to" args (local-env args))
         (with-env body env)))))
