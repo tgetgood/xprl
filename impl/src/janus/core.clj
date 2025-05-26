@@ -22,10 +22,10 @@
 (def special
   "Things that would traditionally be special forms."
   (macros
-   {"μ"      [i/partial? i/createμ]
+   {"μ"      [i/partial? #'i/createμ]
     ;;   "ν"       createν
-    "emit"   [(constantly true) i/emit]
-    "select" [i/check-select i/select]
+    "emit"   [(constantly true) #'i/emit]
+    "select" [i/check-select #'i/select]
     ;; "first*" first*
     ;; "rest*"  rest*
     }))
@@ -33,26 +33,29 @@
 (defn nth* [c i]
   (nth c (dec i)))
 
+(defn rest* [xs]
+  (into [] (rest xs)))
+
 (defn fn-reduced? [args]
   (every? i/evaluated? (env/els args)))
 
 (def fns
   (primitives
    fn-reduced?
-   {"+*"   +
-    "**"   *
-    "-*"   -
-    "/*"   /
-    ">*"   >
-    "<*"   <
-    "=*"   =
-    "mod*" mod
+   {"+*"   #'+
+    "**"   #'*
+    "-*"   #'-
+    "/*"   #'/
+    ">*"   #'>
+    "<*"   #'<
+    "=*"   #'=
+    "mod*" #'mod
 
-    "first*" first
-    "rest*"  #(into [] (rest %)) ; We don't deal with seqs
+    "first*" #'first
+    "rest*"  #'rest*
 
-    "count*" count
-    "nth*"   nth* ; Base 1 indexing
+    "count*" #'count
+    "nth*"   #'nth* ; Base 1 indexing
     }))
 
 

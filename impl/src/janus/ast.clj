@@ -296,19 +296,19 @@
 
 ;;; Primitive
 
-(defmethod print-method Primitive [{:keys [f]} ^Writer w]
+(defmethod print-method Primitive [{:keys [fn]} ^Writer w]
   (.write w "#F[")
-  (if-let [n (:name (meta f))]
-    (.write w (str n))
-    (print-method f w))
+  (if-let [n (:name (meta fn))]
+    (.write w (clojure.core/symbol n))
+    (print-method fn w))
   (.write w "]"))
 
-(defmethod pp/simple-dispatch Primitive [{:keys [f]}]
+(defmethod pp/simple-dispatch Primitive [{:keys [fn]}]
   (pp/pprint-logical-block
    :prefix "#F[" :suffix "]"
-   (if-let [name (:name (meta f))]
-     (pp/write-out name)
-     (pp/write-out f))))
+   (if-let [n (:name (meta fn))]
+     (pp/write-out (clojure.core/symbol n))
+     (pp/write-out fn))))
 
 ;;; Macro
 
