@@ -60,7 +60,7 @@
 
 
 (def base-env
-  (merge special fns))
+  (reduce (fn [e [k v]] (env/ns-bind e k v)) (env/empty-ns) (merge special fns)))
 
 ;;;;; UI
 
@@ -83,8 +83,10 @@
   (ast/inspect (ev s)))
 
 (defn loadfile [envatom fname]
-  (let [conts {(ast/xkeys :env)    (fn [[sym value]] (swap! envatom env/ns-bind sym value))
-               (ast/xkeys :return) #(throw (RuntimeException. "return to top level!"))
+  (let [conts {(ast/xkeys :env)    (fn [[sym value]]
+                                     (swap! envatom env/ns-bind sym value))
+               (ast/xkeys :return) #(throw
+                                     (RuntimeException. "return to top level!"))
                (ast/xkeys :error)  (fn [x]
                                      (println "Error: " x))}]
     (loop [reader (r/file-reader fname)]
