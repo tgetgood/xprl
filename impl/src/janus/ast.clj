@@ -39,9 +39,10 @@
 ;;;;; AST
 
 (defn split-symbolic [s]
-  (if (str/includes? s ".")
-    (str/split s #"\.")
-    [s]))
+  (cond
+    (re-find #"^\.+$" s)  [s]
+    (str/includes? s ".") (str/split s #"\.")
+    true                  [s]))
 
 ;; Keywords are values, which is to say they're context free
 (defrecord Keyword [names]
@@ -52,8 +53,8 @@
 (defn keyword? [k]
   (instance? Keyword k))
 
-(defn keyword [s]
-  (->Keyword (split-symbolic s)))
+(def keyword
+  (memoize (fn [s] (->Keyword (split-symbolic s)))))
 
 
 (defrecord Symbol [names ctx]
@@ -62,14 +63,8 @@
   (toString [_]
     (transduce (interpose ".") str "" names)))
 
-(defonce dot (->Symbol "." (ctx)))
-
-(defn symbol [s]
-  (cond
-    ;; TODO: Intern symbols
-    (= s ".")            dot
-    (re-find #"^\.+$" s) (->Symbol s (build-ctx))
-    :else                (->Symbol (split-symbolic s) (build-ctx))))
+(def symbol
+    (memoize (fn [s] (->Symbol (split-symbolic s) (build-ctx)))))
 
 (defn symbol? [s]
   (instance? Symbol s))
