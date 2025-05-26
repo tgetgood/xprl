@@ -299,7 +299,7 @@
 (defmethod print-method Primitive [{:keys [fn]} ^Writer w]
   (.write w "#F[")
   (if-let [n (:name (meta fn))]
-    (.write w (clojure.core/symbol n))
+    (.write w (str n))
     (print-method fn w))
   (.write w "]"))
 
