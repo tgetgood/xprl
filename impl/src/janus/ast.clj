@@ -78,13 +78,25 @@
     true            #{}))
 
 
+(defrecord List [elements ctx]
+  Contextual
+  Object
+  (toString [_] (str elements)))
+
+(defn list [xs]
+  (->List (into [] xs) (apply build-ctx xs)))
+
+(defn list? [x]
+  (instance? List x))
+
+
 (defrecord Pair [head tail ctx]
   Contextual
   Object
   (toString [_]
     (str "(" (str head) " "
-         (if (vector? tail)
-           (transduce (comp (map str) (interpose " ")) str "" tail)
+         (if (list? tail)
+           (transduce (comp (map str) (interpose " ")) str "" (:elements tail))
            (str ". " (str tail)))
          ")")))
 
@@ -128,17 +140,6 @@
 (defn μ? [x]
   (instance? Mu x))
 
-
-(defrecord List [elements ctx]
-  Contextual
-  Object
-  (toString [_] (str elements)))
-
-(defn list [xs]
-  (->List (into [] xs) (apply build-ctx xs)))
-
-(defn list? [x]
-  (instance? List x))
 
 
 (defn fname [f]
@@ -207,8 +208,8 @@
 (defmethod print-method Pair [o ^Writer w]
   (.write w "(")
   (print-method (:head o) w)
-  (if (vector? (:tail o))
-    (doseq [x (:tail o)]
+  (if (list? (:tail o))
+    (doseq [x (:elements (:tail o))]
       (.write w " ")
       (print-method x w))
     (do
@@ -260,8 +261,8 @@
    :prefix "(" :suffix ")"
    ;; TODO: Dispatch on head of pair to format
    (pp/write-out head)
-   (if (vector? tail)
-     (format-pair head tail)
+   (if (list? tail)
+     (format-pair head (:elements tail))
      (do
        (.write ^Writer *out* " . ")
        (pp/write-out tail)))))
