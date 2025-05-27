@@ -103,8 +103,17 @@
 (defn tail   [x] (nearest-env x :tail))
 (defn form   [x] (nearest-env x :form))
 (defn kvs    [x] (nearest-env x :kvs))
-(defn els    [x] (nearest-env x :elements))
-(defn xnth [x n] (nearest-env (els x) n))
+
+(defn map-list
+  "Apply f to each element of xs, retaining the context."
+  [f l]
+  (with-meta
+    (with-env
+      (ast/list (reduce (fn [acc x]
+                          (conj acc (f (with-env x (merge-env l x)))))
+                        [] (:elements l)))
+      (get-env l))
+    (meta l))) ; transfer metadata and env. Ugly, but don't merge them!
 
 ;;;;; μ specfics
 
