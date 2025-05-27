@@ -2,16 +2,10 @@
   (:refer-clojure :exclude [name])
   (:require
    [janus.ast :as ast]
-   [janus.env :as env :refer [body form head kvs name params tail xnth]]
-   [janus.debug :refer [trace!]]))
+   [janus.env :as env :refer [body form head kvs name params tail]]
+   [janus.debug :as debug :refer [trace!]]))
 
 (declare walk)
-
-;;;;; Application
-
-(defn apply-μ [μ args]
-  (trace! "invoke" μ "with" args)
-  (walk (env/μ-bind μ args)))
 
 (defn evaluated? [x]
   (cond
@@ -19,24 +13,62 @@
     (instance? janus.ast.Application x) false
     true                                true))
 
-(defn apply-primitive [head tail]
-  (let [args (walk tail)]
-    (trace! "pcall" head args)
+;;;;; Application
+
+(defn apply-μ [app]
+  (let [μ    (head app)
+        args (tail app)]
+    (trace! "invoke" μ "with" args)
+    (walk (env/μ-bind μ args))))
+
+(defn apply-primitive [app]
+  (let [h    (head app)
+        args (walk (tail app))]
+    (trace! "pcall" h args)
     ;; REVIEW: This assumes that all primitives take a list as args.
     ;; That seems innocuous, but what are the ramifications?
-    (if (and (ast/list? args) (:check head) args)
-      (apply (:fn head) args)
-      (ast/application head args))))
+    (if (and (ast/list? args) ((:check h) args))
+      (apply (:fn h) args)
+      (assoc app :tail args))))
 
-(defn apply-error [h t]
-  (throw (RuntimeException. (str h " is not applicable, but was called with " t))))
+(defn apply-error [app]
+  (throw (RuntimeException.
+          (str (head app) " is not applicable, but was called with " (tail app)
+               "\n" (debug/provenance app)))))
 
-(defn apply-head [h t]
-  (let [h'  (walk h)
-        app (ast/application h' t)]
-    (if (evaluated? h')
+(defn apply-head [app]
+  (let [app (assoc app :head (walk (head app)))]
+    (if (evaluated? (head app))
       (walk app)
       app)))
+
+;;;;; Eval
+
+(defn eval-symbol [im]
+  (let [s   (form im)
+        env (env/get-env s)]
+    (if-let [ref (env/lookup env s)]
+      (do
+        (trace! "resolve" s ":" ref)
+        (walk ref))
+      (do
+        (trace! (if (contains? (env/decls env) s) "declared" "undeclared") s)
+        im))))
+
+(defn eval-list [im]
+  (walk (env/map-list ast/immediate (form im))))
+
+(defn eval-pair [im]
+  (let [p (form im)]
+    (walk
+     (with-meta (ast/application (ast/immediate (head p)) (tail p))
+       (meta p)))))
+
+(defn eval-step [im]
+  (let [im (assoc im :form (walk (form im)))]  ; evaulate the inner expression
+    (if (evaluated? (form im))                 ; if it worked
+      (walk im)                                ; evaluate the result
+      im)))                                    ; otherwise return unevaluated
 
 ;;;;; Reduction
 
@@ -48,43 +80,16 @@
         p (if (ast/symbol? p) p (walk p))
         b (body μ)
         b (if (ast/symbol? p) (walk (env/μ-declare n p b)) (walk b))]
-    (ast/μ n p b)))
+    (assoc μ :name n :params p :body b)))
 
-(defn reduce-emit [x]
+(defn reduce-emit [e]
   ;; If we had a predicate that asked "is `kvs` fully realised?" then we
   ;; wouldn't need this at all. I'm just not sure how to write that predicate,
   ;; and this seems simple enough that I don't need to worry about it.
-  (ast/emission (walk (kvs x))))
+  (assoc e :kvs (walk (kvs e))))
 
-(defn list-xform [f xs]
-  (ast/list (reduce (fn [acc i] (conj acc (f (xnth xs i)))) [] (range (count xs)))))
-
-(defn reduce-list [xs]
-  (list-xform walk xs))
-
-;;;;; Eval
-
-(defn eval-symbol [s]
-  (let [env (env/get-env s)]
-    (if-let [ref (env/lookup env s)]
-      (do
-        (trace! "resolve" s ":" ref)
-        (walk ref))
-      (do
-        (trace! (if (contains? (env/decls env) s) "declared" "undeclared") s)
-        (ast/immediate s)))))
-
-(defn eval-list [xs]
-  (walk (list-xform ast/immediate xs)))
-
-(defn eval-pair [p]
-  (walk (ast/application (ast/immediate (head p)) (tail p))))
-
-(defn eval-step [x]
-  (let [inner (walk x)]            ; evaulate the inner expression
-    (if (evaluated? inner)         ; if it worked
-      (walk (ast/immediate inner)) ; evaluate the result
-      (ast/immediate inner))))     ; otherwise restore the outer immediate
+(defn reduce-list [l]
+  (env/map-list walk l))
 
 ;;;;; Tree walker
 
@@ -114,12 +119,10 @@
 
    :A apply-error}) ; REVIEW: Should application be extensible?
 
-(defn make-tree [rules]
+(def rule-tree
   (reduce (fn [acc [k v]]
             (assoc-in acc (if (vector? k) (conj k :fn) [k :fn]) v))
           {} rules))
-
-(def rule-tree (make-tree rules))
 
 (defn step [x]
   (cond
@@ -137,17 +140,10 @@
           [t1 (:fn subtree)]))
       [t1 identity])))
 
-(defn smart-call [f x]
-  ;; Not actually all that smart...
-  (cond
-    (instance? janus.ast.Immediate x)   (f (form x))
-    (instance? janus.ast.Application x) (f (head x) (tail x))
-    true                                (f x)))
-
 (defn walk [sexp]
   (let [[rule f] (rule-match sexp)]
     (trace! "rule match:" rule sexp (env/local-env (step sexp)))
-    (let [v (smart-call f sexp)]
+    (let [v (f sexp)]
       (trace! "result:" rule "\n" sexp "\n->\n" v)
       v)))
 
@@ -166,11 +162,10 @@
 
 (defn emit [kvs]
   (assert (even? (count kvs)))
-  (walk
-   (with-meta
-     (ast/emission
-      (ast/list (map (fn [[k v]] [(ast/immediate k) v]) (partition 2 kvs))))
-     (meta kvs))))
+  (with-meta
+    (ast/emission
+     (ast/list (map (fn [[k v]] [(ast/immediate k) v]) (partition 2 kvs))))
+    (meta kvs)))
 
 (defn check-select [args]
   (boolean? (first args)))
