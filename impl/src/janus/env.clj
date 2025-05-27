@@ -26,6 +26,12 @@
   (ast/with-ctx x
     (assoc (ast/ctx x) ::env env)))
 
+(defn transfer
+  "Transfer copies env and metadata from y onto x."
+  ;; REVIEW: That's ugly, but mixing env and metadata was even uglier...
+  [x y]
+  (with-meta (with-env x (get-env y)) (meta y)))
+
 (defn ns-bind
   "Like `bind`, but skips the declaration check since forms interned into a
   namespace don't need to be declared first (but they can be, so we still need
@@ -45,8 +51,6 @@
   (-> env
       (update :declared (fnil conj #{}) s)
       (update :names dissoc s)))
-
-(def ^:dynamic env (atom (empty-ns)))
 
 (defn local-env [form]
   (let [env  (get-env form)
@@ -107,13 +111,11 @@
 (defn map-list
   "Apply f to each element of xs, retaining the context."
   [f l]
-  (with-meta
-    (with-env
-      (ast/list (reduce (fn [acc x]
-                          (conj acc (f (with-env x (merge-env l x)))))
-                        [] (:elements l)))
-      (get-env l))
-    (meta l))) ; transfer metadata and env. Ugly, but don't merge them!
+  (transfer
+   (ast/list (reduce (fn [acc x]
+                       (conj acc (f (with-env x (merge-env l x)))))
+                     [] (:elements l)))
+   l))
 
 ;;;;; μ specfics
 

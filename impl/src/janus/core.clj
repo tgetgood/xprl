@@ -37,7 +37,7 @@
   (into [] (rest xs)))
 
 (defn fn-reduced? [args]
-  (every? i/evaluated? (env/els args)))
+  (every? i/evaluated? (:elements args)))
 
 (def fns
   (primitives
@@ -63,6 +63,8 @@
 (def base-env
   (reduce (fn [e [k v]] (env/ns-bind e k v)) (env/empty-ns) (merge special fns)))
 
+(def the-env (atom base-env))
+
 ;;;;; UI
 
 (def srcpath "../src/")
@@ -78,7 +80,7 @@
    (rt/run!)))
 
 (defn ev [s]
-  (go! @env/env (:form (r/read (r/string-reader s)))))
+  (go! @the-env (:form (r/read (r/string-reader s)))))
 
 (defn iev [s]
   (ast/inspect (ev s)))
@@ -100,21 +102,20 @@
             (recur reader)))))))
 
 (defn reload! [fname]
-  (alter-var-root #'env/env (constantly (atom base-env)))
-  (loadfile env/env fname))
+  (loadfile the-env fname))
 
 (defmacro inspect [n]
-  `(-> @env (get-in [:names (ast/symbol ~(clojure.core/name n))]) ast/inspect))
+  `(-> @the-env (get-in [:names (ast/symbol ~(clojure.core/name n))]) ast/inspect))
 
 (defn el [form name]
   (env/lookup (env/get-env form) (ast/symbol name)))
 
 (defn check [s]
-  (ast/inspect (:form (r/read (r/string-reader s) @env/env))))
+  (ast/inspect (:form (r/read (r/string-reader s) @the-env))))
 
 (defn test []
   (let [conts {(ast/xkeys :env) (fn [[sym value]]
-                                  (swap! env/env env/ns-bind sym value))}]
+                                  (swap! the-env env/ns-bind sym value))}]
     (loop [reader (r/file-reader testxprl)]
       (let [reader (r/read reader)
             form1  (:form reader)
@@ -126,7 +127,7 @@
             (println "Evaluating: " form1)
             (println "---")
             (print "result: ")
-            (go! @env/env form1 (rt/with-return conts println))
+            (go! @the-env form1 (rt/with-return conts println))
             (print "expected: " )
-            (go! @env/env form2 (rt/with-return conts println))
+            (go! @the-env form2 (rt/with-return conts println))
             (recur reader)))))))

@@ -29,7 +29,7 @@
     ;; That seems innocuous, but what are the ramifications?
     (if (and (ast/list? args) ((:check h) args))
       (apply (:fn h) args)
-      (assoc app :tail args))))
+      (env/transfer (ast/application h args) app))))
 
 (defn apply-error [app]
   (throw (RuntimeException.
@@ -37,7 +37,7 @@
                "\n" (debug/provenance app)))))
 
 (defn apply-head [app]
-  (let [app (assoc app :head (walk (head app)))]
+  (let [app (env/transfer (ast/application (walk (head app)) (tail app)) app)]
     (if (evaluated? (head app))
       (walk app)
       app)))
@@ -59,34 +59,34 @@
   (walk (env/map-list ast/immediate (form im))))
 
 (defn eval-pair [im]
-  (let [p (form im)]
-    (walk
-     (with-meta (ast/application (ast/immediate (head p)) (tail p))
-       (meta p)))))
+  (let [p   (form im)
+        h   (env/transfer (ast/immediate (head p)) p)
+        app (env/transfer (ast/application h (tail p)) p)]
+    (walk app)))
 
 (defn eval-step [im]
-  (let [im (assoc im :form (walk (form im)))]  ; evaulate the inner expression
-    (if (evaluated? (form im))                 ; if it worked
-      (walk im)                                ; evaluate the result
-      im)))                                    ; otherwise return unevaluated
+  (let [im (env/transfer (ast/immediate (walk (form im))) im)]
+    (if (evaluated? (form im))
+      (walk im)
+      im)))
 
 ;;;;; Reduction
 
 (defn reduce-μ [μ]
   ;; FIXME: Just look at it...
   (let [n (name μ)
-        n (when n (if (ast/symbol? n) n (walk n)))
         p (params μ)
-        p (if (ast/symbol? p) p (walk p))
         b (body μ)
-        b (if (ast/symbol? p) (walk (env/μ-declare n p b)) (walk b))]
-    (assoc μ :name n :params p :body b)))
+        n' (when n (if (ast/symbol? n) n (walk n)))
+        p' (if (ast/symbol? p) p (walk p))
+        b' (if (ast/symbol? p) (walk (env/μ-declare n p b)) (walk b))]
+    (env/transfer (ast/μ n' p' b') μ)))
 
 (defn reduce-emit [e]
   ;; If we had a predicate that asked "is `kvs` fully realised?" then we
   ;; wouldn't need this at all. I'm just not sure how to write that predicate,
   ;; and this seems simple enough that I don't need to worry about it.
-  (assoc e :kvs (walk (kvs e))))
+  (env/transfer (ast/emission (walk (kvs e))) e))
 
 (defn reduce-list [l]
   (env/map-list walk l))
@@ -141,8 +141,11 @@
       [t1 identity])))
 
 (defn walk [sexp]
+  (trace! "walk" sexp "\n" (ast/ctx sexp) "\n" (ast/ctx (step sexp)))
   (let [[rule f] (rule-match sexp)]
-    (trace! "rule match:" rule sexp (env/local-env (step sexp)))
+    (trace! "rule match:" rule sexp
+            "\n  symbols:" (ast/symbols (step sexp))
+            (env/local-env (step sexp)))
     (let [v (f sexp)]
       (trace! "result:" rule "\n" sexp "\n->\n" v)
       v)))
