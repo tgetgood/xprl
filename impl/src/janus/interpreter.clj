@@ -41,6 +41,7 @@
 ;;;;; Reduction
 
 (defn reduce-μ [μ]
+  ;; FIXME: Just look at it...
   (let [n (name μ)
         n (when n (if (ast/symbol? n) n (walk n)))
         p (params μ)
@@ -50,6 +51,9 @@
     (ast/μ n p b)))
 
 (defn reduce-emit [x]
+  ;; If we had a predicate that asked "is `kvs` fully realised?" then we
+  ;; wouldn't need this at all. I'm just not sure how to write that predicate,
+  ;; and this seems simple enough that I don't need to worry about it.
   (ast/emission (walk (kvs x))))
 
 (defn list-xform [f xs]
@@ -77,40 +81,38 @@
   (walk (ast/application (ast/immediate (head p)) (tail p))))
 
 (defn eval-step [x]
-  (let [inner (walk x)]
-    (if (evaluated? inner)
-      (walk (ast/immediate inner))
-      (ast/immediate inner))))
+  (let [inner (walk x)]            ; evaulate the inner expression
+    (if (evaluated? inner)         ; if it worked
+      (walk (ast/immediate inner)) ; evaluate the result
+      (ast/immediate inner))))     ; otherwise restore the outer immediate
 
 ;;;;; Tree walker
 
 (def rules
-  {[:I :S] eval-symbol ; env lookup
+  {[:I :S] eval-symbol ; aka lookup in environment
    [:I :P] eval-pair   ; (I (P x y)) => (A (I x) y)
    [:I :L] eval-list   ; (I (L x y ...)) => (L (I x) (I y) ...)
-   [:I :I] eval-step   ; eval inner form and recur
-   [:I :A] eval-step   ; "
-   :I      identity    ; (I V) => V. values eval to themselves
+   [:I :I] eval-step
+   [:I :A] eval-step
 
-   ;; In general we cannot walk into structures. These are the exceptions.
-   :L reduce-list
-   :μ reduce-μ
-   :E reduce-emit
+   :I identity    ; (I V) => V. values are fixed points of eval.
 
-   [:A :I] apply-head ; (apply x args) => (apply (walk x) args)
-   [:A :A] apply-head ;   iff x is unevaluated.
+   :L reduce-list ; Most structures are values, with these exceptions.
+   :μ reduce-μ    ; TODO: Drop `reduce`. It's too common a term to override.
+   :E reduce-emit ; REVIEW: Do we actually need to reduce into Emissions?
+
+   [:A :I] apply-head ; (A head tail) => (A (walk head) tail)
+   [:A :A] apply-head ;   iff `head` is unevaluated.
 
    ;; An emission which includes a message to :return can trigger off the
    ;; application. But the connection logic isn't sophisticated enough for this
    ;; yet.
    ;; [:A :E] apply-emit
 
-   ;; Two kinds of operators are built in. I don't think we need any others,
-   ;; but that might change. Should programmers be able to define new ones?
-   [:A :F] apply-primitive
-   [:A :μ] apply-μ
+   [:A :F] apply-primitive ; Two kinds of operators are built in.
+   [:A :μ] apply-μ         ; I think that's sufficient. I might be wrong.
 
-   :A      apply-error})
+   :A apply-error}) ; REVIEW: Should application be extensible?
 
 (defn make-tree [rules]
   (reduce (fn [acc [k v]]

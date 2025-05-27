@@ -42,6 +42,7 @@
 (def fns
   (primitives
    fn-reduced?
+   ;; Using vars lets us pass metadata downstream for debugging.
    {"+*"   #'+
     "**"   #'*
     "-*"   #'-
