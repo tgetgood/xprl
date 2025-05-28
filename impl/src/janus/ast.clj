@@ -452,7 +452,7 @@
   (insp [form ^Writer w level]
     (spacer w level)
     (.write w "F[")
-    (.write w (str (:name (meta (:f form)))))
+    (.write w (fname (:fn form)))
     (.write w "]\n"))
 
   Mu
