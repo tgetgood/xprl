@@ -27,9 +27,9 @@
     (trace! "pcall" h args)
     ;; REVIEW: This assumes that all primitives take a list as args.
     ;; That seems innocuous, but what are the ramifications?
-    (if (and (ast/list? args) ((:check h) args))
-      (apply (:fn h) args)
-      (env/transfer (ast/application h args) app))))
+    (if (and (ast/list? args) ((:check h) (env/elements args)))
+      ((:fn h) (env/elements args))
+      (ast/application h args))))
 
 (defn apply-error [app]
   (throw (RuntimeException.
@@ -37,7 +37,7 @@
                "\n" (debug/provenance app)))))
 
 (defn apply-head [app]
-  (let [app (env/transfer (ast/application (walk (head app)) (tail app)) app)]
+  (let [app (ast/application (walk (head app)) (tail app))]
     (if (evaluated? (head app))
       (walk app)
       app)))
@@ -59,13 +59,11 @@
   (walk (env/map-list ast/immediate (form im))))
 
 (defn eval-pair [im]
-  (let [p   (form im)
-        h   (env/transfer (ast/immediate (head p)) p)
-        app (env/transfer (ast/application h (tail p)) p)]
-    (walk app)))
+  (let [p (form im)]
+    (walk (ast/application (ast/immediate (head p)) (tail p)))))
 
 (defn eval-step [im]
-  (let [im (env/transfer (ast/immediate (walk (form im))) im)]
+  (let [im (ast/immediate (walk (form im)))]
     (if (evaluated? (form im))
       (walk im)
       im)))
@@ -80,13 +78,13 @@
         n' (when n (if (ast/symbol? n) n (walk n)))
         p' (if (ast/symbol? p) p (walk p))
         b' (if (ast/symbol? p) (walk (env/μ-declare n p b)) (walk b))]
-    (env/transfer (ast/μ n' p' b') μ)))
+    (ast/μ n' p' b')))
 
 (defn reduce-emit [e]
   ;; If we had a predicate that asked "is `kvs` fully realised?" then we
   ;; wouldn't need this at all. I'm just not sure how to write that predicate,
   ;; and this seems simple enough that I don't need to worry about it.
-  (env/transfer (ast/emission (walk (kvs e))) e))
+  (ast/emission (walk (kvs e))))
 
 (defn reduce-list [l]
   (env/map-list walk l))
@@ -100,7 +98,7 @@
    [:I :I] eval-step
    [:I :A] eval-step
 
-   :I identity    ; (I V) => V. values are fixed points of eval.
+   :I form        ; (I V) => V. values are fixed points of eval.
 
    :L reduce-list ; Most structures are values, with these exceptions.
    :μ reduce-μ    ; TODO: Drop `reduce`. It's too common a term to override.
@@ -141,7 +139,7 @@
       [t1 identity])))
 
 (defn walk [sexp]
-  (trace! "walk" sexp "\n" (ast/ctx sexp) "\n" (ast/ctx (step sexp)))
+  ;; (trace! "walk" sexp "\n" (ast/ctx sexp) "\n" (ast/ctx (step sexp)))
   (let [[rule f] (rule-match sexp)]
     (trace! "rule match:" rule sexp
             "\n  symbols:" (ast/symbols (step sexp))
@@ -161,14 +159,14 @@
   (let [[name params body] (case (count args)
                              3 args
                              2 `[nil ~@args])]
-    (walk (with-meta (ast/μ name params body) (meta args)))))
+    (walk (ast/μ name params body))))
 
 (defn emit [kvs]
   (assert (even? (count kvs)))
-  (with-meta
-    (ast/emission
-     (ast/list (map (fn [[k v]] [(ast/immediate k) v]) (partition 2 kvs))))
-    (meta kvs)))
+  (walk
+   (ast/emission
+    (ast/list (map (fn [[k v]] (ast/list [(ast/immediate k) v]))
+                   (partition 2 kvs))))))
 
 (defn check-select [args]
   (boolean? (first args)))

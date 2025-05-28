@@ -10,11 +10,8 @@
   ;; not instantiated) names must be empty by the time we finish reading it in.
   {:names {} :declared #{}})
 
-(defn syms [ns]
-  (sort-by :names (keys (:names ns))))
-
 (defn lookup [env sym]
-  (get-in env [:names sym]))
+  (get-in env [:names (ast/free sym)]))
 
 (defn decls [env]
   (:declared env))
@@ -26,37 +23,21 @@
   (ast/with-ctx x
     (assoc (ast/ctx x) ::env env)))
 
-(defn transfer
-  "Transfer copies env and metadata from y onto x."
-  ;; REVIEW: That's ugly, but mixing env and metadata was even uglier...
-  [x y]
-  (with-meta (with-env x (get-env y)) (meta y)))
-
-(defn ns-bind
-  "Like `bind`, but skips the declaration check since forms interned into a
-  namespace don't need to be declared first (but they can be, so we still need
-  to clear declarations)."
-  [ns s val]
-  (-> ns
-      (assoc-in [:names s] val)
-      (update :declared disj s)))
-
 (defn bind [env s val]
-  (assert (contains? (decls env) s) (str "binding undeclared name:" s "to" val))
   (-> env
-      (assoc-in [:names s] val)
-      (update :declared disj s)))
+      (assoc-in [:names (ast/free s)] val)
+      (update :declared disj (ast/free s))))
 
 (defn μ-declare-1 [env s]
   (-> env
-      (update :declared (fnil conj #{}) s)
-      (update :names dissoc s)))
+      (update :declared (fnil conj #{}) (ast/free s))
+      (update :names dissoc (ast/free s))))
 
 (defn local-env [form]
   (let [env  (get-env form)
         syms (ast/symbols form)]
     (str "\n  defined: "
-         (into {} (filter #(contains? syms (key %)) (:names env)))
+         (into {} (filter #(contains? syms (key %))) (:names env))
          " declared: " (decls env))))
 
 ;;;;; env preserving ast traversal
@@ -100,22 +81,21 @@
         e (merge-env x v)]
     (with-env v e)))
 
-(defn params [x] (nearest-env x :params))
-(defn name   [x] (nearest-env x :name))
-(defn body   [x] (nearest-env x :body))
-(defn head   [x] (nearest-env x :head))
-(defn tail   [x] (nearest-env x :tail))
-(defn form   [x] (nearest-env x :form))
-(defn kvs    [x] (nearest-env x :kvs))
+(defn params   [x] (nearest-env x :params))
+(defn name     [x] (nearest-env x :name))
+(defn body     [x] (nearest-env x :body))
+(defn head     [x] (nearest-env x :head))
+(defn tail     [x] (nearest-env x :tail))
+(defn form     [x] (nearest-env x :form))
+(defn kvs      [x] (nearest-env x :kvs))
+(defn elements [x] (nearest-env x :elements))
 
 (defn map-list
   "Apply f to each element of xs, retaining the context."
   [f l]
-  (transfer
-   (ast/list (reduce (fn [acc x]
-                       (conj acc (f (with-env x (merge-env l x)))))
-                     [] (:elements l)))
-   l))
+  (ast/list (reduce (fn [acc x]
+                      (conj acc (f (with-env x (merge-env l x)))))
+                    [] (:elements l))))
 
 ;;;;; μ specfics
 

@@ -41,9 +41,9 @@
     (schedule [(get ccs chn unbound) msg])))
 
 (defn perform-emit! [x ccs]
-  (loop [kvs (env/kvs x)]
+  (loop [kvs (env/elements (env/kvs x))]
     (when (seq kvs)
-      (let [[chn msg] (first kvs)]
+      (let [[chn msg] (env/elements (first kvs))]
         (trace! "sending on" chn ":" msg)
         (send! ccs chn msg))
       (recur (rest kvs)))))

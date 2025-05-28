@@ -27,8 +27,10 @@
     (assoc x :ctx ctx)
     x))
 
+(declare free)
+
 (defn with-symbols [ctx syms]
-  (assoc ctx ::symbols syms))
+  (assoc ctx ::symbols (into #{} (map free) syms)))
 
 (declare symbols)
 
@@ -70,6 +72,9 @@
 
 (def symbol
     (memoize (fn [s] (->Symbol (split-symbolic s) (ctx)))))
+
+(defn free [s]
+  (symbol (str s)))
 
 (defn symbol? [s]
   (instance? Symbol s))
@@ -148,7 +153,11 @@
 
 
 (defn fname [f]
-  (or (:name (meta f)) (str f)))
+  (let [s (:name (meta f))]
+    (cond
+      (clojure.core/symbol? s) (name s)
+      (string? s)              s
+      true                     (str f))))
 
 (defrecord Primitive [check fn]
   Object
@@ -207,6 +216,14 @@
 
 (defmethod pp/simple-dispatch Keyword [o]
   (pp/write-out (clojure.core/keyword (subs (str o) 1))))
+
+;;; List
+
+(defmethod print-method List [l ^Writer w]
+  (print-method (:elements l) w))
+
+(defmethod pp/simple-dispatch List [l]
+  (pp/simple-dispatch (:elements l)))
 
 ;;; Pair
 
@@ -449,7 +466,7 @@
   (insp [form ^Writer w level]
     (spacer w level)
     (.write w "E\n")
-    (loop [kvs (:kvs form)]
+    (loop [kvs (:elements (:kvs form))]
       (when (seq kvs)
         (insp (first kvs) w (inc level))
         (insp (second kvs) w (inc level))

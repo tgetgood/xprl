@@ -11,13 +11,14 @@
 
 
 (defn primitive [p f]
-  (with-meta (ast/primitive p f) (meta f)))
+  (ast/primitive p (with-meta #(apply f %) (meta f))))
 
 (defn primitives [p m]
   (reduce (fn [acc [k v]] (assoc acc (ast/symbol k) (primitive p v))) {} m))
 
 (defn macros [m]
-  (reduce (fn [acc [k [p f]]] (assoc acc (ast/symbol k) (primitive p f))) {} m))
+  (reduce (fn [acc [k [p f]]]
+            (assoc acc (ast/symbol k) (ast/primitive p f))) {} m))
 
 (def special
   "Things that would traditionally be special forms."
@@ -31,13 +32,13 @@
     }))
 
 (defn nth* [c i]
-  (nth c (dec i)))
+  (nth (env/elements c) (dec i)))
 
 (defn rest* [xs]
   (into [] (rest xs)))
 
 (defn fn-reduced? [args]
-  (every? i/evaluated? (:elements args)))
+  (every? i/evaluated? args))
 
 (def fns
   (primitives
@@ -61,7 +62,7 @@
 
 
 (def base-env
-  (reduce (fn [e [k v]] (env/ns-bind e k v)) (env/empty-ns) (merge special fns)))
+  (reduce (fn [e [k v]] (env/bind e k v)) (env/empty-ns) (merge special fns)))
 
 (def the-env (atom base-env))
 
@@ -86,8 +87,9 @@
   (ast/inspect (ev s)))
 
 (defn loadfile [envatom fname]
-  (let [conts {(ast/xkeys :env)    (fn [[sym value]]
-                                     (swap! envatom env/ns-bind sym value))
+  (let [conts {(ast/xkeys :env)    (fn [l]
+                                     (let [[sym value] (env/elements l)]
+                                       (swap! envatom env/bind sym value)))
                (ast/xkeys :return) #(throw
                                      (RuntimeException. "return to top level!"))
                (ast/xkeys :error)  (fn [x]
@@ -115,7 +117,7 @@
 
 (defn test []
   (let [conts {(ast/xkeys :env) (fn [[sym value]]
-                                  (swap! the-env env/ns-bind sym value))}]
+                                  (swap! the-env env/bind sym value))}]
     (loop [reader (r/file-reader testxprl)]
       (let [reader (r/read reader)
             form1  (:form reader)
