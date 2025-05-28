@@ -40,7 +40,12 @@
 
 (defn split-symbolic [s]
   (cond
-    (re-find #"^\.+$" s)  [s]
+    ;; REVIEW: The `.` syntax is too basic to allow it to be overridden, so `.`
+    ;; probably shouldn't be a normal symbol. I don't see any use at the moment
+    ;; for `..`, `...`, &c. as they're not good names so we might be better off
+    ;; without them.
+    (re-find #"^\.+$" s)  [s] ; `.`, `...`, &c. are valid symbols.
+    ;; TODO: check we don't have empty ns portions: `...a...b...
     (str/includes? s ".") (str/split s #"\.")
     true                  [s]))
 
