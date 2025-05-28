@@ -19,7 +19,7 @@
   (let [μ    (head app)
         args (tail app)]
     (trace! "invoke" μ "with" args)
-    (walk (env/μ-bind μ args))))
+    (env/μ-bind μ args)))
 
 (defn apply-primitive [app]
   (let [h    (head app)
@@ -37,10 +37,7 @@
                "\n" (debug/provenance app)))))
 
 (defn apply-head [app]
-  (let [app (ast/application (walk (head app)) (tail app))]
-    (if (evaluated? (head app))
-      (walk app)
-      app)))
+  (ast/application (walk (head app)) (tail app)))
 
 ;;;;; Eval
 
@@ -50,23 +47,20 @@
     (if-let [ref (env/lookup env s)]
       (do
         (trace! "resolve" s ":" ref)
-        (walk ref))
+        ref)
       (do
         (trace! (if (contains? (env/decls env) s) "declared" "undeclared") s)
         im))))
 
 (defn eval-list [im]
-  (walk (env/map-list ast/immediate (form im))))
+  (env/map-list ast/immediate (form im)))
 
 (defn eval-pair [im]
   (let [p (form im)]
-    (walk (ast/application (ast/immediate (head p)) (tail p)))))
+    (ast/application (ast/immediate (head p)) (tail p))))
 
 (defn eval-step [im]
-  (let [im (ast/immediate (walk (form im)))]
-    (if (evaluated? (form im))
-      (walk im)
-      im)))
+  (ast/immediate (walk (form im))))
 
 ;;;;; Reduction
 
@@ -138,7 +132,7 @@
           [t1 (:fn subtree)]))
       [t1 identity])))
 
-(defn walk [sexp]
+(defn walk* [sexp]
   ;; (trace! "walk" sexp "\n" (ast/ctx sexp) "\n" (ast/ctx (step sexp)))
   (let [[rule f] (rule-match sexp)]
     (trace! "rule match:" rule sexp
@@ -146,7 +140,11 @@
             (env/local-env (step sexp)))
     (let [v (f sexp)]
       (trace! "result:" rule "\n" sexp "\n->\n" v)
-      v)))
+      (if (= v sexp)
+        v
+        (recur (debug/with-provenance v {:rule rule :predecessor sexp}))))))
+
+(def walk (memoize walk*))
 
 ;;;;; Builtins
 
@@ -159,14 +157,13 @@
   (let [[name params body] (case (count args)
                              3 args
                              2 `[nil ~@args])]
-    (walk (ast/μ name params body))))
+    (ast/μ name params body)))
 
 (defn emit [kvs]
   (assert (even? (count kvs)))
-  (walk
-   (ast/emission
-    (ast/list (map (fn [[k v]] (ast/list [(ast/immediate k) v]))
-                   (partition 2 kvs))))))
+  (ast/emission
+   (ast/list (map (fn [[k v]] (ast/list [(ast/immediate k) v]))
+                  (partition 2 kvs)))))
 
 (defn check-select [args]
   (boolean? (first args)))
