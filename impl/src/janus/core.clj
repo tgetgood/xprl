@@ -142,3 +142,8 @@
 
 (defn pp [x]
   (:predecessor (p x)))
+
+(def env env/get-env)
+
+(defmacro db [x]
+  `(binding [debug/*verbose* true] ~x))

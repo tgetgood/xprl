@@ -27,17 +27,6 @@
     (assoc x :ctx ctx)
     x))
 
-(declare free)
-
-(defn with-symbols [ctx syms]
-  (assoc ctx ::symbols (into #{} (map free) syms)))
-
-(declare symbols)
-
-(defn build-ctx
-  ([& subforms]
-   (with-symbols (ctx) (apply set/union (map symbols subforms)))))
-
 ;;;;; AST
 
 (defn split-symbolic [s]
@@ -83,9 +72,16 @@
   "Returns set of symbols mentioned in sexp."
   [x]
   (cond
-    (symbol? x)     #{x}               ; symbols needn't track self mention.
+    (symbol? x)     #{(free x)}        ; symbols needn't track self mention.
     (contextual? x) (::symbols (ctx x))
     true            #{}))
+
+(defn with-symbols [ctx syms]
+  (assoc ctx ::symbols (into #{} (map free) syms)))
+
+(defn build-ctx
+  ([& subforms]
+   (with-symbols (ctx) (apply set/union (map symbols subforms)))))
 
 
 (defrecord List [elements ctx]

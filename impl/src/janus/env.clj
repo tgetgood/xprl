@@ -24,10 +24,11 @@
 (defn project
   "Fits `env` by removing all names and declarations not mentioned in `form`."
   [env form]
-  (let [syms (ast/symbols form)]
+  (let [syms (ast/symbols form)
+        pred #(contains? syms (ast/free %))]
     (-> (empty-ns)
-        (names (into {} (remove #(contains? syms (key %))) (names env)))
-        (decls (into #{} (remove #(contains? syms %)) (decls env))))))
+        (names (into {} (filter #(pred (key %))) (names env)))
+        (decls (into #{} (filter pred) (decls env))))))
 
 (defn get-env [x]
   (::env (ast/ctx x)))
