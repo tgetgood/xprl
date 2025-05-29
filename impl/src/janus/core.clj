@@ -3,6 +3,7 @@
   (:require
    [janus.ast :as ast]
    [janus.env :as env]
+   [janus.debug :as debug]
    [janus.interpreter :as i]
    [janus.reader :as r]
    [janus.runtime :as rt]))
@@ -75,7 +76,10 @@
 
 (defn go!
   ([env f]
-   (i/walk (env/with-env (ast/immediate f) env)))
+   (i/walk (env/with-env
+             (debug/with-provenance (ast/immediate f)
+               {:origin ::repl :predecessor f})
+             env)))
   ([env f ccs]
    (rt/schedule [(fn [_] (rt/connect (go! env f) ccs))])
    (rt/run!)))
@@ -133,3 +137,8 @@
             (print "expected: " )
             (go! @the-env form2 (rt/with-return conts println))
             (recur reader)))))))
+
+(def p debug/provenance)
+
+(defn pp [x]
+  (:predecessor (p x)))

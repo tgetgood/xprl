@@ -140,11 +140,15 @@
             (env/local-env (step sexp)))
     (let [v (f sexp)]
       (trace! "result:" rule "\n" sexp "\n->\n" v)
-      (if (= v sexp)
-        v
-        (recur (debug/with-provenance v {:rule rule :predecessor sexp}))))))
+      [rule v])))
 
-(def walk (memoize walk*))
+(def walk** (memoize walk*))
+
+(defn walk [sexp]
+  (let [[rule v] (walk** sexp)]
+    (if (= v sexp)
+        sexp
+        (recur (debug/with-provenance v {:rule rule :predecessor sexp})))))
 
 ;;;;; Builtins
 
