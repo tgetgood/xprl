@@ -153,7 +153,7 @@
     2 (ast/symbol? (first args))
     3 (and (ast/symbol? (first args)) (ast/symbol? (second args)))))
 
-(defn createμ [args]
+(defn μ [args]
   (let [[name params body] (case (count args)
                              3 args
                              2 `[nil ~@args])]
