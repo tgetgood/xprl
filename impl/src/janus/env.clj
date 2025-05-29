@@ -13,15 +13,28 @@
 (defn lookup [env sym]
   (get-in env [:names (ast/free sym)]))
 
-(defn decls [env]
-  (:declared env))
+(defn names
+  ([env] (:names env))
+  ([env xs] (assoc env :names xs)))
+
+(defn decls
+  ([env] (:declared env))
+  ([env xs] (assoc env :declared xs)))
+
+(defn project
+  "Fits `env` by removing all names and declarations not mentioned in `form`."
+  [env form]
+  (let [syms (ast/symbols form)]
+    (-> (empty-ns)
+        (names (into {} (remove #(contains? syms (key %))) (names env)))
+        (decls (into #{} (remove #(contains? syms %)) (decls env))))))
 
 (defn get-env [x]
   (::env (ast/ctx x)))
 
 (defn with-env [x env]
   (ast/with-ctx x
-    (assoc (ast/ctx x) ::env env)))
+    (assoc (ast/ctx x) ::env (project env x))))
 
 (defn bind [env s val]
   (-> env
@@ -45,21 +58,6 @@
 (defn bind-decls [inner outer]
   (when (seq inner)
     ;; REVIEW: this is ugly and so likely wrong.
-    ;;
-    ;; Defined symbols can't "bleed down" into a contained subcontext. But
-    ;; declarations can. Why?
-    ;;
-    ;; The only impetus right now is indirectly defined μs where the body is
-    ;; initially walked in a context where the μ of which it will eventually be
-    ;; part does not yet exist. In this case, when we later create the outer μ
-    ;; and walk ~it~, the body needs to be walked in a new context that didn't
-    ;; exist when it was walked the first time. The only difference between
-    ;; these contexts *should* be the declaration of the parameter (and any
-    ;; others if we have a stack of such μs above us),
-    ;;
-    ;; BUT: can we prove that a μ so constructed will always be reduced ~as a μ~
-    ;; before arguments are applied to it? If not, then the applied args will
-    ;; never get set because their parameters haven't yet been declared.
     (let [extra-decls (set/difference (decls outer)
                                       (decls inner)
                                       (into #{} (keys (:names inner))))]
@@ -89,6 +87,7 @@
 (defn form     [x] (nearest-env x :form))
 (defn kvs      [x] (nearest-env x :kvs))
 (defn elements [x] (nearest-env x :elements))
+(defn xnth   [x n] (nearest-env (elements x) n))
 
 (defn map-list
   "Apply f to each element of xs, retaining the context."
