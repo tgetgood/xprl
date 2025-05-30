@@ -16,6 +16,9 @@
   (symbols [this]))
 
 (extend-protocol Contextual
+  nil
+  (symbols [_] #{})
+
   Object
   (symbols [_] #{}))
 
@@ -78,7 +81,7 @@
 
 (defrecord List [elements ctx]
   Contextual
-  (symbols []
+  (symbols [_]
     (reduce set/union #{} (map symbols elements)))
   Object
   (toString [_] (str elements)))
@@ -178,7 +181,7 @@
 
 (defrecord Emission [kvs ctx]
   Contextual
-  (symbols [_] (reduce set/union #{} (map symbols (flatten kvs))))
+  (symbols [_] (symbols kvs))
   Object
   (toString [_]
     (str "#E" kvs)))

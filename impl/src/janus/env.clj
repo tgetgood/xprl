@@ -21,6 +21,9 @@
   ([env] (:declared env))
   ([env xs] (assoc env :declared xs)))
 
+(defn declared? [env s]
+  (contains? (:declared env) (ast/free s)))
+
 (defn project
   "Fits `env` by removing all names and declarations not mentioned in `form`."
   [env form]
@@ -56,8 +59,11 @@
 
 ;;;;; env preserving ast traversal
 
-(defn bind-decls [inner outer]
-  (when (seq inner)
+(defn bind-decls [ inner outer]
+  (-> empty-ns
+      (names (merge (names outer) (names inner)))
+      (decls (set/union (decls outer) (decls inner))))
+  #_(when (seq inner)
     ;; REVIEW: this is ugly and so likely wrong.
     (let [extra-decls (set/difference (decls outer)
                                       (decls inner)
@@ -67,7 +73,7 @@
                           (bind e sym val)
                           e))
                       inner
-                      (decls inner))
+                      (set/union syms (decls inner)))
               :declared set/union extra-decls))))
 
 (defn merge-env [x y]
@@ -78,6 +84,7 @@
 (defn nearest-env [x k]
   (let [v (get x k)
         e (merge-env x v)]
+    (trace! (ast/symbols v) e)
     (with-env v e)))
 
 (defn params   [x] (nearest-env x :params))
