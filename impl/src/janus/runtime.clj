@@ -16,8 +16,10 @@
 (defn schedule [task]
   (.add stack task))
 
-(defn run-task [[f arg]]
-  (f arg))
+(defn run-task [t]
+  (assert (ast/list? t))
+  (let [[f arg] (env/elements t)]
+    (f arg)))
 
 (defn next-task []
   (try
@@ -37,8 +39,8 @@
 
 (defn send! [ccs chn msg]
   (let [err     (fn [_] (throw (RuntimeException. (str "No such channel: " chn))))
-        unbound (get ccs (ast/xkeys :unbound) err)]
-    (schedule [(get ccs chn unbound) msg])))
+        unbound #((get ccs (ast/xkeys :unbound) err) [chn %])]
+    (schedule (ast/list [(get ccs chn unbound) msg]))))
 
 (defn perform-emit! [x ccs]
   (loop [kvs (env/elements (env/kvs x))]

@@ -81,11 +81,12 @@
                {:origin ::repl :predecessor f})
              env)))
   ([env f ccs]
-   (rt/schedule [(fn [_] (rt/connect (go! env f) ccs))])
+   (rt/schedule (ast/list [(fn [_] (rt/connect (go! env f) ccs))]))
    (rt/run!)))
 
 (defn ev [s]
   (go! @the-env (:form (r/read (r/string-reader s)))))
+
 
 (defn iev [s]
   (ast/inspect (ev s)))
@@ -120,8 +121,9 @@
   (ast/inspect (:form (r/read (r/string-reader s) @the-env))))
 
 (defn test []
-  (let [conts {(ast/xkeys :env) (fn [[sym value]]
-                                  (swap! the-env env/bind sym value))}]
+  (let [conts {(ast/xkeys :env) (fn [l]
+                                  (let [[sym value] (env/elements l)]
+                                    (swap! the-env env/bind sym value)))}]
     (loop [reader (r/file-reader testxprl)]
       (let [reader (r/read reader)
             form1  (:form reader)
