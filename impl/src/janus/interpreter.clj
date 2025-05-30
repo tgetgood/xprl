@@ -48,7 +48,7 @@
         (trace! "resolve" s ":" ref)
         ref)
       (do
-        (trace! (if (contains? (env/decls env) s) "declared" "undeclared") s)
+        (trace! (if (env/declared? env s) "declared" "undeclared") s)
         im))))
 
 (defn eval-list [im]
@@ -132,11 +132,9 @@
       [t1 identity])))
 
 (defn walk* [sexp]
-  ;; (trace! "walk" sexp "\n" (ast/ctx sexp) "\n" (ast/ctx (step sexp)))
   (let [[rule f] (rule-match sexp)]
     (trace! "rule match:" rule sexp
-            "\n  symbols:" (ast/symbols (step sexp))
-            (env/local-env (step sexp)))
+            "\n  symbols:" (ast/symbols sexp) (env/local-env sexp))
     (let [v (f sexp)]
       (trace! "result:" rule "\n" sexp "\n->\n" v)
       [rule v])))
