@@ -63,7 +63,7 @@
 
 
 (def base-env
-  (reduce (fn [e [k v]] (env/bind e k v)) (env/empty-ns) (merge special fns)))
+  (reduce (fn [e [k v]] (env/bind e k v)) env/empty-ns (merge special fns)))
 
 (def the-env (atom base-env))
 

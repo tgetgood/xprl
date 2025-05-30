@@ -5,7 +5,7 @@
    [janus.ast :as ast]
    [janus.debug :refer [trace!]]))
 
-(defn empty-ns []
+(def empty-ns
   ;; REVIEW: One sanity check on a namespace is that the set of declared (but
   ;; not instantiated) names must be empty by the time we finish reading it in.
   {:names {} :declared #{}})
@@ -26,7 +26,7 @@
   [env form]
   (let [syms (ast/symbols form)
         pred #(contains? syms (ast/free %))]
-    (-> (empty-ns)
+    (-> empty-ns
         (names (into {} (filter #(pred (key %))) (names env)))
         (decls (into #{} (filter pred) (decls env))))))
 
@@ -113,5 +113,5 @@
         body)
       (let [env (bind (get-env body) (params μ) args)
             env (if (name μ) (bind env (name μ) μ) env)]
-        (trace! "binding params:" (params μ) "to" args (local-env args))
+        (trace! "binding params:" (params μ) "to" args "in" body (local-env args))
         (with-env body env)))))
