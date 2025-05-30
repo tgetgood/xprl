@@ -45,10 +45,10 @@
         env (env/get-env s)]
     (if-let [ref (env/lookup env s)]
       (do
-        (trace! "resolve" s ":" ref)
+        (trace! "Resolved" s ":" ref)
         ref)
       (do
-        (trace! (if (env/declared? env s) "declared" "undeclared") s)
+        (trace! "Cannot resolve" s "postponing")
         im))))
 
 (defn eval-list [im]
@@ -64,14 +64,8 @@
 ;;;;; Reduction
 
 (defn reduce-μ [μ]
-  ;; FIXME: Just look at it...
-  (let [n (name μ)
-        p (params μ)
-        b (body μ)
-        n' (when n (if (ast/symbol? n) n (walk n)))
-        p' (if (ast/symbol? p) p (walk p))
-        b' (if (ast/symbol? p) (walk (env/μ-declare n p b)) (walk b))]
-    (ast/μ n' p' b')))
+  (let [n (name μ)]
+    (ast/μ (when n (walk n)) (walk (params μ)) (walk (body μ)))))
 
 (defn reduce-emit [e]
   ;; If we had a predicate that asked "is `kvs` fully realised?" then we

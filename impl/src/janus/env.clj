@@ -6,9 +6,7 @@
    [janus.debug :refer [trace!]]))
 
 (def empty-ns
-  ;; REVIEW: One sanity check on a namespace is that the set of declared (but
-  ;; not instantiated) names must be empty by the time we finish reading it in.
-  {:names {} :declared #{}})
+  {:names {}})
 
 (defn lookup [env sym]
   (get-in env [:names (ast/free sym)]))
@@ -17,21 +15,12 @@
   ([env] (:names env))
   ([env xs] (assoc env :names xs)))
 
-(defn decls
-  ([env] (:declared env))
-  ([env xs] (assoc env :declared xs)))
-
-(defn declared? [env s]
-  (contains? (:declared env) (ast/free s)))
-
 (defn project
-  "Fits `env` by removing all names and declarations not mentioned in `form`."
+  "Fits `env` by removing all names not mentioned in `form`."
   [env form]
-  (let [syms (ast/symbols form)
-        pred #(contains? syms (ast/free %))]
-    (-> empty-ns
-        (names (into {} (filter #(pred (key %))) (names env)))
-        (decls (into #{} (filter pred) (decls env))))))
+  (let [syms (ast/symbols form)]
+    (names empty-ns (into {} (filter #(contains? syms (ast/free (key %))))
+                          (names env)))))
 
 (defn get-env [x]
   (::env (ast/ctx x)))
@@ -41,45 +30,20 @@
     (assoc (ast/ctx x) ::env (project env x))))
 
 (defn bind [env s val]
-  (-> env
-      (assoc-in [:names (ast/free s)] val)
-      (update :declared disj (ast/free s))))
-
-(defn μ-declare-1 [env s]
-  (-> env
-      (update :declared (fnil conj #{}) (ast/free s))
-      (update :names dissoc (ast/free s))))
+  (assoc-in env [:names (ast/free s)] val))
 
 (defn local-env [form]
   (let [env  (get-env form)
         syms (ast/symbols form)]
-    (str "\n  defined: "
-         (into {} (filter #(contains? syms (key %))) (:names env))
-         " declared: " (decls env))))
+    (str "\n  env: "
+         (into {} (filter #(contains? syms (key %))) (:names env)))))
 
 ;;;;; env preserving ast traversal
-
-(defn bind-decls [ inner outer]
-  (-> empty-ns
-      (names (merge (names outer) (names inner)))
-      (decls (set/union (decls outer) (decls inner))))
-  #_(when (seq inner)
-    ;; REVIEW: this is ugly and so likely wrong.
-    (let [extra-decls (set/difference (decls outer)
-                                      (decls inner)
-                                      (into #{} (keys (:names inner))))]
-      (update (reduce (fn [e sym]
-                        (if-let [val (lookup outer sym)]
-                          (bind e sym val)
-                          e))
-                      inner
-                      (set/union syms (decls inner)))
-              :declared set/union extra-decls))))
 
 (defn merge-env [x y]
   (let [outer (or (get-env x) nil)
         inner (or (get-env y) outer)]
-    (bind-decls inner outer)))
+    (names inner (merge (names outer) (names inner)))))
 
 (defn nearest-env [x k]
   (let [v (get x k)
@@ -105,12 +69,6 @@
                     [] (:elements l))))
 
 ;;;;; μ specfics
-
-(defn μ-declare [name params body]
-  (let [env (μ-declare-1 (get-env body) params)
-        env (if name (μ-declare-1 env name) env)]
-    (trace! "declaring params:" params name (local-env body))
-    (with-env body env)))
 
 (defn μ-bind [μ args]
   (let [body (body μ)]
