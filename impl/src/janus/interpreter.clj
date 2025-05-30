@@ -18,7 +18,6 @@
 (defn apply-μ [app]
   (let [μ    (head app)
         args (tail app)]
-    (trace! "invoke" μ "with" args)
     (env/μ-bind μ args)))
 
 (defn apply-primitive [app]
