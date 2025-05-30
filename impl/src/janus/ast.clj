@@ -12,15 +12,20 @@
 
 ;;;;; Context
 
-(defprotocol Contextual)
+(defprotocol Contextual
+  (symbols [this]))
+
+(extend-protocol Contextual
+  Object
+  (symbols [_] #{}))
 
 (defn contextual? [x]
   (instance? janus.ast.Contextual x))
 
-(defn ctx
-  ([] {})
-  ([x]
-   (when (contextual? x) (:ctx x))))
+(def empty-ctx {})
+
+(defn ctx [x]
+  (when (contextual? x) (:ctx x)))
 
 (defn with-ctx [x ctx]
   (if (contextual? x)
@@ -52,15 +57,17 @@
 (def keyword
   (memoize (fn [s] (->Keyword (split-symbolic s)))))
 
+(declare free)
 
 (defrecord Symbol [names ctx]
   Contextual
+  (symbols [this] #{(free this)})
   Object
   (toString [_]
     (transduce (interpose ".") str "" names)))
 
 (def symbol
-    (memoize (fn [s] (->Symbol (split-symbolic s) (ctx)))))
+    (memoize (fn [s] (->Symbol (split-symbolic s) empty-ctx))))
 
 (defn free [s]
   (symbol (str s)))
@@ -68,29 +75,16 @@
 (defn symbol? [s]
   (instance? Symbol s))
 
-(defn symbols
-  "Returns set of symbols mentioned in sexp."
-  [x]
-  (cond
-    (symbol? x)     #{(free x)}        ; symbols needn't track self mention.
-    (contextual? x) (::symbols (ctx x))
-    true            #{}))
-
-(defn with-symbols [ctx syms]
-  (assoc ctx ::symbols (into #{} (map free) syms)))
-
-(defn build-ctx
-  ([& subforms]
-   (with-symbols (ctx) (apply set/union (map symbols subforms)))))
-
 
 (defrecord List [elements ctx]
   Contextual
+  (symbols []
+    (reduce set/union #{} (map symbols elements)))
   Object
   (toString [_] (str elements)))
 
 (defn list [xs]
-  (->List (into [] xs) (apply build-ctx xs)))
+  (->List (into [] xs) empty-ctx))
 
 (defn list? [x]
   (instance? List x))
@@ -98,6 +92,7 @@
 
 (defrecord Pair [head tail ctx]
   Contextual
+  (symbols [_] (set/union (symbols head) (symbols tail)))
   Object
   (toString [_]
     (str "(" (str head) " "
@@ -107,45 +102,45 @@
          ")")))
 
 (defn pair [head tail]
-  (->Pair head tail (build-ctx head tail)))
+  (->Pair head tail empty-ctx))
 
 
 (defrecord Immediate [form ctx]
   Contextual
+  (symbols [_] (symbols form))
   Object
   (toString [_]
     (str "~" form)))
 
 (defn immediate [form]
-  (->Immediate form (build-ctx form)))
+  (->Immediate form empty-ctx))
 
 
 (defrecord Application [head tail ctx]
   Contextual
+  (symbols [_] (set/union (symbols head) (symbols tail)))
   Object
   (toString [_]
     (str "#" (str (pair head tail)))))
 
 (defn application [head tail]
-  (->Application head tail (build-ctx head tail)))
+  (->Application head tail empty-ctx))
 
 
 (defrecord Mu [name params body ctx]
   Contextual
+  ;; This is unintuitive, but we only look at the body because it ~might not~
+  ;; refer to the name and formal param of the μ.
+  (symbols [_] (symbols body))
   Object
   (toString [_]
     (str "(#μ " params " " body ")")))
 
 (defn μ [name params body]
-  ;; REVIEW: Can μ be called if params *isn't* a symbol?
-  ;; That depends on the interpreter, so let's not assume anything here.
-  (let [syms (if (symbol? params) (conj (symbols body) params) (symbols body))
-        syms (if (symbol? name) (conj syms name) syms)]
-    (->Mu name params body (with-symbols (build-ctx) syms))))
+  (->Mu name params body empty-ctx))
 
 (defn μ? [x]
   (instance? Mu x))
-
 
 
 (defn fname [f]
@@ -183,12 +178,13 @@
 
 (defrecord Emission [kvs ctx]
   Contextual
+  (symbols [_] (reduce set/union #{} (map symbols (flatten kvs))))
   Object
   (toString [_]
     (str "#E" kvs)))
 
 (defn emission [kvs]
-  (->Emission kvs (build-ctx kvs)))
+  (->Emission kvs empty-ctx))
 
 ;;;;; Pretty Printing
 ;;
