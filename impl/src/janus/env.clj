@@ -12,7 +12,7 @@
   (get-in env [:names (ast/free sym)]))
 
 (defn names
-  ([env] (:names env))
+  ([env] (or (:names env) {}))
   ([env xs] (assoc env :names xs)))
 
 (defn project
@@ -32,12 +32,6 @@
 (defn bind [env s val]
   (assoc-in env [:names (ast/free s)] val))
 
-(defn local-env [form]
-  (let [env  (get-env form)
-        syms (ast/symbols form)]
-    (str "\n  env: "
-         (into {} (filter #(contains? syms (key %))) (:names env)))))
-
 ;;;;; env preserving ast traversal
 
 (defn merge-env [x y]
@@ -48,7 +42,6 @@
 (defn nearest-env [x k]
   (let [v (get x k)
         e (merge-env x v)]
-    (trace! (ast/symbols v) e)
     (with-env v e)))
 
 (defn params   [x] (nearest-env x :params))
