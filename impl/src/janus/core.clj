@@ -12,7 +12,7 @@
 
 
 (defn primitive [p f]
-  (ast/primitive p (with-meta #(apply f %) (meta f))))
+  (ast/primitive p (with-meta #(apply f (env/extract %)) (meta f))))
 
 (defn primitives [p m]
   (reduce (fn [acc [k v]] (assoc acc (ast/symbol k) (primitive p v))) {} m))

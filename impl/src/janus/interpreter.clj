@@ -27,9 +27,9 @@
     (trace! "pcall" h args)
     ;; REVIEW: This assumes that all primitives take a list as args.
     ;; That seems innocuous, but what are the ramifications?
-    (if (and (ast/list? args) ((:check h) ex))
-      ((:fn h) ex)
-      (ast/application h args))))
+    (if (and (ast/list? args) ((:check h) (env/extract args)))
+      ((:fn h) args)
+      (env/carry-env (ast/application h args) app))))
 
 (defn apply-error [app]
   (throw (RuntimeException.
@@ -153,20 +153,24 @@
     2 (ast/symbol? (first args))
     3 (and (ast/symbol? (first args)) (ast/symbol? (second args)))))
 
-(defn μ [args]
-  (let [[name params body] (case (count args)
+(defn μ [l]
+  (let [args               (env/extract l)
+        [name params body] (case (count args)
                              3 args
                              2 `[nil ~@args])]
-    (ast/μ name params body)))
+    (env/carry-env (ast/μ name params body) l)))
 
-(defn emit [kvs]
-  (assert (even? (count kvs)))
-  (ast/emission
-   (ast/list (map (fn [[k v]] (ast/list [(ast/immediate k) v]))
-                  (partition 2 kvs)))))
+(defn emit [l]
+  (let [kvs (env/extract l)]
+    (assert (even? (count kvs)))
+    (env/carry-env
+      (ast/emission
+       (ast/list (map (fn [[k v]] (ast/list [(ast/immediate k) v]))
+                      (partition 2 kvs))))
+      l)))
 
 (defn check-select [args]
-  (boolean? (first args)))
+  (boolean? (env/xnth args 0)))
 
 (defn select [[p t f]]
   ;; `t` & `f` have already been walked, so we've nothing to do but pick one.
