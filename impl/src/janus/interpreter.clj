@@ -129,7 +129,7 @@
 (defn walk* [sexp]
   (let [[rule f] (rule-match sexp)]
     (trace! "rule match:" rule sexp
-            "\n  symbols:" (ast/symbols sexp)
+            "\n  symbols:" (env/symbols sexp)
             "env:" (env/names (env/get-env sexp)))
     (let [v (f sexp)]
       (trace! "result:" rule "\n" sexp "\n->\n" v)

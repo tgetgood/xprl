@@ -15,15 +15,21 @@
   ([env] (or (:names env) {}))
   ([env xs] (assoc env :names xs)))
 
+(defn get-env [x]
+  (::env (ast/ctx x)))
+
+(defn symbols
+  ([form] (symbols form (get-env form)))
+  ([form e]
+   (let [syms (ast/symbols form)]
+     (transduce (map #(symbols (lookup e %))) set/union syms syms))))
+
 (defn project
   "Fits `env` by removing all names not mentioned in `form`."
   [env form]
-  (let [syms (ast/symbols form)]
+  (let [syms (symbols form env)]
     (names empty-ns (into {} (filter #(contains? syms (ast/free (key %))))
                           (names env)))))
-
-(defn get-env [x]
-  (::env (ast/ctx x)))
 
 (defn with-env [x env]
   (ast/with-ctx x
@@ -79,5 +85,5 @@
         body)
       (let [env (bind (get-env body) (params μ) args)
             env (if (name μ) (bind env (name μ) μ) env)]
-        (trace! "binding params:" (params μ) "to" args "in" body (local-env args))
+        (trace! "binding params:" (params μ) "to" args "in" body)
         (with-env body env)))))
