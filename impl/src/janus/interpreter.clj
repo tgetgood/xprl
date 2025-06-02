@@ -37,14 +37,15 @@
                "\n" (debug/provenance app)))))
 
 (defn apply-head [app]
-  (ast/application (walk (head app)) (tail app)))
+  (env/carry-env (ast/application (walk (head app)) (tail app))
+    app))
 
 ;;;;; Eval
 
 (defn eval-symbol [im]
   (let [s   (form im)
         env (env/get-env s)]
-    (if-let [ref (env/lookup env s)]
+    (if-let [ref (env/embedded-lookup env s)]
       (do
         (trace! "Resolved" s ":" ref)
         ref)
@@ -57,22 +58,24 @@
 
 (defn eval-pair [im]
   (let [p (form im)]
-    (ast/application (ast/immediate (head p)) (tail p))))
+    (env/carry-env (ast/application (ast/immediate (head p)) (tail p)) p)))
 
 (defn eval-step [im]
-  (ast/immediate (walk (form im))))
+  (env/carry-env (ast/immediate (walk (form im))) (form im)))
 
 ;;;;; Reduction
 
 (defn reduce-μ [μ]
   (let [n (name μ)]
-    (ast/μ (when n (walk n)) (walk (params μ)) (walk (body μ)))))
+    (env/carry-env
+      (ast/μ (when n (walk n)) (walk (params μ)) (walk (body μ)))
+      μ)))
 
 (defn reduce-emit [e]
   ;; If we had a predicate that asked "is `kvs` fully realised?" then we
   ;; wouldn't need this at all. I'm just not sure how to write that predicate,
   ;; and this seems simple enough that I don't need to worry about it.
-  (ast/emission (walk (kvs e))))
+  (env/carry-env (ast/emission (walk (kvs e))) (kvs e)))
 
 (defn reduce-list [l]
   (env/map-list walk l))

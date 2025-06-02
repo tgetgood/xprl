@@ -15,13 +15,8 @@
 (defn get-env [x]
   (::env (ast/ctx x)))
 
-(declare with-env)
-
 (defn lookup [env sym]
-  (let [ref (get-in env [:names (ast/free sym)])]
-    (with-env ref
-      (names empty-ns
-             (merge (names env) (names (get-env ref)))))))
+  (get-in env [:names (ast/free sym)]))
 
 (defn symbols
   ([form] (symbols form (get-env form)))
@@ -40,18 +35,23 @@
   (ast/with-ctx x
     (assoc (ast/ctx x) ::env (project env x))))
 
+(defn merge-env [outer inner]
+  (names empty-ns (merge (names outer) (names inner))))
+
+(defn carry-env [inner outer]
+  (with-env inner (merge-env (get-env outer) (get-env inner))))
+
 (defn bind [env s val]
   (assoc-in env [:names (ast/free s)] val))
 
+(defn embedded-lookup [env sym]
+  (let [ref (lookup env sym)]
+    (with-env ref (merge-env env (get-env ref)))))
+
 ;;;;; env preserving ast traversal
 
-(defn merge-env [outer inner]
-  (names empty-ns (merge (names (get-env outer)) (names (get-env inner)))))
-
 (defn nearest-env [x k]
-  (let [v (get x k)
-        e (merge-env x v)]
-    (with-env v e)))
+  (carry-env (get x k) x))
 
 (defn params [x] (nearest-env x :params))
 (defn name   [x] (nearest-env x :name))
@@ -62,8 +62,7 @@
 (defn kvs    [x] (nearest-env x :kvs))
 
 (defn xnth [x n]
-  (let [el (nth (:elements x) n)]
-    (with-env el (merge-env x el))))
+  (carry-env (nth (:elements x) n) x))
 
 (defn extract
   "Extracts all elements of List `xs` with their correctly inherited
@@ -74,7 +73,7 @@
 (defn map-list
   "Apply f to each element of xs, retaining the context."
   [f l]
-  (ast/list (map f (extract l))))
+  (carry-env (ast/list (map f (extract l))) l))
 
 ;;;;; μ specfics
 
