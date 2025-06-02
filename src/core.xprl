@@ -63,11 +63,12 @@
 
 (defn inc x (+ 1 (nth x 1)))
 
-(def !1
+edef !1
   (μ !1 n
-     ~~(select ~(=* ~n 0)
+     ~~(select ~(<* ~n 2)
               1
               (** ~n ~(!1 . ~(-* ~n 1))))))
+
 (defμ !2 n
   ~~(select ~(=* ~n 0)
               1
