@@ -126,13 +126,16 @@
           [t1 (:fn subtree)]))
       [t1 identity])))
 
+(defn trace-env [sexp]
+  (merge
+   (into {} (map (fn [x] [x :unbound]) (env/symbols sexp)))
+   (env/names (env/get-env sexp))))
+
 (defn walk* [sexp]
   (let [[rule f] (rule-match sexp)]
-    (trace! "rule match:" rule sexp
-            "\n  symbols:" (env/symbols sexp)
-            "env:" (env/names (env/get-env sexp)))
+    (trace! "rule match:" rule sexp "\n  env:" (trace-env sexp))
     (let [v (f sexp)]
-      (trace! "result:" rule "\n" sexp "\n->\n" v)
+      (trace! "result:" rule "\n" sexp "\n->\n" v )
       [rule v])))
 
 (def walk** (memoize walk*))

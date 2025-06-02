@@ -4,7 +4,7 @@
 
 ;; REVIEW: Why is this a macro?
 (defmacro trace! [& args]
-  `(when *verbose* (println ~@args)))
+  `(when *verbose* (println ~@args "\n")))
 
 (defn provenance [x]
   (::provenance (meta x)))
