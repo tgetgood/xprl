@@ -54,8 +54,8 @@
     "=*"   #'=
     "mod*" #'mod
 
-    "first*" #'first
-    "rest*"  #'rest*
+    ;; "first*" #'first
+    ;; "rest*"  #'rest*
 
     "count*" #'count
     "nth*"   #'nth* ; Base 1 indexing
