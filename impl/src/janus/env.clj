@@ -8,9 +8,6 @@
 (def empty-ns
   {:names {}})
 
-(defn lookup [env sym]
-  (get-in env [:names (ast/free sym)]))
-
 (defn names
   ([env] (or (:names env) {}))
   ([env xs] (assoc env :names xs)))
@@ -18,11 +15,19 @@
 (defn get-env [x]
   (::env (ast/ctx x)))
 
+(declare with-env)
+
+(defn lookup [env sym]
+  (let [ref (get-in env [:names (ast/free sym)])]
+    (with-env ref
+      (names empty-ns
+             (merge (names env) (names (get-env ref)))))))
+
 (defn symbols
   ([form] (symbols form (get-env form)))
   ([form e]
    (let [syms (ast/symbols form)]
-     (transduce (map #(symbols (lookup e %))) set/union syms syms))))
+     (into syms (comp (mapcat #(symbols (lookup e %))) (map ast/free)) syms))))
 
 (defn project
   "Fits `env` by removing all names not mentioned in `form`."
@@ -40,10 +45,8 @@
 
 ;;;;; env preserving ast traversal
 
-(defn merge-env [x y]
-  (let [outer (or (get-env x) nil)
-        inner (or (get-env y) outer)]
-    (names inner (merge (names outer) (names inner)))))
+(defn merge-env [outer inner]
+  (names empty-ns (merge (names (get-env outer)) (names (get-env inner)))))
 
 (defn nearest-env [x k]
   (let [v (get x k)
@@ -66,14 +69,12 @@
   "Extracts all elements of List `xs` with their correctly inherited
   environments into a clj vector."
   [xs]
-  (into [] (map #(xnth xs %)) (range (count (:elements xs)))))
+  (map #(xnth xs %) (range (count (:elements xs)))))
 
 (defn map-list
   "Apply f to each element of xs, retaining the context."
   [f l]
-  (ast/list (reduce (fn [acc x]
-                      (conj acc (f (with-env x (merge-env l x)))))
-                    [] (:elements l))))
+  (ast/list (map f (extract l))))
 
 ;;;;; μ specfics
 
