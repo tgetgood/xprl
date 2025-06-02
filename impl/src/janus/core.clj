@@ -109,6 +109,7 @@
             (recur reader)))))))
 
 (defn reload! [fname]
+  (reset! the-env base-env)
   (loadfile the-env fname))
 
 (defmacro inspect [n]
