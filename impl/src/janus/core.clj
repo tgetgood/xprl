@@ -33,7 +33,7 @@
     }))
 
 (defn nth* [c i]
-  (nth (env/elements c) (dec i)))
+  (env/xnth c (dec i)))
 
 (defn rest* [xs]
   (into [] (rest xs)))
