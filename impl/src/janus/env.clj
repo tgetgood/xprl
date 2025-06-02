@@ -44,15 +44,23 @@
         e (merge-env x v)]
     (with-env v e)))
 
-(defn params   [x] (nearest-env x :params))
-(defn name     [x] (nearest-env x :name))
-(defn body     [x] (nearest-env x :body))
-(defn head     [x] (nearest-env x :head))
-(defn tail     [x] (nearest-env x :tail))
-(defn form     [x] (nearest-env x :form))
-(defn kvs      [x] (nearest-env x :kvs))
-(defn elements [x] (nearest-env x :elements))
-(defn xnth   [x n] (nearest-env (elements x) n))
+(defn params [x] (nearest-env x :params))
+(defn name   [x] (nearest-env x :name))
+(defn body   [x] (nearest-env x :body))
+(defn head   [x] (nearest-env x :head))
+(defn tail   [x] (nearest-env x :tail))
+(defn form   [x] (nearest-env x :form))
+(defn kvs    [x] (nearest-env x :kvs))
+
+(defn xnth [x n]
+  (let [el (nth (:elements x) n)]
+    (with-env el (merge-env x el))))
+
+(defn extract
+  "Extracts all elements of List `xs` with their correctly inherited
+  environments into a clj vector."
+  [xs]
+  (into [] (map #(xnth xs %)) (range (count (:elements xs)))))
 
 (defn map-list
   "Apply f to each element of xs, retaining the context."

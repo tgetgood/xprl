@@ -18,7 +18,7 @@
 
 (defn run-task [t]
   (assert (ast/list? t))
-  (let [[f arg] (env/elements t)]
+  (let [[f arg] (env/extract t)]
     (f arg)))
 
 (defn next-task []
@@ -43,9 +43,9 @@
     (schedule (ast/list [(get ccs chn unbound) msg]))))
 
 (defn perform-emit! [x ccs]
-  (loop [kvs (env/elements (env/kvs x))]
+  (loop [kvs (env/extract (env/kvs x))]
     (when (seq kvs)
-      (let [[chn msg] (env/elements (first kvs))]
+      (let [[chn msg] (env/extract (first kvs))]
         (trace! "sending on" chn ":" msg)
         (send! ccs chn msg))
       (recur (rest kvs)))))

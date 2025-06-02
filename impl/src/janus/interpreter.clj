@@ -22,12 +22,13 @@
 
 (defn apply-primitive [app]
   (let [h    (head app)
-        args (walk (tail app))]
+        args (walk (tail app))
+        ex   (env/extract args)]
     (trace! "pcall" h args)
     ;; REVIEW: This assumes that all primitives take a list as args.
     ;; That seems innocuous, but what are the ramifications?
-    (if (and (ast/list? args) ((:check h) (env/elements args)))
-      ((:fn h) (env/elements args))
+    (if (and (ast/list? args) ((:check h) ex))
+      ((:fn h) ex)
       (ast/application h args))))
 
 (defn apply-error [app]

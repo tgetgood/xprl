@@ -93,7 +93,7 @@
 
 (defn loadfile [envatom fname]
   (let [conts {(ast/xkeys :env)    (fn [l]
-                                     (let [[sym value] (env/elements l)]
+                                     (let [[sym value] (env/extract l)]
                                        (swap! envatom env/bind sym value)))
                (ast/xkeys :return) #(throw
                                      (RuntimeException. "return to top level!"))
@@ -122,7 +122,7 @@
 
 (defn test []
   (let [conts {(ast/xkeys :env) (fn [l]
-                                  (let [[sym value] (env/elements l)]
+                                  (let [[sym value] (env/extract l)]
                                     (swap! the-env env/bind sym value)))}]
     (loop [reader (r/file-reader testxprl)]
       (let [reader (r/read reader)
