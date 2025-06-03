@@ -71,7 +71,7 @@
     env))
 
 (defn μ-declare [name params body]
-  (with-env body
+  (env/with-env body
     (-> body env/get-env (clear-sym name) (clear-sym params))))
 
 (defn reduce-μ [μ]
