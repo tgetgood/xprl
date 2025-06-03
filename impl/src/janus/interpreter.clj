@@ -65,11 +65,20 @@
 
 ;;;;; Reduction
 
+(defn clear-sym [env sym?]
+  (if (ast/symbol? sym?)
+    (env/clear env sym?)
+    env))
+
+(defn μ-declare [name params body]
+  (with-env body
+    (-> body env/get-env (clear-sym name) (clear-sym params))))
+
 (defn reduce-μ [μ]
-  (let [n (name μ)]
-    (env/carry-env
-      (ast/μ (when n (walk n)) (walk (params μ)) (walk (body μ)))
-      μ)))
+  (let [n    (when-let [n (name μ)] (walk n))
+        p    (walk (params μ))
+        b    (body μ)]
+    (ast/μ n p (walk (μ-declare n p b)))))
 
 (defn reduce-emit [e]
   ;; If we had a predicate that asked "is `kvs` fully realised?" then we
@@ -161,7 +170,7 @@
         [name params body] (case (count args)
                              3 args
                              2 `[nil ~@args])]
-    (env/carry-env (ast/μ name params body) l)))
+    (env/carry-env (ast/μ name params (μ-declare body name params)) l)))
 
 (defn emit [l]
   (let [kvs (env/extract l)]

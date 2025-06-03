@@ -12,6 +12,9 @@
   ([env] (or (:names env) {}))
   ([env xs] (assoc env :names xs)))
 
+(defn clear [env sym]
+  (update env names dissoc (ast/free sym)))
+
 (defn get-env [x]
   (::env (ast/ctx x)))
 
