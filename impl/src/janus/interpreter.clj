@@ -170,7 +170,7 @@
         [name params body] (case (count args)
                              3 args
                              2 `[nil ~@args])]
-    (env/carry-env (ast/μ name params (μ-declare body name params)) l)))
+    (env/carry-env (ast/μ name params (μ-declare name params body)) l)))
 
 (defn emit [l]
   (let [kvs (env/extract l)]
