@@ -182,7 +182,7 @@
       l)))
 
 (defn check-select [args]
-  (boolean? (env/xnth args 0)))
+  (boolean? (nth args 0)))
 
 (defn select [[p t f]]
   ;; `t` & `f` have already been walked, so we've nothing to do but pick one.

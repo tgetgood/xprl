@@ -1,7 +1,7 @@
 (ns janus.ast
   (:refer-clojure
    :exclude
-   [reduced? symbol symbol? keyword keyword? destructure delay type list list? List])
+   [symbol symbol? keyword keyword? destructure type list list? List])
   (:require
    [clojure.pprint :as pp]
    [clojure.set :as set]
@@ -25,17 +25,17 @@
 (defn contextual? [x]
   (instance? janus.ast.Contextual x))
 
-(def empty-ctx {})
-
-(defn ctx [x]
-  (when (contextual? x) (:ctx x)))
-
-(defn with-ctx [x ctx]
-  (if (contextual? x)
-    (assoc x :ctx ctx)
-    x))
-
 ;;;;; AST
+
+(defrecord ContextSwitch [form env]
+  Object
+  (toString [_]
+    ;; FIXME: How do we display pinned environments?
+    (str form)))
+
+(defn cs? [x]
+  (instance? ContextSwitch x))
+
 
 (defn split-symbolic [s]
   (cond
@@ -60,55 +60,69 @@
 (def keyword
   (memoize (fn [s] (->Keyword (split-symbolic s)))))
 
-(declare free)
-
-(defrecord Symbol [names ctx]
+(defrecord Symbol [names]
   Contextual
-  (symbols [this] #{(free this)})
+  (symbols [this] #{this})
   Object
   (toString [_]
     (transduce (interpose ".") str "" names)))
 
 (def symbol
-    (memoize (fn [s] (->Symbol (split-symbolic s) empty-ctx))))
-
-(defn free [s]
-  (symbol (str s)))
+    (memoize (fn [s] (->Symbol (split-symbolic s)))))
 
 (defn symbol? [s]
   (instance? Symbol s))
 
 
-(defrecord List [elements ctx]
+(deftype List [elements]
   Contextual
   (symbols [_]
     (reduce set/union #{} (map symbols elements)))
+
+  clojure.lang.Indexed
+  (nth [_ n]
+    (nth elements n))
+  (nth [_ n nf]
+    (nth elements nf))
+
+  clojure.lang.Counted
+  (count [this]
+    (count elements))
+
+  clojure.lang.ILookup
+  (valAt [_ k]
+    (get elements k))
+  (valAt [this k nf]
+    (get elements k nf))
+
   Object
   (toString [_] (str elements)))
 
+(defn elements [l]
+  (.elements l))
+
 (defn list [xs]
-  (->List (into [] xs) empty-ctx))
+  (->List (into [] xs)))
 
 (defn list? [x]
   (instance? List x))
 
-
-(defrecord Pair [head tail ctx]
+(defrecord Pair [head tail]
   Contextual
   (symbols [_] (set/union (symbols head) (symbols tail)))
   Object
   (toString [_]
     (str "(" (str head) " "
          (if (list? tail)
-           (transduce (comp (map str) (interpose " ")) str "" (:elements tail))
+           (transduce (comp (map str) (interpose " ")) str "" (elements tail))
            (str ". " (str tail)))
          ")")))
 
 (defn pair [head tail]
-  (->Pair head tail empty-ctx))
+  (->Pair head tail))
 
 
-(defrecord Immediate [form ctx]
+(defrecord Immediate [form]
   Contextual
   (symbols [_] (symbols form))
   Object
@@ -116,10 +130,10 @@
     (str "~" form)))
 
 (defn immediate [form]
-  (->Immediate form empty-ctx))
+  (->Immediate form))
 
 
-(defrecord Application [head tail ctx]
+(defrecord Application [head tail]
   Contextual
   (symbols [_] (set/union (symbols head) (symbols tail)))
   Object
@@ -127,10 +141,10 @@
     (str "#" (str (pair head tail)))))
 
 (defn application [head tail]
-  (->Application head tail empty-ctx))
+  (->Application head tail))
 
 
-(defrecord Mu [name params body ctx]
+(defrecord Mu [name params body]
   Contextual
   ;; This is unintuitive, but we only look at the body because it ~might not~
   ;; refer to the name and formal param of the μ.
@@ -140,7 +154,7 @@
     (str "(#μ " params " " body ")")))
 
 (defn μ [name params body]
-  (->Mu name params body empty-ctx))
+  (->Mu name params body))
 
 (defn μ? [x]
   (instance? Mu x))
@@ -172,14 +186,14 @@
   (->Macro f))
 
 
-(defrecord Nu [name params body ctx]
+(defrecord Nu [name params body]
   Contextual
   Object
   (toString [_]
     (str "(#ν " params " " body ")")))
 
 
-(defrecord Emission [kvs ctx]
+(defrecord Emission [kvs]
   Contextual
   (symbols [_] (symbols kvs))
   Object
@@ -187,7 +201,7 @@
     (str "#E" kvs)))
 
 (defn emission [kvs]
-  (->Emission kvs empty-ctx))
+  (->Emission kvs))
 
 ;;;;; Pretty Printing
 ;;
@@ -215,10 +229,10 @@
 ;;; List
 
 (defmethod print-method List [l ^Writer w]
-  (print-method (:elements l) w))
+  (print-method (elements l) w))
 
 (defmethod pp/simple-dispatch List [l]
-  (pp/simple-dispatch (:elements l)))
+  (pp/simple-dispatch (elements l)))
 
 ;;; Pair
 
@@ -226,7 +240,7 @@
   (.write w "(")
   (print-method (:head o) w)
   (if (list? (:tail o))
-    (doseq [x (:elements (:tail o))]
+    (doseq [x (elements (:tail o))]
       (.write w " ")
       (print-method x w))
     (do
@@ -258,7 +272,7 @@
     (assert (< (count tail) 4))
     (.write ^Writer *out* " ")
     (pp/pprint-newline :linear)
-    (pp/write-out (nth tail 2))))
+    (pp/write-out (clojure.core/nth tail 2))))
 
 (defmethod format-pair (symbol "def")
   [_ tail]
@@ -279,7 +293,7 @@
    ;; TODO: Dispatch on head of pair to format
    (pp/write-out head)
    (if (list? tail)
-     (format-pair head (:elements tail))
+     (format-pair head (elements tail))
      (do
        (.write ^Writer *out* " . ")
        (pp/write-out tail)))))
@@ -434,7 +448,7 @@
   (insp [form ^Writer w level]
     (spacer w level)
     (.write w "L\n")
-    (dorun (map #(insp % w (inc level)) (:elements form))))
+    (dorun (map #(insp % w (inc level)) (elements form))))
 
   Macro
   (insp [form ^Writer w level]
@@ -461,7 +475,7 @@
   (insp [form ^Writer w level]
     (spacer w level)
     (.write w "E\n")
-    (loop [kvs (:elements (:kvs form))]
+    (loop [kvs (elements (:kvs form))]
       (when (seq kvs)
         (insp (first kvs) w (inc level))
         (insp (second kvs) w (inc level))
