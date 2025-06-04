@@ -24,7 +24,7 @@
 (def special
   "Things that would traditionally be special forms."
   (macros
-   {"μ"      [i/partial? #'i/μ]
+   {"μ"      [i/μ-ready? #'i/μ]
     ;;   "ν"       createν
     "emit"   [(constantly true) #'i/emit]
     "select" [i/check-select #'i/select]

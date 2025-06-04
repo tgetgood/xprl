@@ -160,7 +160,7 @@
 
 ;;;;; Builtins
 
-(defn partial? [args]
+(defn μ-ready? [args]
   (case (count args)
     2 (ast/symbol? (first args))
     3 (and (ast/symbol? (first args)) (ast/symbol? (second args)))))
