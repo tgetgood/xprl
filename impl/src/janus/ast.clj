@@ -1,7 +1,7 @@
 (ns janus.ast
   (:refer-clojure
    :exclude
-   [symbol symbol? keyword keyword? destructure type list list? List])
+   [symbol symbol? keyword keyword? destructure type list list?])
   (:require
    [clojure.pprint :as pp]
    [clojure.set :as set]
@@ -74,38 +74,14 @@
   (instance? Symbol s))
 
 
-(deftype List [elements]
-  Contextual
-  (symbols [_]
-    (reduce set/union #{} (map symbols elements)))
-
-  clojure.lang.Indexed
-  (nth [_ n]
-    (nth elements n))
-  (nth [_ n nf]
-    (nth elements nf))
-
-  clojure.lang.Counted
-  (count [this]
-    (count elements))
-
-  clojure.lang.ILookup
-  (valAt [_ k]
-    (get elements k))
-  (valAt [this k nf]
-    (get elements k nf))
-
-  Object
-  (toString [_] (str elements)))
-
 (defn elements [l]
-  (.elements l))
+  l)
 
 (defn list [xs]
-  (->List (into [] xs)))
+  (vec xs))
 
 (defn list? [x]
-  (instance? List x))
+  (vector?  x))
 
 (defrecord Pair [head tail]
   Contextual
@@ -225,14 +201,6 @@
 
 (defmethod pp/simple-dispatch Keyword [o]
   (pp/write-out (clojure.core/keyword (subs (str o) 1))))
-
-;;; List
-
-(defmethod print-method List [l ^Writer w]
-  (print-method (elements l) w))
-
-(defmethod pp/simple-dispatch List [l]
-  (pp/simple-dispatch (elements l)))
 
 ;;; Pair
 
@@ -444,11 +412,11 @@
     (insp (:head form) w (inc level))
     (insp (:tail form) w (inc level)))
 
-  List
+  clojure.lang.PersistentVector
   (insp [form ^Writer w level]
     (spacer w level)
     (.write w "L\n")
-    (dorun (map #(insp % w (inc level)) (elements form))))
+    (dorun (map #(insp % w (inc level)) form)))
 
   Macro
   (insp [form ^Writer w level]
@@ -488,7 +456,8 @@
 ;;;;; Sugar
 
 (def type-table
-  {List        :L
+  {clojure.lang.PersistentVector :L
+
    Immediate   :I
    Pair        :P
    Symbol      :S

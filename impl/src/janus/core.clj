@@ -12,7 +12,7 @@
 
 
 (defn primitive [p f]
-  (ast/primitive p (with-meta #(apply f (env/extract %)) (meta f))))
+  (ast/primitive p (with-meta #(apply f %) (meta f))))
 
 (defn primitives [p m]
   (reduce (fn [acc [k v]] (assoc acc (ast/symbol k) (primitive p v))) {} m))
@@ -76,10 +76,8 @@
 
 (defn go!
   ([env f]
-   (i/walk (env/with-env
-             (debug/with-provenance (ast/immediate f)
-               {:origin ::repl :predecessor f})
-             env)))
+   (i/walk env (debug/with-provenance (ast/immediate f)
+                 {:origin ::repl :predecessor f})))
   ([env f ccs]
    (rt/schedule (ast/list [(fn [_] (rt/connect (go! env f) ccs))]))
    (rt/run!)))
@@ -93,7 +91,7 @@
 
 (defn loadfile [envatom fname]
   (let [conts {(ast/xkeys :env)    (fn [l]
-                                     (let [[sym value] (env/extract l)]
+                                     (let [[sym value] l]
                                        (swap! envatom env/bind sym value)))
                (ast/xkeys :return) #(throw
                                      (RuntimeException. "return to top level!"))
@@ -115,7 +113,7 @@
 (defmacro inspect [n]
   `(-> @the-env (get-in [:names (ast/symbol ~(clojure.core/name n))]) ast/inspect))
 
-(defn el [form name]
+#_(defn el [form name]
   (env/lookup (env/get-env form) (ast/symbol name)))
 
 (defn check [s]
@@ -123,7 +121,7 @@
 
 (defn test []
   (let [conts {(ast/xkeys :env) (fn [l]
-                                  (let [[sym value] (env/extract l)]
+                                  (let [[sym value] l]
                                     (swap! the-env env/bind sym value)))}]
     (loop [reader (r/file-reader testxprl)]
       (let [reader (r/read reader)
@@ -146,7 +144,6 @@
 (defn pp [x]
   (:predecessor (p x)))
 
-(def env env/get-env)
 
 (defmacro db [x]
   `(binding [debug/*verbose* true] ~x))

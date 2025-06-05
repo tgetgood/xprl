@@ -2,7 +2,6 @@
   (:refer-clojure :exclude [run!])
   (:require
    [janus.ast :as ast]
-   [janus.env :as env]
    [janus.debug :refer [trace!]])
   (:import
    (java.util.concurrent ConcurrentLinkedDeque)))
@@ -18,7 +17,7 @@
 
 (defn run-task [t]
   (assert (ast/list? t))
-  (let [[f arg] (env/extract t)]
+  (let [[f arg] t]
     (f arg)))
 
 (defn next-task []
@@ -32,8 +31,6 @@
     (run-task task)
     (recur)))
 
-
-
 (defn with-return [ccs cont]
   (assoc ccs (ast/xkeys :return) cont))
 
@@ -43,9 +40,9 @@
     (schedule (ast/list [(get ccs chn unbound) msg]))))
 
 (defn perform-emit! [x ccs]
-  (loop [kvs (env/extract (env/kvs x))]
+  (loop [kvs (:kvs x)]
     (when (seq kvs)
-      (let [[chn msg] (env/extract (first kvs))]
+      (let [[chn msg] (first kvs)]
         (trace! "sending on" chn ":" msg)
         (send! ccs chn msg))
       (recur (rest kvs)))))

@@ -2,10 +2,11 @@
   (:refer-clojure :exclude [name])
   (:require
    [janus.ast :as ast]
-   [janus.env :as env :refer [body form head kvs name params tail]]
+   [janus.env :as env]
    [janus.debug :as debug :refer [trace!]]))
 
 (declare walk)
+(def ^:dynamic *env*)
 
 (defn evaluated? [x]
   (cond
@@ -16,36 +17,32 @@
 ;;;;; Application
 
 (defn apply-μ [app]
-  (let [μ    (head app)
-        args (tail app)]
-    (env/μ-bind μ args)))
+  (let [μ (:head app)]
+    (env/bind (:body μ) (:name μ) μ (:params μ) (env/pin (:tail app) *env*))))
 
 (defn apply-primitive [app]
-  (let [h    (head app)
-        args (walk (tail app))
-        ex   (env/extract args)]
+  (let [h    (:head app)
+        args (walk (:tail app))]
     (trace! "pcall" h args)
     ;; REVIEW: This assumes that all primitives take a list as args.
     ;; That seems innocuous, but what are the ramifications?
-    (if (and (ast/list? args) ((:check h) (env/extract args)))
+    (if (and (ast/list? args) ((:check h) args))
       ((:fn h) args)
-      (env/carry-env (ast/application h args) app))))
+      (ast/application h args))))
 
 (defn apply-error [app]
   (throw (RuntimeException.
-          (str (head app) " is not applicable, but was called with " (tail app)
+          (str (:head app) " is not applicable, but was called with " (:tail app)
                "\n" (debug/provenance app)))))
 
 (defn apply-head [app]
-  (env/carry-env (ast/application (walk (head app)) (tail app))
-    app))
+  (ast/application (walk (:head app)) (:tail app)))
 
 ;;;;; Eval
 
 (defn eval-symbol [im]
-  (let [s   (form im)
-        env (env/get-env s)]
-    (if-let [ref (env/embedded-lookup env s)]
+  (let [s (:form im)]
+    (if-let [ref (env/lookup *env* s)]
       (do
         (trace! "Resolved" s ":" ref)
         ref)
@@ -54,40 +51,30 @@
         im))))
 
 (defn eval-list [im]
-  (env/map-list ast/immediate (form im)))
+  (ast/list (map ast/immediate (:form im))))
 
 (defn eval-pair [im]
-  (let [p (form im)]
-    (env/carry-env (ast/application (ast/immediate (head p)) (tail p)) p)))
+  (let [p (:form im)]
+    (ast/application (ast/immediate (:head p)) (:tail p))))
 
 (defn eval-step [im]
-  (env/carry-env (ast/immediate (walk (form im))) (form im)))
+  (ast/immediate (walk (:form im))))
 
 ;;;;; Reduction
 
-(defn clear-sym [env sym?]
-  (if (ast/symbol? sym?)
-    (env/clear env sym?)
-    env))
-
-(defn μ-declare [name params body]
-  (env/with-env body
-    (-> body env/get-env (clear-sym name) (clear-sym params))))
-
 (defn reduce-μ [μ]
-  (let [n    (when-let [n (name μ)] (walk n))
-        p    (walk (params μ))
-        b    (body μ)]
-    (ast/μ n p (walk (μ-declare n p b)))))
+  (let [n (when-let [n (:name μ)] (walk n))
+        p (walk (:params μ))]
+    (ast/μ n p (walk (env/declare (:body μ) n p)))))
 
 (defn reduce-emit [e]
   ;; If we had a predicate that asked "is `kvs` fully realised?" then we
   ;; wouldn't need this at all. I'm just not sure how to write that predicate,
   ;; and this seems simple enough that I don't need to worry about it.
-  (env/carry-env (ast/emission (walk (kvs e))) (kvs e)))
+  (ast/emission (walk (:kvs e))))
 
 (defn reduce-list [l]
-  (env/map-list walk l))
+  (ast/list (map walk l)))
 
 ;;;;; Tree walker
 
@@ -98,7 +85,7 @@
    [:I :I] eval-step
    [:I :A] eval-step
 
-   :I form        ; (I V) => V. values are fixed points of eval.
+   :I :form       ; (I V) => V. values are fixed points of eval.
 
    :L reduce-list ; Most structures are values, with these exceptions.
    :μ reduce-μ    ; TODO: Drop `reduce`. It's too common a term to override.
@@ -124,8 +111,8 @@
 
 (defn step [x]
   (cond
-    (instance? janus.ast.Immediate x)   (form x)
-    (instance? janus.ast.Application x) (head x)
+    (instance? janus.ast.Immediate x)   (:form x)
+    (instance? janus.ast.Application x) (:head x)
     true                                nil))
 
 (defn rule-match [sexp]
@@ -140,8 +127,8 @@
 
 (defn trace-env [sexp]
   (merge
-   (into {} (map (fn [x] [x :unbound]) (env/symbols sexp)))
-   (env/names (env/get-env sexp))))
+   (into {} (map (fn [x] [x :unbound]) (ast/symbols sexp)))
+   (env/names *env*)))
 
 (defn walk* [sexp]
   (let [[rule f] (rule-match sexp)]
@@ -152,11 +139,22 @@
 
 (def walk** (memoize walk*))
 
-(defn walk [sexp]
-  (let [[rule v] (walk** sexp)]
-    (if (= v sexp)
-        sexp
-        (recur (debug/with-provenance v {:rule rule :predecessor sexp})))))
+(defn walk
+  ([env sexp]
+   (binding [*env* env]
+     (walk sexp)))
+  ([sexp]
+   (if (env/switch? sexp)
+     ;; Deal with context switches here rather than in rules.
+     (let [result (binding [*env* (env/merge-env (:env sexp) *env*)]
+                    (walk (debug/tag (:form sexp) :c sexp)))]
+       (env/rewrap result sexp))
+     (let [[rule v] (walk** sexp)]
+       (if (= v sexp)
+         ;; Caller never cares about the env as such.
+         sexp
+         ;; We never change the env unless we hit a context switch.
+         (recur (debug/tag v rule sexp)))))))
 
 ;;;;; Builtins
 
@@ -165,21 +163,17 @@
     2 (ast/symbol? (first args))
     3 (and (ast/symbol? (first args)) (ast/symbol? (second args)))))
 
-(defn μ [l]
-  (let [args               (env/extract l)
-        [name params body] (case (count args)
+(defn μ [args]
+  (let [[name params body] (case (count args)
                              3 args
                              2 `[nil ~@args])]
-    (env/carry-env (ast/μ name params (μ-declare name params body)) l)))
+    (ast/μ name params (env/declare body name params))))
 
-(defn emit [l]
-  (let [kvs (env/extract l)]
-    (assert (even? (count kvs)))
-    (env/carry-env
-      (ast/emission
-       (ast/list (map (fn [[k v]] (ast/list [(ast/immediate k) v]))
-                      (partition 2 kvs))))
-      l)))
+(defn emit [kvs]
+  (assert (even? (count kvs)))
+  (ast/emission
+   (ast/list (map (fn [[k v]] (ast/list [(ast/immediate k) v]))
+                  (partition 2 kvs)))))
 
 (defn check-select [args]
   (boolean? (nth args 0)))

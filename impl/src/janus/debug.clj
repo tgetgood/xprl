@@ -13,3 +13,6 @@
   (if (and p (instance? clojure.lang.IMeta x))
     (with-meta x (assoc (meta x) ::provenance p))
     x))
+
+(defn tag [val rule predecessor]
+  (with-provenance val {:rule rule :predecessor predecessor}))
