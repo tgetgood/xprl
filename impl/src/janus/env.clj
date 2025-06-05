@@ -97,8 +97,4 @@
   (instance? janus.env.ContextSwitch x))
 
 (defn rewrap [form ctx]
-  ;; context free forms (values?) don't need to carry environment info around.
-  ;; REVIEW: Do I want to add this complexity? do I gain anything from it?
-  (if (ast/contextual? form)
-    (assoc ctx :form form)
-    form))
+  (assoc ctx :form form))

@@ -58,20 +58,19 @@
     (ast/application (ast/immediate (:head p)) (:tail p))))
 
 (defn eval-step [im]
-  (ast/immediate (walk (:form im))))
+  (update im :form walk)
+  #_(ast/immediate (walk (:form im))))
 
 ;;;;; Reduction
 
 (defn reduce-μ [μ]
-  (let [n (when-let [n (:name μ)] (walk n))
-        p (walk (:params μ))]
-    (ast/μ n p (walk (env/declare (:body μ) n p)))))
+  (update μ :body walk))
 
 (defn reduce-emit [e]
   ;; If we had a predicate that asked "is `kvs` fully realised?" then we
   ;; wouldn't need this at all. I'm just not sure how to write that predicate,
   ;; and this seems simple enough that I don't need to worry about it.
-  (ast/emission (walk (:kvs e))))
+  (update e :kvs walk))
 
 (defn reduce-list [l]
   (ast/list (map walk l)))

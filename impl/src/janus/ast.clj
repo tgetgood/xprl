@@ -22,9 +22,6 @@
   Object
   (symbols [_] #{}))
 
-(defn contextual? [x]
-  (instance? janus.ast.Contextual x))
-
 ;;;;; AST
 
 (defrecord ContextSwitch [form env]
