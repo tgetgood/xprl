@@ -146,7 +146,7 @@
   ([sexp]
    (if (env/switch? sexp)
      ;; Deal with context switches here rather than in rules.
-     (let [result (binding [*env* (env/merge-env (:env sexp) *env*)]
+     (let [result (binding [*env* (env/merge-env sexp *env*)]
                     (walk (debug/tag (:form sexp) :c sexp)))]
        (env/rewrap result sexp))
      (let [[rule v] (walk** sexp)]

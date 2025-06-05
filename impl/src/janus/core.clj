@@ -63,7 +63,7 @@
 
 
 (def base-env
-  (reduce (fn [e [k v]] (env/bind e k v)) env/empty-ns (merge special fns)))
+  (reduce (fn [e [k v]] (env/bind* e k v)) env/empty-ns (merge special fns)))
 
 (def the-env (atom base-env))
 
@@ -92,7 +92,7 @@
 (defn loadfile [envatom fname]
   (let [conts {(ast/xkeys :env)    (fn [l]
                                      (let [[sym value] l]
-                                       (swap! envatom env/bind sym value)))
+                                       (swap! envatom env/bind* sym value)))
                (ast/xkeys :return) #(throw
                                      (RuntimeException. "return to top level!"))
                (ast/xkeys :error)  (fn [x]
@@ -122,7 +122,7 @@
 (defn test []
   (let [conts {(ast/xkeys :env) (fn [l]
                                   (let [[sym value] l]
-                                    (swap! the-env env/bind sym value)))}]
+                                    (swap! the-env env/bind* sym value)))}]
     (loop [reader (r/file-reader testxprl)]
       (let [reader (r/read reader)
             form1  (:form reader)
