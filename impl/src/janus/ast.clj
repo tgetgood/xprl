@@ -12,15 +12,27 @@
 
 ;;;;; Context
 
-(defprotocol Contextual
-  (symbols [this]))
+(defprotocol Contextual)
 
 (extend-protocol Contextual
+  clojure.lang.PersistentVector)
+
+(defprotocol Symbolic
+  (symbols [this]))
+
+(extend-protocol Symbolic
   nil
   (symbols [_] #{})
 
+  clojure.lang.PersistentVector
+  (symbols [xs]
+    (into #{} (mapcat symbols) xs))
+
   Object
   (symbols [_] #{}))
+
+(defn contextual? [x]
+  (satisfies? Contextual x))
 
 ;;;;; AST
 
@@ -59,6 +71,7 @@
 
 (defrecord Symbol [names]
   Contextual
+  Symbolic
   (symbols [this] #{this})
   Object
   (toString [_]
@@ -82,6 +95,7 @@
 
 (defrecord Pair [head tail]
   Contextual
+  Symbolic
   (symbols [_] (set/union (symbols head) (symbols tail)))
   Object
   (toString [_]
@@ -97,6 +111,7 @@
 
 (defrecord Immediate [form]
   Contextual
+  Symbolic
   (symbols [_] (symbols form))
   Object
   (toString [_]
@@ -108,6 +123,7 @@
 
 (defrecord Application [head tail]
   Contextual
+  Symbolic
   (symbols [_] (set/union (symbols head) (symbols tail)))
   Object
   (toString [_]
@@ -119,6 +135,7 @@
 
 (defrecord Mu [name params body]
   Contextual
+  Symbolic
   ;; This is unintuitive, but we only look at the body because it ~might not~
   ;; refer to the name and formal param of the μ.
   (symbols [_] (symbols body))
@@ -161,6 +178,7 @@
 
 (defrecord Nu [name params body]
   Contextual
+  Symbolic
   Object
   (toString [_]
     (str "(#ν " params " " body ")")))
@@ -168,6 +186,7 @@
 
 (defrecord Emission [kvs]
   Contextual
+  Symbolic
   (symbols [_] (symbols kvs))
   Object
   (toString [_]

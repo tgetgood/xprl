@@ -28,7 +28,7 @@
     ;; That seems innocuous, but what are the ramifications?
     (if (and (ast/list? args) ((:check h) args))
       ((:fn h) args)
-      (ast/application h args))))
+      (ast/application h (env/pin args *env*)))))
 
 (defn apply-error [app]
   (throw (RuntimeException.
@@ -125,11 +125,12 @@
       [t1 identity])))
 
 (defn trace-env [sexp]
-  (merge
-   (into {} (map (fn [x] [x :unbound]) (ast/symbols sexp)))
-   (env/names *env*)))
+  (let [syms (ast/symbols sexp)]
+    (merge
+     (into {} (map (fn [x] [x :unbound]) syms))
+     (into {} (filter #(contains? syms (key %))) (env/names *env*)))))
 
-(defn walk* [sexp]
+(defn walk* [env sexp]
   (let [[rule f] (rule-match sexp)]
     (trace! "rule match:" rule sexp "\n  env:" (trace-env sexp))
     (let [v (f sexp)]
