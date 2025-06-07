@@ -12,6 +12,7 @@
   (cond
     (instance? janus.ast.Immediate x)   false
     (instance? janus.ast.Application x) false
+    (env/switch? x)                     (recur (:form x))
     true                                true))
 
 ;;;;; Application
@@ -26,9 +27,9 @@
     (trace! "pcall" h args)
     ;; REVIEW: This assumes that all primitives take a list as args.
     ;; That seems innocuous, but what are the ramifications?
-    (if (and (ast/list? args) ((:check h) args))
-      ((:fn h) args)
-      (ast/application h (env/pin args *env*)))))
+    (if (and (evaluated? args) ((:check h) args))
+      ((:fn h) (env/list-expand args))
+      (ast/application h args))))
 
 (defn apply-error [app]
   (throw (RuntimeException.
@@ -146,14 +147,12 @@
   ([sexp]
    (if (env/switch? sexp)
      ;; Deal with context switches here rather than in rules.
-     (let [result (binding [*env* (env/merge-env sexp *env*)]
-                    (trace! "switch:" (:ctx sexp))
-                    (walk (debug/tag (:form sexp) :C sexp)))]
-       result)
+     (binding [*env* (env/merge-env sexp *env*)]
+       (trace! "switch:" (:ctx sexp))
+       (walk (debug/tag (:form sexp) :C sexp)))
      (let [[rule v] (walk* *env* sexp)]
        (if (= v sexp)
-         ;; Caller never cares about the env as such.
-         sexp
+         (env/pin sexp *env*)
          ;; We never change the env unless we hit a context switch.
          (recur (debug/tag v rule sexp)))))))
 

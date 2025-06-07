@@ -49,7 +49,13 @@
   (satisfies? ContextSwitch x))
 
 (defrecord EnvWrapper [form ctx]
+  Object
+  (toString [_]
+    (str form))
   janus.ast.Contextual
+  janus.ast.Symbolic
+  (symbols [_]
+    (ast/symbols form))
   ContextSwitch
   (merge-env [_ outer]
     (reduce (fn [e s]
@@ -62,16 +68,32 @@
   ;; If a message is being sent from beneath a declaration node, then the
   ;; receiver must be beneath the *same* declaration node. This preserves
   ;; reference to unknowns.
+  Object
+  (toString [_]
+    (str form))
   janus.ast.Contextual
+  janus.ast.Symbolic
+  (symbols [_]
+    (ast/symbols form))
   ContextSwitch
   (merge-env [_ outer]
     (reduce declare* outer (decls ctx))))
 
 (defrecord Binding [form ctx]
+  Object
+  (toString [_]
+    (str form))
   janus.ast.Contextual
+  janus.ast.Symbolic
+  (symbols [_]
+    (ast/symbols form))
   ContextSwitch
   (merge-env [_ outer]
     (reduce (fn [acc [s v]] (bind* acc s v)) outer (names ctx))))
+
+(ast/ps EnvWrapper)
+(ast/ps Declaration)
+(ast/ps Binding)
 
 (defn pin [body env]
   (if (ast/contextual? body)
@@ -93,3 +115,18 @@
   (if (ast/contextual? form)
     (assoc ctx :form form)
     form))
+
+
+(defn wrapped-list? [x]
+  (cond
+    (ast/list? x) true
+    (switch? x)   (recur (:form x))
+    true          false))
+
+(defn list-expand [xs]
+  (cond
+    (ast/list? xs) xs
+    (switch? xs)   (ast/list (map #(rewrap % xs) (list-expand (:form xs))))))
+
+(defn expand [form]
+  ())

@@ -33,7 +33,8 @@
     }))
 
 (defn nth* [c i]
-  (nth c (dec i)))
+  (println (i/evaluated? c) i)
+  (nth (env/list-expand c) (dec i)))
 
 (defn rest* [xs]
   (into [] (rest xs)))
