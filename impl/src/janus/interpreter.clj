@@ -6,30 +6,31 @@
    [janus.debug :as debug :refer [trace!]]))
 
 (declare walk)
-(def ^:dynamic *env*)
 
 (defn evaluated? [x]
   (cond
     (instance? janus.ast.Immediate x)   false
     (instance? janus.ast.Application x) false
-    (env/switch? x)                     (recur (:form x))
     true                                true))
 
 ;;;;; Application
 
 (defn apply-μ [app]
   (let [μ (:head app)]
-    (env/bind (:body μ) (:name μ) μ (:params μ) (env/pin (:tail app) *env*))))
+    (env/bind (:body μ) (:name μ) μ (:params μ) (:tail app))))
 
 (defn apply-primitive [app]
   (let [h    (:head app)
-        args (walk (:tail app))]
-    (trace! "pcall" h args)
+        tail (walk (:tail app))]
+    (trace! "pcall" h tail (evaluated? tail))
     ;; REVIEW: This assumes that all primitives take a list as args.
     ;; That seems innocuous, but what are the ramifications?
-    (if (and (evaluated? args) ((:check h) args))
-      ((:fn h) (env/list-expand args))
-      (ast/application h args))))
+    (if (evaluated? tail)
+      (let [args (env/list-expand tail)]
+        (if ((:check h) args)
+          ((:fn h) args)
+          (ast/application h args)))
+      (ast/application h tail))))
 
 (defn apply-error [app]
   (throw (RuntimeException.
@@ -43,7 +44,7 @@
 
 (defn eval-symbol [im]
   (let [s (:form im)]
-    (if-let [ref (env/lookup *env* s)]
+    (if-let [ref (env/lookup s)]
       (do
         (trace! "Resolved" s ":" ref)
         ref)
@@ -84,6 +85,7 @@
    [:I :L] eval-list   ; (I (L x y ...)) => (L (I x) (I y) ...)
    [:I :I] eval-step
    [:I :A] eval-step
+   [:I :C] eval-step
 
    :I :form       ; (I V) => V. values are fixed points of eval.
 
@@ -93,6 +95,7 @@
 
    [:A :I] apply-head ; (A head tail) => (A (walk head) tail)
    [:A :A] apply-head ;   iff `head` is unevaluated.
+   [:A :C] apply-head
 
    ;; An emission which includes a message to :return can trigger off the
    ;; application. But the connection logic isn't sophisticated enough for this
@@ -102,7 +105,11 @@
    [:A :F] apply-primitive ; Two kinds of operators are built in.
    [:A :μ] apply-μ         ; I think that's sufficient. I might be wrong.
 
-   :A apply-error}) ; REVIEW: Should application be extensible?
+   :A apply-error ; REVIEW: Should application be extensible?
+
+   [:C :C] env/merge-env
+   :C      env/pack
+   })
 
 (def rule-tree
   (reduce (fn [acc [k v]]
@@ -116,10 +123,10 @@
     true                                nil))
 
 (defn rule-match [sexp]
-  (let [t1 (ast/type sexp)]
+  (let [t1 (env/type sexp)]
     (if-let [subtree (get rule-tree t1)]
       (let [subexp (step sexp)
-            t2 (ast/type subexp)]
+            t2 (env/type subexp)]
         (if-let [subsubtree (get subtree t2)]
           [[t1 t2] (:fn subsubtree)]
           [t1 (:fn subtree)]))
@@ -129,41 +136,38 @@
   (let [syms (ast/symbols sexp)]
     (merge
      (into {} (map (fn [x] [x :unbound]) syms))
-     (into {} (filter #(contains? syms (key %))) (env/names *env*)))))
+     #_(into {} (filter #(contains? syms (key %))) (env/names env)))))
 
-(defn walk* [env sexp]
+(defn walk* [sexp]
   (let [[rule f] (rule-match sexp)]
     (trace! "rule match:" rule sexp "\n  env:" (trace-env sexp))
     (let [v (f sexp)]
-      (trace! "result:" rule "\n" sexp "\n->\n" v )
+      (trace! "result:" rule "\n" sexp "\n->\n" v)
       [rule v])))
 
 (def walk** (memoize walk*))
 
 (defn walk
   ([env sexp]
-   (binding [*env* env]
-     (walk sexp)))
+   (walk (env/pin sexp env)))
   ([sexp]
-   (if (env/switch? sexp)
-     ;; Deal with context switches here rather than in rules.
-     (binding [*env* (env/merge-env sexp *env*)]
-       (trace! "switch:" (:ctx sexp))
-       (walk (debug/tag (:form sexp) :C sexp)))
-     (let [[rule v] (walk* *env* sexp)]
-       (if (= v sexp)
-         (env/pin sexp *env*)
-         ;; We never change the env unless we hit a context switch.
-         (recur (debug/tag v rule sexp)))))))
+   (let [[rule v] (walk* sexp)]
+     (if (= v sexp)
+       sexp
+       ;; We never change the env unless we hit a context switch.
+       (recur (debug/tag v rule sexp))))))
 
 ;;;;; Builtins
 
 (defn μ-ready? [args]
-  (case (count args)
-    2 (ast/symbol? (first args))
-    3 (and (ast/symbol? (first args)) (ast/symbol? (second args)))))
+  (let [args (env/base args)]
+    (case (count args)
+      2 (ast/symbol? (env/base (first args)))
+      3 (and (ast/symbol? (env/base (first args)))
+             (ast/symbol? (env/base (second args)))))))
 
 (defn μ [args]
+  (trace! "createμ")
   (let [[name params body] (case (count args)
                              3 args
                              2 `[nil ~@args])]
@@ -176,7 +180,7 @@
                   (partition 2 kvs)))))
 
 (defn check-select [args]
-  (boolean? (nth args 0)))
+  (boolean? (env/base (nth (env/base args) 0))))
 
 (defn select [[p t f]]
   ;; `t` & `f` have already been walked, so we've nothing to do but pick one.

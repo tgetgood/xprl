@@ -45,13 +45,10 @@
 (defprotocol ContextSwitch
   (merge-env [inner outer]))
 
-(defn switch? [x]
-  (satisfies? ContextSwitch x))
-
-(defrecord EnvWrapper [form ctx]
+(defrecord CarriedEnvironment [form ctx]
   Object
   (toString [_]
-    (str form))
+    (str "#C::" form))
   janus.ast.Contextual
   janus.ast.Symbolic
   (symbols [_]
@@ -64,44 +61,54 @@
                 e))
             ctx (decls ctx))))
 
-(defrecord Declaration [form ctx]
+(defrecord Declaration [form syms]
+  Object
+  (toString [_]
+    (str "#B::" form))
+  janus.ast.Contextual
+  janus.ast.Symbolic
+  (symbols [_]
+    (ast/symbols form))
+  ContextSwitch
+  (merge-env [_ outer]
+)))
+
+(defrecord Binding [form bindings]
   ;; If a message is being sent from beneath a declaration node, then the
   ;; receiver must be beneath the *same* declaration node. This preserves
   ;; reference to unknowns.
   Object
   (toString [_]
-    (str form))
+    (str "#B::" form))
   janus.ast.Contextual
   janus.ast.Symbolic
   (symbols [_]
     (ast/symbols form))
   ContextSwitch
   (merge-env [_ outer]
-    (reduce declare* outer (decls ctx))))
+))
 
-(defrecord Binding [form ctx]
+(defrecord ResolvedSymbol [sym binding extra-bindings]
   Object
   (toString [_]
-    (str form))
+    (str sym "{=" binding "}"))
+
   janus.ast.Contextual
   janus.ast.Symbolic
   (symbols [_]
-    (ast/symbols form))
-  ContextSwitch
-  (merge-env [_ outer]
-    (reduce (fn [acc [s v]] (bind* acc s v)) outer (names ctx))))
+    #{sym}))
 
-(ast/ps EnvWrapper)
-(ast/ps Declaration)
+(ast/ps CarriedEnvironment)
 (ast/ps Binding)
+(ast/ps ResolvedSymbol)
 
 (defn pin [body env]
   (if (ast/contextual? body)
-    (->EnvWrapper body env)
+    (->CarriedEnvironment body env)
     body))
 
 (defn declare [body & syms]
-  (->Declaration body (reduce declare* empty-ns syms)))
+  (->Binding body (reduce declare* empty-ns syms)))
 
 (defn bind [form & bindings]
   ;; (assert (instance? janus.env.Declaration form) form)
@@ -111,11 +118,15 @@
       form
       (->Binding form env))))
 
-(defn rewrap [form ctx]
-  (if (ast/contextual? form)
-    (assoc ctx :form form)
-    form))
+(def type-table
+  ;; REVIEW: This is an odd form of polymorphism...
+  {CarriedEnvironment :C
+   Binding            :C
+   ResolvedSymbol     :S})
 
+(defn type [x]
+  (let [t (type x)]
+    (get type-table t (get ast/type-table t))))
 
 (defn wrapped-list? [x]
   (cond
@@ -126,7 +137,11 @@
 (defn list-expand [xs]
   (cond
     (ast/list? xs) xs
-    (switch? xs)   (ast/list (map #(rewrap % xs) (list-expand (:form xs))))))
+    (switch? xs)   (ast/list (map #(rewrap % xs) (list-expand (:form xs))))
+    true           (throw (RuntimeException. (str xs " is not a list!")))))
 
-(defn expand [form]
-  ())
+(defn pack [x]
+  (if (switch? x)
+    (cond
+      (switch? (:form x)) (pack ()))
+    x))
