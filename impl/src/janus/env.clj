@@ -108,20 +108,16 @@
     body))
 
 (defn declare [body & syms]
-  (->Binding body (reduce declare* empty-ns syms)))
+  (->Declaration body (into #{} (filter ast/symbol?) syms)))
 
 (defn bind [form & bindings]
-  ;; (assert (instance? janus.env.Declaration form) form)
-  (let [env (reduce (fn [env [sym val]] (if (nil? sym) env (bind* env sym val)))
-                    empty-ns (partition 2 bindings))]
-    (if (= env empty-ns)
-      form
-      (->Binding form env))))
+  (->Binding form (into {} (filter #(ast/symbol? (key %))) (partition 2 bindings))))
 
 (def type-table
   ;; REVIEW: This is an odd form of polymorphism...
   {CarriedEnvironment :C
    Binding            :C
+   Declaration        :C
    ResolvedSymbol     :S})
 
 (defn type [x]
@@ -145,3 +141,10 @@
     (cond
       (switch? (:form x)) (pack ()))
     x))
+
+(defn peel
+  "Removes ns nodes recursively until we reach an ast node."
+  [f]
+  (if (ctx? f)
+    (recur (:form f))
+    f))

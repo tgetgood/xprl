@@ -5,7 +5,7 @@
    [janus.env :as env]
    [janus.debug :as debug :refer [trace!]]))
 
-(declare walk)
+(declare walk walk1)
 
 (defn evaluated? [x]
   (cond
@@ -19,10 +19,13 @@
   (let [μ (:head app)]
     (env/bind (:body μ) (:name μ) μ (:params μ) (:tail app))))
 
+(defn apply-macro [app]
+  ;; Pass the entire Application in so that we can delay.
+  ((:f (:head app)) app))
+
 (defn apply-primitive [app]
   (let [h    (:head app)
         tail (walk (:tail app))]
-    (trace! "pcall" h tail (evaluated? tail))
     ;; REVIEW: This assumes that all primitives take a list as args.
     ;; That seems innocuous, but what are the ramifications?
     (if (evaluated? tail)
@@ -60,8 +63,7 @@
     (ast/application (ast/immediate (:head p)) (:tail p))))
 
 (defn eval-step [im]
-  (update im :form walk)
-  #_(ast/immediate (walk (:form im))))
+  (update im :form walk))
 
 ;;;;; Reduction
 
@@ -80,8 +82,7 @@
 ;;;;; Tree walker
 
 (def rules
-  {[:I :S] eval-symbol ; aka lookup in environment
-   [:I :P] eval-pair   ; (I (P x y)) => (A (I x) y)
+  {[:I :P] eval-pair   ; (I (P x y)) => (A (I x) y)
    [:I :L] eval-list   ; (I (L x y ...)) => (L (I x) (I y) ...)
    [:I :I] eval-step
    [:I :A] eval-step
@@ -102,14 +103,18 @@
    ;; yet.
    ;; [:A :E] apply-emit
 
+   [:A :M] apply-macro
    [:A :F] apply-primitive ; Two kinds of operators are built in.
    [:A :μ] apply-μ         ; I think that's sufficient. I might be wrong.
 
    :A apply-error ; REVIEW: Should application be extensible?
 
-   [:C :C] env/merge-env
-   :C      env/pack
-   })
+   [:I :S] env/resolve ; lookup symbol in environment
+
+   ;; REVIEW: It's nice to split the env logic out into its own module, but we
+   ;; also need to generalise and split out the driving logic so as not to worry
+   ;; about diversions.
+   :C env/walk})
 
 (def rule-tree
   (reduce (fn [acc [k v]]
@@ -145,13 +150,13 @@
       (trace! "result:" rule "\n" sexp "\n->\n" v)
       [rule v])))
 
-(def walk** (memoize walk*))
+(def walk1 (memoize walk*))
 
 (defn walk
   ([env sexp]
    (walk (env/pin sexp env)))
   ([sexp]
-   (let [[rule v] (walk* sexp)]
+   (let [[rule v] (walk1 sexp)]
      (if (= v sexp)
        sexp
        ;; We never change the env unless we hit a context switch.
@@ -159,19 +164,23 @@
 
 ;;;;; Builtins
 
-(defn μ-ready? [args]
-  (let [args (env/base args)]
-    (case (count args)
-      2 (ast/symbol? (env/base (first args)))
-      3 (and (ast/symbol? (env/base (first args)))
-             (ast/symbol? (env/base (second args)))))))
-
-(defn μ [args]
-  (trace! "createμ")
-  (let [[name params body] (case (count args)
-                             3 args
-                             2 `[nil ~@args])]
-    (ast/μ name params (env/declare body name params))))
+(defn μ [app]
+  (let [tail (:tail app)
+        args (if (evaluated? tail) tail (walk1 tail))]
+    (if (not (evaluated? args))
+      (assoc app :tail args)
+      (let [[name params body] (case (count args)
+                                 3 args
+                                 2 `[nil ~@args])
+            [name params body] (if (ast/symbol params)
+                                 [name params body]
+                                 ;; REVIEW: Should these all be walk1?
+                                 ;; We'd need repeat until fixedpoint logic.
+                                 [(walk name) (walk params) (walk1 body)])
+            psym (env/peel params)]
+        (if (ast/symbol? psym)
+          (ast/μ name psym (env/declare body name psym))
+          (assoc app :tail [name params body]))))))
 
 (defn emit [kvs]
   (assert (even? (count kvs)))

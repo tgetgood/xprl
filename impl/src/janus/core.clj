@@ -24,7 +24,7 @@
 (def special
   "Things that would traditionally be special forms."
   (macros
-   {"μ"      [i/μ-ready? #'i/μ]
+   {
     ;;   "ν"       createν
     "emit"   [(constantly true) #'i/emit]
     "select" [i/check-select #'i/select]
@@ -62,9 +62,13 @@
     "nth*"   #'nth* ; Base 1 indexing
     }))
 
+(def μ
+  "Creating a μ requires more control over evaluation than anything else in the
+  language (as of yet). "
+  {"μ" (with-meta (ast/macro #'i/μ) {:name "μ"})})
 
 (def base-env
-  (reduce (fn [e [k v]] (env/bind* e k v)) env/empty-ns (merge special fns)))
+  (reduce (fn [e [k v]] (env/bind* e k v)) env/empty-ns (merge special fns μ)))
 
 (def the-env (atom base-env))
 
