@@ -36,16 +36,6 @@
 
 ;;;;; AST
 
-(defrecord ContextSwitch [form env]
-  Object
-  (toString [_]
-    ;; FIXME: How do we display pinned environments?
-    (str form)))
-
-(defn cs? [x]
-  (instance? ContextSwitch x))
-
-
 (defn split-symbolic [s]
   (cond
     ;; REVIEW: The `.` syntax is too basic to allow it to be overridden, so `.`
@@ -108,6 +98,8 @@
 (defn pair [head tail]
   (->Pair head tail))
 
+(defn pair? [x]
+  (instance? Pair x))
 
 (defrecord Immediate [form]
   Contextual
@@ -120,6 +112,9 @@
 (defn immediate [form]
   (->Immediate form))
 
+(defn immediate? [x]
+  (instance? Immediate x))
+
 
 (defrecord Application [head tail]
   Contextual
@@ -131,6 +126,9 @@
 
 (defn application [head tail]
   (->Application head tail))
+
+(defn application? [x]
+  (instance? Application x))
 
 
 (defrecord Mu [name params body]
@@ -194,6 +192,9 @@
 
 (defn emission [kvs]
   (->Emission kvs))
+
+(defn emission? [x]
+  (instance? Emission x))
 
 ;;;;; Pretty Printing
 ;;

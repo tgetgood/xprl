@@ -1,10 +1,7 @@
 (ns janus.env
-  (:refer-clojure :exclude [name declare])
+  (:refer-clojure :exclude [declare resolve])
   (:require
-   [clojure.set :as set]
-   [janus.ast :as ast]
-   [janus.debug :refer [trace!]]))
-
+   [janus.ast :as ast]))
 
 (def empty-ns
   {:names {} :declarations #{} :outer {}})
@@ -71,7 +68,7 @@
     (ast/symbols form))
   ContextSwitch
   (merge-env [_ outer]
-)))
+    ))
 
 (defrecord Binding [form bindings]
   ;; If a message is being sent from beneath a declaration node, then the
@@ -88,17 +85,18 @@
   (merge-env [_ outer]
 ))
 
-(defrecord ResolvedSymbol [sym binding extra-bindings]
+(defrecord ResolvedSymbol [sym binding]
   Object
   (toString [_]
     (str sym "{=" binding "}"))
 
   janus.ast.Contextual
   janus.ast.Symbolic
-  (symbols [_]
-    #{sym}))
+  (symbols [this]
+    #{this}))
 
 (ast/ps CarriedEnvironment)
+(ast/ps Declaration)
 (ast/ps Binding)
 (ast/ps ResolvedSymbol)
 
@@ -118,29 +116,11 @@
   {CarriedEnvironment :C
    Binding            :C
    Declaration        :C
-   ResolvedSymbol     :S})
+   ResolvedSymbol     :R})
 
-(defn type [x]
-  (let [t (type x)]
-    (get type-table t (get ast/type-table t))))
 
-(defn wrapped-list? [x]
-  (cond
-    (ast/list? x) true
-    (switch? x)   (recur (:form x))
-    true          false))
-
-(defn list-expand [xs]
-  (cond
-    (ast/list? xs) xs
-    (switch? xs)   (ast/list (map #(rewrap % xs) (list-expand (:form xs))))
-    true           (throw (RuntimeException. (str xs " is not a list!")))))
-
-(defn pack [x]
-  (if (switch? x)
-    (cond
-      (switch? (:form x)) (pack ()))
-    x))
+(defn ctx? [x]
+  (satisfies? janus.env.ContextSwitch x))
 
 (defn peel
   "Removes ns nodes recursively until we reach an ast node."
@@ -148,3 +128,23 @@
   (if (ctx? f)
     (recur (:form f))
     f))
+
+(defn resolve [ctx])
+(defn reresolve [ctx])
+
+(defn asskeys [f ctx & keys]
+  (reduce (fn [f k] (assoc f k ctx)) f ctx))
+
+(defn pushall [ctx form]
+  (reduce (fn [acc [k v]] (assoc acc k (assoc ctx :form v))) form form))
+
+(defn push-down [ctx]
+  (let [inner (:form ctx)]
+    (cond
+      (ast/pair? inner)        (pushall ctx inner)
+      (ast/application? inner) (pushall ctx inner)
+      (ast/immediate? inner)   (pushall ctx inner)
+      (ast/emission? inner)    (pushall ctx inner)
+
+      (vector? inner) (mapv #(assoc ctx :form %) inner)
+      (ast/μ? inner)  (assoc inner :body (assoc ctx :form (:body inner))))))
