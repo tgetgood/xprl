@@ -39,8 +39,19 @@
 
 ;;;;; Contexts
 
+(defrecord ResolvedSymbol [symbol binding]
+  Object
+  (toString [_]
+    (str sym "{=" binding "}"))
+
+  janus.ast.Contextual
+  janus.ast.Symbolic
+  (symbols [this]
+    #{this}))
+
 (defprotocol ContextSwitch
-  (merge-env [inner outer]))
+  (resolve [this])
+  (reresolve [this]))
 
 (defrecord CarriedEnvironment [form ctx]
   Object
@@ -51,24 +62,11 @@
   (symbols [_]
     (ast/symbols form))
   ContextSwitch
-  (merge-env [_ outer]
-    (reduce (fn [e s]
-              (if (contains? (names outer) s)
-                (bind* e s (lookup outer s))
-                e))
-            ctx (decls ctx))))
-
-(defrecord Declaration [form syms]
-  Object
-  (toString [_]
-    (str "#B::" form))
-  janus.ast.Contextual
-  janus.ast.Symbolic
-  (symbols [_]
-    (ast/symbols form))
-  ContextSwitch
-  (merge-env [_ outer]
-    ))
+  (resovle [_]
+    (if-let [binding (lookup ctx form)]
+      (->ResolvedSymbol form binding)
+      form))
+  (reresolve [_] form))
 
 (defrecord Binding [form bindings]
   ;; If a message is being sent from beneath a declaration node, then the
@@ -82,18 +80,26 @@
   (symbols [_]
     (ast/symbols form))
   ContextSwitch
-  (merge-env [_ outer]
-))
+  (resolve [_]
+    (if-let [binding (get bindings form)]
+      (->ResolvedSymbol form binding)
+      form))
+  (reresolve [_] form))
 
-(defrecord ResolvedSymbol [sym binding]
+(defrecord Declaration [form syms]
   Object
   (toString [_]
-    (str sym "{=" binding "}"))
-
+    (str "#B::" form))
   janus.ast.Contextual
   janus.ast.Symbolic
-  (symbols [this]
-    #{this}))
+  (symbols [_]
+    (ast/symbols form))
+  ContextSwitch
+  (resolve [_] form)
+  (reresolve [_]
+    (if (contains? syms (:symbol form))
+      (:symbol form)
+      form)))
 
 (ast/ps CarriedEnvironment)
 (ast/ps Declaration)
@@ -118,7 +124,6 @@
    Declaration        :C
    ResolvedSymbol     :R})
 
-
 (defn ctx? [x]
   (satisfies? janus.env.ContextSwitch x))
 
@@ -128,9 +133,6 @@
   (if (ctx? f)
     (recur (:form f))
     f))
-
-(defn resolve [ctx])
-(defn reresolve [ctx])
 
 (defn asskeys [f ctx & keys]
   (reduce (fn [f k] (assoc f k ctx)) f ctx))
