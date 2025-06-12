@@ -3,8 +3,7 @@
   (:require
    [janus.ast :as ast]
    [janus.debug :as debug :refer [trace!]]
-   [janus.env :as env]
-   [janus.walker :as walker]))
+   [janus.env :as env]))
 
 (declare walk walk1)
 
@@ -122,12 +121,51 @@
    ;; about diversions.
    :C env/push-down})
 
-(def walk1
-  (walker/walk-step rules (merge ast/type-table env/type-table)))
+(def rule-tree
+  (reduce (fn [acc [k v]]
+            (assoc-in acc (if (vector? k) (conj k :fn) [k :fn]) v))
+          {} rules))
+
+(defn step [x]
+  (cond
+    (instance? janus.ast.Immediate x)   (:form x)
+    (instance? janus.ast.Application x) (:head x)
+    true                                nil))
+
+(defn type [x]
+  (let [t (clojure.core/type x)]
+    (get env/type-table t (get ast/type-table t :V))))
+
+(defn rule-match [sexp]
+  (let [t1 (type sexp)]
+    (if-let [subtree (get rule-tree t1)]
+      (let [subexp (step sexp)
+            t2 (type subexp)]
+        (if-let [subsubtree (get subtree t2)]
+          [[t1 t2] (:fn subsubtree)]
+          [t1 (:fn subtree)]))
+      [t1 identity])))
+
+(defn trace-env [sexp]
+  (ast/symbols sexp))
+
+(defn walk1 [sexp]
+  (let [[rule f] (rule-match sexp)]
+    (trace! "rule match:" rule sexp "\n  syms:" (trace-env sexp))
+    (let [v (f sexp)]
+      (trace! "result:" rule "\n" sexp "\n->\n" v)
+      [rule v])))
 
 ;; (def walk1 (memoize walk1))
 
-(def walk (partial walker/walk-to-fp walk1))
+(defn walk
+  ([env sexp]
+   (walk (env/pin sexp env)))
+  ([sexp]
+   (let [[rule v] (walk1 sexp)]
+     (if (= v sexp)
+       sexp
+       (recur (debug/tag v rule sexp))))))
 
 ;;;;; Builtins
 

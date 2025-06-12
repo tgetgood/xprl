@@ -1,7 +1,8 @@
 (ns janus.env
   (:refer-clojure :exclude [declare resolve])
   (:require
-   [janus.ast :as ast]))
+   [janus.ast :as ast]
+   [janus.debug :refer [trace!]]))
 
 (def empty-ns
   {:names {} :declarations #{} :outer {}})
@@ -42,7 +43,7 @@
 (defrecord ResolvedSymbol [symbol binding]
   Object
   (toString [_]
-    (str sym "{=" binding "}"))
+    (str symbol "{=" binding "}"))
 
   janus.ast.Contextual
   janus.ast.Symbolic
@@ -62,7 +63,8 @@
   (symbols [_]
     (ast/symbols form))
   ContextSwitch
-  (resovle [_]
+  (resolve [_]
+    (trace! "resolve" form (lookup ctx form))
     (if-let [binding (lookup ctx form)]
       (->ResolvedSymbol form binding)
       form))
@@ -142,6 +144,7 @@
 
 (defn push-down [ctx]
   (let [inner (:form ctx)]
+    (trace! "push" (type ctx) inner)
     (cond
       (ast/pair? inner)        (pushall ctx inner)
       (ast/application? inner) (pushall ctx inner)
