@@ -64,7 +64,6 @@
     (ast/symbols form))
   ContextSwitch
   (resolve [_]
-    (trace! "resolve" form (lookup ctx form))
     (if-let [binding (lookup ctx form)]
       (->ResolvedSymbol form binding)
       form))
@@ -152,4 +151,6 @@
       (ast/emission? inner)    (pushall ctx inner)
 
       (vector? inner) (mapv #(assoc ctx :form %) inner)
-      (ast/μ? inner)  (assoc inner :body (assoc ctx :form (:body inner))))))
+      (ast/μ? inner)  (assoc inner :body (assoc ctx :form (:body inner)))
+
+      true inner)))

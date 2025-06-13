@@ -42,15 +42,15 @@
 
 ;;;;; Eval
 
-(defn eval-symbol [im]
-  (let [s (:form im)]
-    (if-let [ref (env/lookup s)]
-      (do
-        (trace! "Resolved" s ":" ref)
-        ref)
-      (do
-        (trace! "Cannot resolve" s "postponing")
-        im))))
+;; (defn eval-symbol [im]
+;;   (let [s (:form im)]
+;;     (if-let [ref (env/lookup s)]
+;;       (do
+;;         (trace! "Resolved" s ":" ref)
+;;         ref)
+;;       (do
+;;         (trace! "Cannot resolve" s "postponing")
+;;         im))))
 
 (defn eval-list [im]
   (ast/list (map ast/immediate (:form im))))
@@ -108,8 +108,8 @@
 
    :A apply-error ; REVIEW: Should application be extensible?
 
-   [:I :S] identity ; unresolved symbols can't be evaluated
-   [:I :R] :binding ; resolved symbols store their referrent
+   [:I :S] identity              ; unresolved symbols can't be evaluated
+   [:I :R] (comp :binding :form) ; resolved symbols store their referrent
 
    [:C :S] env/resolve
    [:C :R] env/reresolve
@@ -130,6 +130,7 @@
   (cond
     (instance? janus.ast.Immediate x)   (:form x)
     (instance? janus.ast.Application x) (:head x)
+    (satisfies? env/ContextSwitch x)    (:form x)
     true                                nil))
 
 (defn type [x]
