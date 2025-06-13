@@ -33,7 +33,6 @@
     }))
 
 (defn nth* [c i]
-  (println (i/evaluated? c) i)
   (nth c (dec i)))
 
 (defn rest* [xs]

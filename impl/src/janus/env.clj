@@ -115,8 +115,8 @@
 (defn declare [body & syms]
   (->Declaration body (into #{} (filter ast/symbol?) syms)))
 
-(defn bind [form & bindings]
-  (->Binding form (into {} (filter #(ast/symbol? (key %))) (partition 2 bindings))))
+(defn bind [body & bindings]
+  (->Binding body (into {} (filter #(ast/symbol? (key %))) (partition 2 bindings))))
 
 (def type-table
   ;; REVIEW: This is an odd form of polymorphism...
@@ -126,7 +126,7 @@
    ResolvedSymbol     :R})
 
 (defn ctx? [x]
-  (satisfies? janus.env.ContextSwitch x))
+  (satisfies? ContextSwitch x))
 
 (defn peel
   "Removes ns nodes recursively until we reach an ast node."
@@ -135,15 +135,11 @@
     (recur (:form f))
     f))
 
-(defn asskeys [f ctx & keys]
-  (reduce (fn [f k] (assoc f k ctx)) f ctx))
-
 (defn pushall [ctx form]
   (reduce (fn [acc [k v]] (assoc acc k (assoc ctx :form v))) form form))
 
 (defn push-down [ctx]
   (let [inner (:form ctx)]
-    (trace! "push" (type ctx) inner)
     (cond
       (ast/pair? inner)        (pushall ctx inner)
       (ast/application? inner) (pushall ctx inner)

@@ -1,11 +1,10 @@
 (ns janus.interpreter
-  (:refer-clojure :exclude [name])
   (:require
    [janus.ast :as ast]
    [janus.debug :as debug :refer [trace!]]
    [janus.env :as env]))
 
-(declare walk walk1)
+(declare walk)
 
 (defn evaluated? [x]
   (cond
@@ -128,20 +127,20 @@
 
 (defn step [x]
   (cond
-    (instance? janus.ast.Immediate x)   (:form x)
-    (instance? janus.ast.Application x) (:head x)
-    (satisfies? env/ContextSwitch x)    (:form x)
-    true                                nil))
+    (ast/immediate? x)   (:form x)
+    (ast/application? x) (:head x)
+    (env/ctx? x)         (:form x)
+    true                 nil))
 
-(defn type [x]
-  (let [t (clojure.core/type x)]
+(defn node-type [x]
+  (let [t (type x)]
     (get env/type-table t (get ast/type-table t :V))))
 
 (defn rule-match [sexp]
-  (let [t1 (type sexp)]
+  (let [t1 (node-type sexp)]
     (if-let [subtree (get rule-tree t1)]
       (let [subexp (step sexp)
-            t2 (type subexp)]
+            t2 (node-type subexp)]
         (if-let [subsubtree (get subtree t2)]
           [[t1 t2] (:fn subsubtree)]
           [t1 (:fn subtree)]))
@@ -172,17 +171,17 @@
 
 (defn μ [app]
   (let [tail (:tail app)
-        args (if (evaluated? tail) tail (walk1 tail))]
+        args (if (evaluated? tail) tail (second (walk1 tail)))]
     (if (not (evaluated? args))
       (assoc app :tail args)
       (let [[name params body] (case (count args)
                                  3 args
                                  2 `[nil ~@args])
-            [name params body] (if (ast/symbol params)
+            [name params body] (if (ast/symbol? params)
                                  [name params body]
                                  ;; REVIEW: Should these all be walk1?
                                  ;; We'd need repeat until fixedpoint logic.
-                                 [(walk name) (walk params) (walk1 body)])
+                                 [(walk name) (walk params) (second (walk1 body))])
             psym (env/peel params)]
         (if (ast/symbol? psym)
           (ast/μ name psym (env/declare body name psym))

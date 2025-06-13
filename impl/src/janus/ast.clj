@@ -78,7 +78,7 @@
   l)
 
 (defn list [xs]
-  (vec xs))
+  (into [] xs))
 
 (defn list? [x]
   (vector?  x))
