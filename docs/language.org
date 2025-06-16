@@ -15,10 +15,10 @@ This is largely an aid to my own memory so bear with me.
 
   #+BEGIN_SRC clojure
     (def f (fn [x y] (+ x y)))
-    ;; => f
+    ;; ⇒ f
 
     (f 4 5)
-    ;; => 9
+    ;; ⇒ 9
 
     (if (< (f x y) 0) (g x) (h y))
   #+END_SRC
@@ -71,10 +71,10 @@ This is largely an aid to my own memory so bear with me.
 
    #+BEGIN_SRC clojure
      (def f (μ [x y] (+ x y)))
-     ;; => f
+     ;; ⇒ f
 
      (f 4 5)
-     ;; => (+ x y)
+     ;; ⇒ (+ x y)
 
      ;; which is an error because x and y aren't defined.
    #+END_SRC
@@ -106,20 +106,20 @@ This is largely an aid to my own memory so bear with me.
 
    #+BEGIN_SRC clojure
      (def f (μ [x y] (+ ~x ~y)))
-     ;; => f
+     ;; ⇒ f
 
      (f 4 5)
-     ;; => (+ 4 5)
+     ;; ⇒ (+ 4 5)
 
      ;; `~x` and `~y` can be evaluated as soon as `f` is called. Since they're
      ;; bound in the lexical environment of the body, eval reduces to lookup.
      ;; But remember that the output is not evaluated, so `f` returns an expression.
 
      (def g (μ [x y] ~(+ x y)))
-     ;; => g
+     ;; ⇒ g
 
      (g 4 5)
-     ;; => 9
+     ;; ⇒ 9
 
      ;; Note that this only works because `+` is defined so as to eval its
      ;; arguments before applying the underlying addition operation.
@@ -206,16 +206,16 @@ This is largely an aid to my own memory so bear with me.
    is senseless and would result in error.
 
    In a traditional lisp, we have
-   =(eval (f . tail))= => =(apply (eval f) (eval tail))=.
+   =(eval (f . tail))= ⇒ =(apply (eval f) (eval tail))=.
 
    But we aren't writing an applicative language, so we want something more
    like:
 
-   =(eval (f . tail))= => =(apply (eval f) tail)=
+   =(eval (f . tail))= ⇒ =(apply (eval f) tail)=
 
    Which is represented syntactically by our first rule:
 
-   =~(f . tail)= => =#(~f . tail)=
+   =~(f . tail)= ⇒ =#(~f . tail)=
 
    Thus ~(f x y) -> #(~f x y) which applies [x y] to whatever the symbol =f= is
    bound to. The μ to which f is bound, might in turn choose to evaluate
@@ -227,7 +227,7 @@ This is largely an aid to my own memory so bear with me.
 
    Let =μ= be bound to the primitive =#M[μ]= then we have
 
-   =~(μ params body)= => =#(#M[μ] params body)=
+   =~(μ params body)= ⇒ =#(#M[μ] params body)=
 
    which causes the underlying implementation of the primitive =μ= to be
    called with the tail of the application: =[params body]=.
@@ -251,7 +251,7 @@ This is largely an aid to my own memory so bear with me.
    If we let =(#μ params body)= represent an actual μ object with =params= and
    =body=, then we can write:
 
-   =#((#μ params body) . args)= =>
+   =#((#μ params body) . args)= ⇒
    =(extend-enviroment (destructuring-bind params args) body)=
 
    Note that =extend-environment= and =destructuring-bind= are
@@ -273,15 +273,15 @@ This is largely an aid to my own memory so bear with me.
 
    becomes Y with symbols occuring in X renamed to their bindings in Z.
 
-   In particular =#((#μ X Y) . ~X)= => =Y=. This actually comes up often as an
+   In particular =#((#μ X Y) . ~X)= ⇒ =Y=. This actually comes up often as an
    optimisation, so it's useful to recognise.
 
    Finally, eval distributes over lists, and literal values are fixed points to
    eval.
 
-   That is: =~V= => =V= if V is a literal value (number, string, bool, etc.)
+   That is: =~V= ⇒ =V= if V is a literal value (number, string, bool, etc.)
 
-   and: =~[X Y Z ...]= => =[~X ~Y ~Z ...]=
+   and: =~[X Y Z ...]= ⇒ =[~X ~Y ~Z ...]=
 
    N.B.: The interpreter is currently written to explicitly walk the ast and
    apply rules. the =core/rules= map defines the rules currently needed which is
@@ -295,19 +295,19 @@ This is largely an aid to my own memory so bear with me.
    An expression is considered "fully reduced" if it contains no immediate or
    application nodes.
 
-   1) ~(X . Y) <=> #(~X . Y)
-   2) #(#M[f] . tail) => always escapes to implementation
-   3) #(#F[f] . tail) => invokes foreign code iff tail is fully reduced.
-   4) #((#μ X Y) . Z) => Y in the current lexical env extended by {X Z}
+   1) ~(X . Y) ⇌ #(~X . Y)
+   2) #(#M[f] . tail) ⇒ always escapes to implementation
+   3) #(#F[f] . tail) ⇒ invokes foreign code iff tail is reduced.
+   4) #((#μ X Y) . Z) ⇒ Y in the current lexical env extended by {X Z}
       where {X Z} represents the destructured binding of X to Z
 
       The essentially says the ~X inside Y means Z.
-   5) #((#μ X Y) . ~Z) => Y with {X Z} as a renaming mask
+   5) #((#μ X Y) . ~Z) ⇒ Y with {X Z} as a renaming mask
       If ~X means ~Z then use of X stands for use of Z.
 
       The special case Z=X makes this a noop.
-   6) ~V <=> V whenever V is a literal value
-   7) ~[X Y ...] <=> [~X ~Y ...]
+   6) ~V ⇌ V whenever V is a literal value
+   7) ~[X Y ...] ⇌ [~X ~Y ...]
       Similar rules apply to maps and sets in the obvious fashion.
 
    Some of these rules are reversable, some are not because information is lost.
@@ -636,7 +636,7 @@ This is largely an aid to my own memory so bear with me.
         (first ((accumulate conj coll) in))))
 
     ((into []) ((comp (map inc) (filter even?)) [1 2 3 4 5]))
-    ; => [2 4 6]
+    ; ⇒ [2 4 6]
   #+END_SRC
 
   =accumulate= here returns a stream which will only ever realise one value. To
