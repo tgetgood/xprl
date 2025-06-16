@@ -70,12 +70,9 @@
   (reresolve [_] form))
 
 (defrecord Binding [form bindings]
-  ;; If a message is being sent from beneath a declaration node, then the
-  ;; receiver must be beneath the *same* declaration node. This preserves
-  ;; reference to unknowns.
   Object
   (toString [_]
-    (str "#B::" form))
+    (str "#B" (keys bindings) "::" form))
   janus.ast.Contextual
   janus.ast.Symbolic
   (symbols [_]
@@ -88,9 +85,12 @@
   (reresolve [_] form))
 
 (defrecord Declaration [form syms]
+  ;; If a message is being sent from beneath a declaration node, then the
+  ;; receiver must be beneath the *same* declaration node. This preserves
+  ;; reference to unknowns.
   Object
   (toString [_]
-    (str "#B::" form))
+    (str "#D" (seq syms) "::" form))
   janus.ast.Contextual
   janus.ast.Symbolic
   (symbols [_]
@@ -150,3 +150,41 @@
       (ast/μ? inner)  (assoc inner :body (assoc ctx :form (:body inner)))
 
       true inner)))
+
+(defn bind** [env [k v]]
+  (bind* env k v))
+
+(def merge-ctx-rules
+  {
+   ;; How could two full context switches stack up like this?
+   [:C :C] (constantly (assert false)) ; This should never occur... I think
+
+   ;; Once inside a context switch, bindings and declarations work normally.
+   [:C :D] #(pin (:form (:form %)) (declare* (:ctx %) (-> % :form :ctx :syms)))
+   [:C :B] (fn [{:keys [form ctx]}]
+             (pin (:form form) (reduce bind** ctx (:bindings (:ctx form)))))
+
+   ;; Declarations just stack up.
+   [:D :D] (fn [{:keys [ctx form]}]
+             (declare (:form form) (set/union (:syms ctx) (:syms (:ctx form)))))
+   ;; Declarations outside of a context switch do nothing
+   [:D :C] :form ; discard outer decls since syms can't occur in inner form.
+   ;; Declarations outside of a binding can't override bindings, but
+   ;; declarations of symbols not in the binding should propagate.
+   [:D :B] (fn [{:keys [form ctx]}]
+             (pin (:form form)
+                  (as-> empty-ns %
+                    (reduce declare* % (:syms ctx))
+                    (reduce bind** % (:bindings (:ctx form))))))
+
+   [:B :B] (fn [{:keys [ctx form]}]
+             (update-in form [:ctx :bindings] #(merge (:bindings ctx) %)))
+   ;; Bindings on the outside fill in declarations on the inside.
+   [:B :C] fill-decls
+
+   ;; FIXME: This is wrong. Binding on the outside should fill in declarations on the inside
+   [:B :D] (fn [{:keys [form ctx]}]
+             (pin (:form form)
+                  (as-> empty-ns %
+                    (reduce bind** % (:bindings form))
+                    (reduce declare* % (:syms (:ctx form))))))})

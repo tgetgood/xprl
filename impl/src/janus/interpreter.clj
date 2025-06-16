@@ -8,9 +8,10 @@
 
 (defn evaluated? [x]
   (cond
-    (instance? janus.ast.Immediate x)   false
-    (instance? janus.ast.Application x) false
-    true                                true))
+    (ast/immediate? x)   false
+    (ast/application? x) false
+    (env/ctx? x)         false
+    true                 true))
 
 ;;;;; Application
 
@@ -41,16 +42,6 @@
 
 ;;;;; Eval
 
-;; (defn eval-symbol [im]
-;;   (let [s (:form im)]
-;;     (if-let [ref (env/lookup s)]
-;;       (do
-;;         (trace! "Resolved" s ":" ref)
-;;         ref)
-;;       (do
-;;         (trace! "Cannot resolve" s "postponing")
-;;         im))))
-
 (defn eval-list [im]
   (ast/list (map ast/immediate (:form im))))
 
@@ -60,7 +51,7 @@
 
 ;;;;; Reduction
 
-(defn inside-out
+(defn eval-inner
   "Walk inner form first, then come back to `x`."
   [x]
   (update x :form walk))
@@ -82,9 +73,9 @@
 (def rules
   {[:I :P] eval-pair   ; (I (P x y)) => (A (I x) y)
    [:I :L] eval-list   ; (I (L x y ...)) => (L (I x) (I y) ...)
-   [:I :I] inside-out
-   [:I :A] inside-out
-   [:I :C] inside-out
+   [:I :I] eval-inner
+   [:I :A] eval-inner
+   [:I :C] eval-inner
 
    :I :form       ; (I V) => V. values are fixed points of eval.
 
@@ -113,7 +104,7 @@
    [:C :S] env/resolve
    [:C :R] env/reresolve
 
-   [:C :C] inside-out
+   [:C :C] env/merge-ctx
 
    ;; REVIEW: It's nice to split the env logic out into its own module, but we
    ;; also need to generalise and split out the driving logic so as not to worry
@@ -177,11 +168,13 @@
       (let [[name params body] (case (count args)
                                  3 args
                                  2 `[nil ~@args])
-            [name params body] (if (ast/symbol? params)
+            [name params body] (if (ast/symbol? (env/peel params))
                                  [name params body]
                                  ;; REVIEW: Should these all be walk1?
                                  ;; We'd need repeat until fixedpoint logic.
-                                 [(walk name) (walk params) (second (walk1 body))])
+                                 [(when name (walk name))
+                                  (walk params)
+                                  (second (walk1 body))])
             psym (env/peel params)]
         (if (ast/symbol? psym)
           (ast/μ name psym (env/declare body name psym))
