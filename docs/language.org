@@ -40,8 +40,8 @@ This is largely an aid to my own memory so bear with me.
    Lisp uses cons lists in two ways: 1) as lists of data, for which we'll just
    use vectors, and 2) as a syntax for invoking functions.
 
-   (f x y z) means eval the head (f), eval the tail (x y z), then apply the
-   latter to the former.
+   (f x y z) means eval the head =f=, eval (evlis) the tail =(x y z)=, then
+   apply the latter to the former.
 
    We will keep the (f x y z) syntax for calling functions, but instead of
    (cons f (cons x (cons y (cons z nil)))), we store it as (pair f [x y z]).
@@ -155,9 +155,9 @@ This is largely an aid to my own memory so bear with me.
    It may help to think of the body of a μ as quasiquoted, except that we can
    unquote as many times as we please.
 
-   That said, there is no quote, unquote, quasiquote, eval, nor apply defined in
-   the language — you can easily write them yourself, but please don't — so the
-   analogy is a bit weak.
+   That said, none of quote, unquote, quasiquote, eval, nor apply are defined as
+   operators in the language — you can easily write them yourself, but please
+   don't — so the analogy is a bit weak.
 ** An Exception
    One final note: I said above that there is *no* implicit evaluation. You've
    probably noticed in my examples that everything typed into the repl *is*
@@ -225,17 +225,17 @@ This is largely an aid to my own memory so bear with me.
    its possible to implement μ in this language, so we need an escape hatch
    which I've taken to calling primitive macros.
 
-   Let =μ= be bound to the primitive =#Pmac[createμ]= then we have
+   Let =μ= be bound to the primitive =#M[μ]= then we have
 
-   =~(μ params body)= => =#(#Pmac[createμ] params body)=
+   =~(μ params body)= => =#(#M[μ] params body)=
 
-   which causes the underlying implementation of the primitive =createμ= to be
+   which causes the underlying implementation of the primitive =μ= to be
    called with the tail of the application: =[params body]=.
 
    It's up to a primitive macro to continue the evaluation appropriately, which
-   makes them very brittle. As of yet I very few of them. They're all related to
-   creating and manipulating structures which are outside of the scope of the
-   syntax..
+   makes them very brittle. As of yet I need very few of them. They're all
+   related to creating and manipulating structures which are outside of the
+   scope of the syntax..
 
    There are also primitive functions which can only be applied to literal
    values. These aren't essential to having a working language, but while you
@@ -281,11 +281,11 @@ This is largely an aid to my own memory so bear with me.
 
    That is: =~V= => =V= if V is a literal value (number, string, bool, etc.)
 
-   and: =~[X Y Z]= => =[~X ~Y ~Z]=
+   and: =~[X Y Z ...]= => =[~X ~Y ~Z ...]=
 
-   N.B.: The interpreter is currently (as of this commit) written to explicitly
-   walk the ast and apply rules. the =core/rules= map defines the rules
-   currently needed which is larger than those discussed above.
+   N.B.: The interpreter is currently written to explicitly walk the ast and
+   apply rules. the =core/rules= map defines the rules currently needed which is
+   larger than those discussed above.
 ** Summary
    - Note taken on [2025-05-13 Tue 15:22] \\
      This section is likely out of sync with reality.
@@ -296,8 +296,8 @@ This is largely an aid to my own memory so bear with me.
    application nodes.
 
    1) ~(X . Y) <=> #(~X . Y)
-   2) #(#Pmac[f] . tail) => always escapes to implementation
-   3) #(#Pfn[f] . tail) => invokes foreign code iff tail is fully reduced.
+   2) #(#M[f] . tail) => always escapes to implementation
+   3) #(#F[f] . tail) => invokes foreign code iff tail is fully reduced.
    4) #((#μ X Y) . Z) => Y in the current lexical env extended by {X Z}
       where {X Z} represents the destructured binding of X to Z
 
