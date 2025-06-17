@@ -183,6 +183,6 @@
       ;; Binding and declaration happen at different points in the lifecycle of
       ;; a μ. But can the bindings of one abut the declarations of another? I'm
       ;; not positive they can't. I don't have a good intuition yet.
-      [:B :D] println
-      [:D :B] println
+      [:B :D] ; remove inner decls if bound
+      [:D :B] ; remove inner bindings if declared
       )))
