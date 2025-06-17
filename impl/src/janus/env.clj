@@ -1,11 +1,14 @@
 (ns janus.env
   (:refer-clojure :exclude [declare resolve])
   (:require
-   [janus.ast :as ast]
-   [janus.debug :refer [trace!]]))
+   [clojure.pprint :as pp]
+   [clojure.set :as set]
+   [janus.ast :as ast])
+  (:import
+   (java.io Writer)))
 
 (def empty-ns
-  {:names {} :declarations #{} :outer {}})
+  {:names {} :declarations #{}})
 
 (defn names [env]
   (or (:names env) {}))
@@ -47,86 +50,72 @@
 
   janus.ast.Contextual
   janus.ast.Symbolic
-  (symbols [this]
-    #{this}))
-
-(defprotocol ContextSwitch
-  (resolve [this])
-  (reresolve [this]))
-
-(defrecord CarriedEnvironment [form ctx]
-  Object
-  (toString [_]
-    (str "#C::" form))
-  janus.ast.Contextual
-  janus.ast.Symbolic
   (symbols [_]
-    (ast/symbols form))
-  ContextSwitch
-  (resolve [_]
-    (if-let [binding (lookup ctx form)]
-      (->ResolvedSymbol form binding)
-      form))
-  (reresolve [_] form))
+    #{symbol}))
 
-(defrecord Binding [form bindings]
-  Object
-  (toString [_]
-    (str "#B" (keys bindings) "::" form))
-  janus.ast.Contextual
-  janus.ast.Symbolic
-  (symbols [_]
-    (ast/symbols form))
-  ContextSwitch
-  (resolve [_]
-    (if-let [binding (get bindings form)]
-      (->ResolvedSymbol form binding)
-      form))
-  (reresolve [_] form))
-
-(defrecord Declaration [form syms]
-  ;; If a message is being sent from beneath a declaration node, then the
-  ;; receiver must be beneath the *same* declaration node. This preserves
-  ;; reference to unknowns.
-  Object
-  (toString [_]
-    (str "#D" (seq syms) "::" form))
-  janus.ast.Contextual
-  janus.ast.Symbolic
-  (symbols [_]
-    (ast/symbols form))
-  ContextSwitch
-  (resolve [_] form)
-  (reresolve [_]
-    (if (contains? syms (:symbol form))
-      (:symbol form)
-      form)))
-
-(ast/ps CarriedEnvironment)
-(ast/ps Declaration)
-(ast/ps Binding)
 (ast/ps ResolvedSymbol)
+
+(defmethod pp/simple-dispatch ResolvedSymbol [o]
+  (pp/write-out (str o)))
+
+(defrecord Context [form ctx]
+  Object
+  (toString [_]
+    (str "#C" (keys (names ctx)) "," (decls ctx) "::" form))
+  janus.ast.Contextual
+  janus.ast.Symbolic
+  (symbols [_]
+    (ast/symbols form)))
+
+(ast/ps Context)
+
+(defmethod pp/simple-dispatch Context [{:keys [form ctx]}]
+  (pp/write-out (str "#C" (keys (names ctx)) "," (decls ctx) "::"))
+  (pp/simple-dispatch form))
+
+(extend-protocol ast/Inspectable
+  ResolvedSymbol
+  (insp [{:keys [form]} ^Writer w level]
+    (ast/spacer level)
+    (.write w "S*[")
+    (.write w (str form))
+    (.write w "]\n"))
+
+  Context
+  (insp [{:keys [form]} ^Writer w level]
+    (ast/spacer level)
+    (.write w "C\n")
+    (ast/insp form w (inc level))))
 
 (defn pin [body env]
   (if (ast/contextual? body)
-    (->CarriedEnvironment body env)
+    (->Context body env)
     body))
 
 (defn declare [body & syms]
-  (->Declaration body (into #{} (filter ast/symbol?) syms)))
+  (pin body (reduce declare* empty-ns (filter ast/symbol? syms))))
 
 (defn bind [body & bindings]
-  (->Binding body (into {} (filter #(ast/symbol? (key %))) (partition 2 bindings))))
+  (pin body (reduce (fn [e [k v]] (bind* e k v)) empty-ns
+                    (filter (fn [[k _]] (ast/symbol? k))
+                            (apply hash-map bindings)))))
+
+(defn resolve [{:keys [form ctx]}]
+  (if-let [binding (lookup ctx form)]
+      (->ResolvedSymbol form binding)
+      form))
+
+(defn reresolve [{:keys [form ctx]}]
+  (if (contains? (decls ctx) (:symbol form))
+      (:symbol form)
+      form))
 
 (def type-table
-  ;; REVIEW: This is an odd form of polymorphism...
-  {CarriedEnvironment :C
-   Binding            :C
-   Declaration        :C
-   ResolvedSymbol     :R})
+  {Context        :C
+   ResolvedSymbol :R})
 
 (defn ctx? [x]
-  (satisfies? ContextSwitch x))
+  (instance? Context x))
 
 (defn peel
   "Removes ns nodes recursively until we reach an ast node."
@@ -151,40 +140,17 @@
 
       true inner)))
 
-(defn bind** [env [k v]]
-  (bind* env k v))
+(defn merge-ctx [{:keys [ctx form]}]
+  (let [outer-bindings (names ctx)
+        outer-decls    (decls ctx)
+        inner-bindings (names (:ctx form))
+        inner-decls    (decls (:ctx form))
+        inner-form     (:form form)
 
-(def merge-ctx-rules
-  {
-   ;; How could two full context switches stack up like this?
-   [:C :C] (constantly (assert false)) ; This should never occur... I think
-
-   ;; Once inside a context switch, bindings and declarations work normally.
-   [:C :D] #(pin (:form (:form %)) (declare* (:ctx %) (-> % :form :ctx :syms)))
-   [:C :B] (fn [{:keys [form ctx]}]
-             (pin (:form form) (reduce bind** ctx (:bindings (:ctx form)))))
-
-   ;; Declarations just stack up.
-   [:D :D] (fn [{:keys [ctx form]}]
-             (declare (:form form) (set/union (:syms ctx) (:syms (:ctx form)))))
-   ;; Declarations outside of a context switch do nothing
-   [:D :C] :form ; discard outer decls since syms can't occur in inner form.
-   ;; Declarations outside of a binding can't override bindings, but
-   ;; declarations of symbols not in the binding should propagate.
-   [:D :B] (fn [{:keys [form ctx]}]
-             (pin (:form form)
-                  (as-> empty-ns %
-                    (reduce declare* % (:syms ctx))
-                    (reduce bind** % (:bindings (:ctx form))))))
-
-   [:B :B] (fn [{:keys [ctx form]}]
-             (update-in form [:ctx :bindings] #(merge (:bindings ctx) %)))
-   ;; Bindings on the outside fill in declarations on the inside.
-   [:B :C] fill-decls
-
-   ;; FIXME: This is wrong. Binding on the outside should fill in declarations on the inside
-   [:B :D] (fn [{:keys [form ctx]}]
-             (pin (:form form)
-                  (as-> empty-ns %
-                    (reduce bind** % (:bindings form))
-                    (reduce declare* % (:syms (:ctx form))))))})
+        bindings (into {} (concat (remove #(contains? outer-decls (key %))
+                                          inner-bindings)
+                                  (filter #(contains? inner-decls (key %))
+                                          outer-bindings)))
+        decls    (remove #(contains? bindings %)
+                         (set/union inner-decls outer-decls))]
+    (pin inner-form (assoc empty-ns :names bindings :declarations decls))))
