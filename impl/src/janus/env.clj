@@ -93,7 +93,7 @@
     body))
 
 (defn declare [body & syms]
-  (pin body (reduce declare* empty-ns (filter ast/symbol? syms))))
+  (pin body (reduce declare* empty-ns (filter (ast/symbol? syms)))))
 
 (defn bind [body & bindings]
   (pin body (reduce (fn [e [k v]] (bind* e k v)) empty-ns
@@ -140,6 +140,15 @@
 
       true inner)))
 
+(defn filter-names [bindings decls]
+  (into {} (filter #(contains? decls (key %))) bindings))
+
+(defn merge-bind [ctx bindings]
+  (reduce (fn [e [k v]] (bind* e k v)) ctx bindings))
+
+(defn merge-decl [ctx decls]
+  (reduce declare* ctx decls))
+
 (defn merge-ctx [{:keys [ctx form]}]
   (let [outer-bindings (names ctx)
         outer-decls    (decls ctx)
@@ -154,3 +163,26 @@
         decls    (remove #(contains? bindings %)
                          (set/union inner-decls outer-decls))]
     (pin inner-form (assoc empty-ns :names bindings :declarations decls))))
+
+(defn merge-ctx [{:keys [ctx form] :as outer}]
+  (let [ictx (:ctx form)
+        iform (:form form)
+        tag [(t2 (type outer)) (t2 (type form))]]
+    (case tag
+      [:C :C] form
+
+      [:C :D] (pin iform (merge-decl ctx ictx))
+      [:D :C] (pin iform (merge-decl ictx ctx))
+
+      [:C :B] (pin iform (merge-bind ctx ictx))
+      [:B :C] (pin iform (merge-bind ictx (filter-names ctx (decls ictx))))
+
+      [:B :B] (->Binding iform (merge ctx ictx))
+      [:D :D] (->Declaration iform (set/union ctx ictx))
+
+      ;; Binding and declaration happen at different points in the lifecycle of
+      ;; a μ. But can the bindings of one abut the declarations of another? I'm
+      ;; not positive they can't. I don't have a good intuition yet.
+      [:B :D] println
+      [:D :B] println
+      )))
