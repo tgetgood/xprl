@@ -43,6 +43,10 @@
 
 ;;;;; Contexts
 
+(defprotocol ContextSwitch
+  (resolve [this])
+  (reresolve [this]))
+
 (defrecord ResolvedSymbol [symbol binding]
   Object
   (toString [_]
@@ -65,9 +69,34 @@
   janus.ast.Contextual
   janus.ast.Symbolic
   (symbols [_]
-    (ast/symbols form)))
+    (ast/symbols form))
+  )
 
 (ast/ps Context)
+
+(defrecord Declaration [form syms]
+  Object
+  (toString [_]
+    (str "#D" syms "::" form))
+  janus.ast.Contextual
+  janus.ast.Symbolic
+  (symbols [_]
+    (ast/symbols form))
+  )
+
+(ast/ps Declaration)
+
+(defrecord Binding [form bindings]
+  Object
+  (toString [_]
+    (str "#B" bindings "::" form))
+  janus.ast.Contextual
+  janus.ast.Symbolic
+  (symbols [_]
+    (ast/symbols form))
+  )
+
+(ast/ps Binding)
 
 (defmethod pp/simple-dispatch Context [{:keys [form ctx]}]
   (pp/write-out (str "#C" (keys (names ctx)) "," (decls ctx) "::"))
@@ -85,6 +114,22 @@
   (insp [{:keys [form]} ^Writer w level]
     (ast/spacer level)
     (.write w "C\n")
+    (ast/insp form w (inc level)))
+
+  Declaration
+  (insp [{:keys [form syms]} ^Writer w level]
+    (ast/spacer level)
+    (.write w "D")
+    (.write w syms)
+    (.write w "\n")
+    (ast/insp form w (inc level)))
+
+  Binding
+  (insp [{:keys [form bindings]} ^Writer w level]
+    (ast/spacer level)
+    (.write w "B")
+    (.write w bindings)
+    (.write w "\n")
     (ast/insp form w (inc level))))
 
 (defn pin [body env]
