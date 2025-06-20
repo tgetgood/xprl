@@ -38,7 +38,7 @@
                "\n" (debug/provenance app)))))
 
 (defn apply-head [app]
-  (ast/application (walk (:head app)) (:tail app)))
+  (update app :head walk))
 
 ;;;;; Eval
 
@@ -49,23 +49,27 @@
   (let [p (:form im)]
     (ast/application (ast/immediate (:head p)) (:tail p))))
 
-;;;;; Reduction
-
 (defn eval-inner
   "Walk inner form first, then come back to `x`."
   [x]
   (update x :form walk))
 
-(defn reduce-μ [μ]
+;;;;; Reduction
+
+(defn walk-μ [μ]
   (update μ :body walk))
 
-(defn reduce-emit [e]
+(defn walk-emit [e]
   ;; If we had a predicate that asked "is `kvs` fully realised?" then we
   ;; wouldn't need this at all. I'm just not sure how to write that predicate,
   ;; and this seems simple enough that I don't need to worry about it.
+  ;;
+  ;; REVIEW: If an E node makes it to the top, that is it has no μ above it, or
+  ;; no holes in its environment, then does it matter whether we walk it now, or
+  ;; the receiver walks it later? It shouldn't.
   (update e :kvs walk))
 
-(defn reduce-list [l]
+(defn walk-list [l]
   (ast/list (map walk l)))
 
 ;;;;; Tree walker
@@ -79,9 +83,9 @@
 
    :I :form       ; (I V) => V. values are fixed points of eval.
 
-   :L reduce-list ; Most structures are values, with these exceptions.
-   :μ reduce-μ    ; TODO: Drop `reduce`. It's too common a term to override.
-   :E reduce-emit ; REVIEW: Do we actually need to reduce into Emissions?
+   :L walk-list
+   :μ walk-μ
+   :E walk-emit ; REVIEW: Do we actually need to reduce into Emissions?
 
    [:A :I] apply-head ; (A head tail) => (A (walk head) tail)
    [:A :A] apply-head ;   iff `head` is unevaluated.
@@ -140,23 +144,22 @@
 (defn trace-env [sexp]
   (ast/symbols sexp))
 
-(defn walk1 [sexp]
+(defn walk [sexp]
   (let [[rule f] (rule-match sexp)]
     (trace! "rule match:" rule sexp "\n  syms:" (trace-env sexp))
     (let [v (f sexp)]
       (trace! "result:" rule "\n" sexp "\n->\n" v)
-      [rule v])))
+      (debug/tag v rule sexp))))
 
-;; (def walk1 (memoize walk1))
+;; (def walk (memoize walk))
 
-(defn walk
+(defn walk*
   ([env sexp]
-   (walk (env/pin sexp env)))
-  ([sexp]
-   (let [[rule v] (walk1 sexp)]
-     (if (= v sexp)
-       sexp
-       (recur (debug/tag v rule sexp))))))
+   (loop [sexp (env/pin sexp env)]
+     (let [next (walk sexp)]
+       (if (= sexp next)
+         sexp
+         (recur next))))))
 
 ;;;;; Builtins
 
@@ -174,7 +177,7 @@
                                  ;; We'd need repeat until fixedpoint logic.
                                  [(when name (walk name))
                                   (walk params)
-                                  (second (walk1 body))])
+                                  (second (walk body))])
             psym (env/peel params)]
         (if (ast/symbol? psym)
           (ast/μ name psym (env/declare body name psym))

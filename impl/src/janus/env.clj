@@ -179,11 +179,9 @@
       (ast/application? inner) (pushall ctx inner)
       (ast/immediate? inner)   (pushall ctx inner)
       (ast/emission? inner)    (pushall ctx inner)
-
-      (vector? inner) (mapv #(assoc ctx :form %) inner)
-      (ast/μ? inner)  (assoc inner :body (assoc ctx :form (:body inner)))
-
-      true inner)))
+      (vector? inner)          (mapv #(assoc ctx :form %) inner)
+      (ast/μ? inner)           (assoc inner :body (assoc ctx :form (:body inner)))
+      true                     inner)))
 
 (defn filter-names [bindings decls]
   (into {} (filter #(contains? decls (key %))) bindings))
@@ -209,7 +207,7 @@
                          (set/union inner-decls outer-decls))]
     (pin inner-form (assoc empty-ns :names bindings :declarations decls))))
 
-(defn merge-ctx [{:keys [ctx form] :as outer}]
+#_(defn merge-ctx [{:keys [ctx form] :as outer}]
   (let [ictx (:ctx form)
         iform (:form form)
         tag [(t2 (type outer)) (t2 (type form))]]
