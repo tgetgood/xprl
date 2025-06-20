@@ -19,10 +19,6 @@
   (let [μ (:head app)]
     (env/bind (:body μ) (:name μ) μ (:params μ) (:tail app))))
 
-(defn apply-macro [app]
-  ;; Pass the entire Application in so that we can delay.
-  ((:f (:head app)) app))
-
 (defn apply-primitive [app]
   (let [h    (:head app)
         args (walk (:tail app))]
@@ -89,7 +85,6 @@
    ;; yet.
    ;; [:A :E] apply-emit
 
-   [:A :M] apply-macro
    [:A :F] apply-primitive ; Two kinds of operators are built in.
    [:A :μ] apply-μ         ; I think that's sufficient. I might be wrong.
 
@@ -156,25 +151,18 @@
 
 ;;;;; Builtins
 
+(defn μ-ready? [args]
+  (and
+   (ast/list? args)
+   (ast/symbol? (first args))
+   (or (= 2 (count args)) (ast/symbol? (second args)))))
+
 (defn μ [app]
-  (let [tail (:tail app)
-        args (if (evaluated? tail) tail (second (walk1 tail)))]
-    (if (not (evaluated? args))
-      (assoc app :tail args)
-      (let [[name params body] (case (count args)
-                                 3 args
-                                 2 `[nil ~@args])
-            [name params body] (if (ast/symbol? (env/peel params))
-                                 [name params body]
-                                 ;; REVIEW: Should these all be walk1?
-                                 ;; We'd need repeat until fixedpoint logic.
-                                 [(when name (walk name))
-                                  (walk params)
-                                  (second (walk body))])
-            psym (env/peel params)]
-        (if (ast/symbol? psym)
-          (ast/μ name psym (env/declare body name psym))
-          (assoc app :tail [name params body]))))))
+  (let [args               (:tail app)
+        [name params body] (case (count args)
+                             3 args
+                             2 `[nil ~@args])]
+    (ast/μ name params (env/declare body name params))))
 
 (defn emit [kvs]
   (assert (even? (count kvs)))
