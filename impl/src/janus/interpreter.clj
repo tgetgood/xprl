@@ -60,13 +60,6 @@
   (update μ :body walk))
 
 (defn walk-emit [e]
-  ;; If we had a predicate that asked "is `kvs` fully realised?" then we
-  ;; wouldn't need this at all. I'm just not sure how to write that predicate,
-  ;; and this seems simple enough that I don't need to worry about it.
-  ;;
-  ;; REVIEW: If an E node makes it to the top, that is it has no μ above it, or
-  ;; no holes in its environment, then does it matter whether we walk it now, or
-  ;; the receiver walks it later? It shouldn't.
   (update e :kvs walk))
 
 (defn walk-list [l]
@@ -81,11 +74,11 @@
    [:I :A] eval-inner
    [:I :C] eval-inner
 
-   :I :form       ; (I V) => V. values are fixed points of eval.
+   :I :form     ; (I V) => V. values are fixed points of eval.
 
-   :L walk-list
+   :L walk-list ; Walk has to recur into some structures, but most are data
    :μ walk-μ
-   :E walk-emit ; REVIEW: Do we actually need to reduce into Emissions?
+   :E walk-emit
 
    [:A :I] apply-head ; (A head tail) => (A (walk head) tail)
    [:A :A] apply-head ;   iff `head` is unevaluated.
