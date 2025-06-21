@@ -120,15 +120,21 @@
   (let [t (type x)]
     (get env/type-table t (get ast/type-table t :V))))
 
-(defn rule-match [sexp]
-  (let [t1 (node-type sexp)]
-    (if-let [subtree (get rule-tree t1)]
-      (let [subexp (step sexp)
-            t2 (node-type subexp)]
-        (if-let [subsubtree (get subtree t2)]
-          [[t1 t2] (:fn subsubtree)]
-          [t1 (:fn subtree)]))
-      [t1 identity])))
+(defn unwind [rule trees]
+  (cond
+    (contains? (last trees) :fn) [rule (:fn (last trees))]
+    (= 1 (count rule))           [(first rule) identity]
+
+    true (recur (into [] (butlast rule)) (into [] (butlast trees)))))
+
+(defn rule-match
+  ([s] (rule-match [] [rule-tree] s))
+  ([rule trees sexp]
+   (let [rule  (conj rule (node-type sexp))
+         trees (conj trees (get (last trees) (last rule)))]
+     (if (last trees)
+       (recur rule trees (step sexp))
+       (unwind rule trees)))))
 
 (defn trace-env [sexp]
   (ast/symbols sexp))
