@@ -125,30 +125,30 @@
 (extend-protocol ast/Inspectable
   ResolvedSymbol
   (insp [{:keys [form]} ^Writer w level]
-    (ast/spacer level)
+    (ast/spacer w level)
     (.write w "S*[")
     (.write w (str form))
     (.write w "]\n"))
 
   Context
   (insp [{:keys [form]} ^Writer w level]
-    (ast/spacer level)
+    (ast/spacer w level)
     (.write w "C\n")
     (ast/insp form w (inc level)))
 
   Declaration
   (insp [{:keys [form syms]} ^Writer w level]
-    (ast/spacer level)
+    (ast/spacer w level)
     (.write w "D")
-    (.write w syms)
+    (.write w (str syms))
     (.write w "\n")
     (ast/insp form w (inc level)))
 
   Binding
   (insp [{:keys [form bindings]} ^Writer w level]
-    (ast/spacer level)
+    (ast/spacer w level)
     (.write w "B")
-    (.write w bindings)
+    (.write w (str bindings))
     (.write w "\n")
     (ast/insp form w (inc level))))
 
