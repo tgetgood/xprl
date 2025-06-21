@@ -17,7 +17,9 @@
 
 (defn apply-μ [app]
   (let [μ (:head app)]
-    (env/bind (:body μ) (:name μ) μ (:params μ) (:tail app))))
+    (env/bind (:body μ) (merge {(:params μ) (:tail app)}
+                               (when-let [name (:name μ)]
+                                 {name μ})))))
 
 (defn apply-primitive [app]
   (let [h    (:head app)
@@ -96,11 +98,10 @@
    [:C :S] env/resolve
    [:C :R] env/reresolve
 
+   [:D :B :I :I] ::not-implemented
+
    [:C :C] env/merge-ctx
 
-   ;; REVIEW: It's nice to split the env logic out into its own module, but we
-   ;; also need to generalise and split out the driving logic so as not to worry
-   ;; about diversions.
    :C env/push-down})
 
 (def rule-tree
@@ -157,12 +158,8 @@
    (ast/symbol? (first args))
    (or (= 2 (count args)) (ast/symbol? (second args)))))
 
-(defn μ [app]
-  (let [args               (:tail app)
-        [name params body] (case (count args)
-                             3 args
-                             2 `[nil ~@args])]
-    (ast/μ name params (env/declare body name params))))
+(defn μ [args]
+  (apply ast/μ (update args (dec (count args)) env/declare (butlast args))))
 
 (defn emit [kvs]
   (assert (even? (count kvs)))

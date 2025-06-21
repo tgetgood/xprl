@@ -141,8 +141,9 @@
   (toString [_]
     (str "(#μ " params " " body ")")))
 
-(defn μ [name params body]
-  (->Mu name params body))
+(defn μ
+  ([params body] (μ nil params body))
+  ([name params body] (->Mu name params body)))
 
 (defn μ? [x]
   (instance? Mu x))

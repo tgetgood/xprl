@@ -70,7 +70,15 @@
   janus.ast.Symbolic
   (symbols [_]
     (ast/symbols form))
-  )
+  ContextSwitch
+  (resolve [_]
+    (if-let [binding (lookup ctx form)]
+      (->ResolvedSymbol form binding)
+      form))
+  (reresolve [_]
+    (if (contains? (decls ctx) (:symbol form))
+      (:symbol form)
+      form)))
 
 (ast/ps Context)
 
@@ -82,7 +90,13 @@
   janus.ast.Symbolic
   (symbols [_]
     (ast/symbols form))
-  )
+  ContextSwitch
+  (resolve [_]
+    form)
+  (reresolve [_]
+    (if (contains? syms (:symbol form))
+      (:symbol form)
+      form)))
 
 (ast/ps Declaration)
 
@@ -94,7 +108,13 @@
   janus.ast.Symbolic
   (symbols [_]
     (ast/symbols form))
-  )
+  ContextSwitch
+  (resolve [_]
+    (if-let [binding (get bindings form)]
+      (->ResolvedSymbol form binding)
+      form))
+  (reresolve [_]
+    form))
 
 (ast/ps Binding)
 
@@ -137,37 +157,20 @@
     (->Context body env)
     body))
 
-(defn declare [body & syms]
-  (pin body (reduce declare* empty-ns (filter (ast/symbol? syms)))))
+(defn declare [body syms]
+  (->Declaration body (into #{} syms)))
 
-(defn bind [body & bindings]
-  (pin body (reduce (fn [e [k v]] (bind* e k v)) empty-ns
-                    (filter (fn [[k _]] (ast/symbol? k))
-                            (apply hash-map bindings)))))
-
-(defn resolve [{:keys [form ctx]}]
-  (if-let [binding (lookup ctx form)]
-      (->ResolvedSymbol form binding)
-      form))
-
-(defn reresolve [{:keys [form ctx]}]
-  (if (contains? (decls ctx) (:symbol form))
-      (:symbol form)
-      form))
+(defn bind [body bindings]
+  (->Binding body bindings))
 
 (def type-table
   {Context        :C
+   Declaration    :D
+   Binding        :B
    ResolvedSymbol :R})
 
 (defn ctx? [x]
-  (instance? Context x))
-
-(defn peel
-  "Removes ns nodes recursively until we reach an ast node."
-  [f]
-  (if (ctx? f)
-    (recur (:form f))
-    f))
+  (satisfies? ContextSwitch x))
 
 (defn pushall [ctx form]
   (reduce (fn [acc [k v]] (assoc acc k (assoc ctx :form v))) form form))

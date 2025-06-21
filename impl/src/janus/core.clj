@@ -75,7 +75,7 @@
 
 (defn go!
   ([env f]
-   (i/walk env (debug/with-provenance (ast/immediate f)
+   (i/walk* env (debug/with-provenance (ast/immediate f)
                  {:origin ::repl :predecessor f})))
   ([env f ccs]
    (rt/schedule (ast/list [(fn [_] (rt/connect (go! env f) ccs))]))
