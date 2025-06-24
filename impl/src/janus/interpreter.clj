@@ -17,9 +17,9 @@
 
 (defn apply-μ [app]
   (let [μ (:head app)]
-    (env/bind (:body μ) (merge {(:params μ) (:tail app)}
-                               (when-let [name (:name μ)]
-                                 {name μ})))))
+    (env/bind (:body μ) (:id μ) (merge {(:params μ) (:tail app)}
+                                       (when-let [name (:name μ)]
+                                         {name μ})))))
 
 (defn apply-primitive [app]
   (let [h    (:head app)
@@ -65,12 +65,17 @@
 
 ;;;;; Tree walker
 
+(defn inconceivable? [& args]
+  (throw (RuntimeException. "I thought this was unreachable!")))
+
 (def rules
   {[:I :P] eval-pair   ; (I (P x y)) => (A (I x) y)
    [:I :L] eval-list   ; (I (L x y ...)) => (L (I x) (I y) ...)
    [:I :I] eval-inner
    [:I :A] eval-inner
    [:I :C] eval-inner
+   [:I :B] eval-inner
+   [:I :D] eval-inner
 
    :I :form     ; (I V) => V. values are fixed points of eval.
 
@@ -81,6 +86,10 @@
    [:A :I] apply-head ; (A head tail) => (A (walk head) tail)
    [:A :A] apply-head ;   iff `head` is unevaluated.
    [:A :C] apply-head
+   [:A :B] apply-head
+   ;; REVIEW: Declarations should get pushed down before pairs become
+   ;; applications, no?
+   [:A :D] inconceivable?
 
    ;; An emission which includes a message to :return can trigger off the
    ;; application. But the connection logic isn't sophisticated enough for this
@@ -97,12 +106,19 @@
 
    [:C :S] env/resolve
    [:C :R] env/reresolve
+   [:D :S]
 
-   [:D :B :I :I] ::not-implemented
+   [:D :B :I :I] (fn [& args] (throw (RuntimeException. "DBII")))
 
-   [:C :C] env/merge-ctx
+   [:C :C] inconceivable?
+   [:D :D] inconceivable?
+   [:B :B] inconceivable?
 
-   :C env/push-down})
+   [:D :C] env/bore
+
+   :C env/push-down
+   :D env/push-down
+   :B env/push-down})
 
 (def rule-tree
   (reduce (fn [acc [k v]]
@@ -123,7 +139,7 @@
 (defn unwind [rule trees]
   (cond
     (contains? (last trees) :fn) [rule (:fn (last trees))]
-    (= 1 (count rule))           [(first rule) identity]
+    (= 1 (count rule))           [rule identity]
 
     true (recur (into [] (butlast rule)) (into [] (butlast trees)))))
 
@@ -139,18 +155,19 @@
 (defn trace-env [sexp]
   (ast/symbols sexp))
 
-(defn walk [sexp]
+(defn walk1 [sexp]
   (let [[rule f] (rule-match sexp)]
     (trace! "rule match:" rule sexp "\n  syms:" (trace-env sexp))
     (let [v (f sexp)]
       (trace! "result:" rule "\n" sexp "\n->\n" v)
       (debug/tag v rule sexp))))
 
-;; (def walk (memoize walk))
+(def walk (memoize walk1))
 
 (defn walk*
   ([env sexp]
    (loop [sexp (env/pin sexp env)]
+     (trace! "\n  reentering walk loop\n")
      (let [next (walk sexp)]
        (if (= sexp next)
          sexp
@@ -165,7 +182,8 @@
    (or (= 2 (count args)) (ast/symbol? (second args)))))
 
 (defn μ [args]
-  (apply ast/μ (update args (dec (count args)) env/declare (butlast args))))
+  (let [id (gensym)]
+    (apply ast/μ id (update args (dec (count args)) env/declare id (butlast args)))))
 
 (defn emit [kvs]
   (assert (even? (count kvs)))

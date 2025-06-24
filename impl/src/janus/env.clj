@@ -47,6 +47,16 @@
   (resolve [this])
   (reresolve [this]))
 
+(defrecord DeclaredSymbol [symbol id]
+  Object
+  (toString [_]
+    (str symbol "{" id "}"))
+
+  janus.ast.Contextual
+  janus.ast.Symbolic
+  (symbols [_]
+    #{symbol}))
+
 (defrecord ResolvedSymbol [symbol binding]
   Object
   (toString [_]
@@ -82,7 +92,7 @@
 
 (ast/ps Context)
 
-(defrecord Declaration [form syms]
+(defrecord Declaration [form id syms]
   Object
   (toString [_]
     (str "#D" syms "::" form))
@@ -157,17 +167,16 @@
     (->Context body env)
     body))
 
-(defn declare [body syms]
-  (->Declaration body (into #{} syms)))
+(defn declare [body id syms]
+  (->Declaration body id (into #{} syms)))
 
-(defn bind [body bindings]
-  (->Binding body bindings))
+(defn bind [body id bindings]
+  (->Binding body id bindings))
 
 (def type-table
   {Context        :C
    Declaration    :D
-   Binding        :B
-   ResolvedSymbol :R})
+   Binding        :B})
 
 (defn ctx? [x]
   (satisfies? ContextSwitch x))
@@ -185,6 +194,12 @@
       (vector? inner)          (mapv #(assoc ctx :form %) inner)
       (ast/μ? inner)           (assoc inner :body (assoc ctx :form (:body inner)))
       true                     inner)))
+
+
+;; REVIEW: Really going with the metaphor...
+(defn bore [{{:keys [form ctx]} :form syms :syms}]
+  (pin form (reduce declare* ctx syms)))
+
 
 (defn filter-names [bindings decls]
   (into {} (filter #(contains? decls (key %))) bindings))
