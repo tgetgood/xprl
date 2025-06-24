@@ -36,8 +36,8 @@
   declarations."
   [env form]
   (let [syms (ast/symbols form)]
-    (transduce  (filter #(contains? syms %))
-                (fn [env sym] (update env :names dissoc sym))
+    (transduce (remove #(contains? syms %))
+               (completing (fn [env sym] (update env :names dissoc sym)))
                 env
                 (keys (names env)))))
 
@@ -46,21 +46,23 @@
     (assoc outer :form (:form inner))
     outer))
 
-(defn resolve [{:keys [form ctx]}]
-  (if-let [v (lookup ctx (:form form))]
+(defn resolve [{{ctx :ctx sym :form} :form :as im}]
+  (if-let [v (lookup ctx sym)]
     v
-    form))
+    (assoc im :form sym)))
 
-(defn c-or-d [{{im :form syms :syms :as decl} :form :as ctx}]
-  (if (contains? syms (:form im))
-    decl
-    (assoc ctx :form im)))
+(defn c-or-d [{{{sym :form :as decl} :form :as ctx} :form :as im}]
+  (if (contains? (:syms decl) sym)
+    (assoc im :form decl)
+    (assoc im :form (assoc ctx :form sym))))
 
-(defn bind-arg [{{{sym :form} :form syms :syms :as decl} :form bs :bindings :as bind}]
-  (if (and (= (:id decl) (:id bind)) (contains? syms sym) (contains? bs sym))
-    (get bs sym)
+(defn bind-arg [{{{sym :form :as decl} :form :as bind} :form :as im}]
+  (if (and (= (:id decl) (:id bind))
+           (contains? (:syms decl) sym)
+           (contains? (:bindings bind) sym))
+    (get (:bindings bind) sym)
     ;; If the binding doesn't apply to this declaration, toss it.
-    decl))
+    (assoc im :form decl)))
 
 ;;;;; Contexts
 
@@ -69,7 +71,7 @@
 (defrecord Context [form ctx]
   Object
   (toString [_]
-    (str "#C" (keys (names ctx)) "," (decls ctx) "::" form))
+    (str "#C" (keys (names ctx)) "::" form))
   janus.ast.Contextual
   janus.ast.Symbolic
   (symbols [_]

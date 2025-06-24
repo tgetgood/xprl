@@ -110,18 +110,17 @@
    [:D :C] (fn [{{:keys [form ctx]} :form :keys [syms id]}] ; -> [:C :D]
              (env/pin (env/declare form id syms) ctx))    ; i.e. invert the nodes.
 
-   [:D :I :S] (fn [{{sym :form :as im} :form syms :syms :as decl}]
+   [:D :S] (fn [{sym :form syms :syms :as decl}]
                 (if (contains? syms sym)
                   decl
-                  im))
+                  sym))
 
-   [:B :I :S] (fn [x] (throw (RuntimeException.
-                              (str "undeclared symbol" (:form (:form x))))))
+   [:B :S] (fn [x] (throw (RuntimeException. (str "undeclared symbol" (:form x)))))
 
-   [:C :I :S] env/resolve
+   [:I :C :S] env/resolve ; FIXME: I-C-S
 
-   [:B :D :I :S] env/bind-arg
-   [:C :D :I :S] env/c-or-d
+   [:I :B :D :S] env/bind-arg
+   [:I :C :D :S] env/c-or-d
 
    :C env/push-down
    :D env/push-down
@@ -173,8 +172,8 @@
 
 (defn walk*
   ([env sexp]
-   (loop [sexp (env/pin sexp env)]
-     (trace! "\n  reentering walk loop\n")
+   (loop [sexp (env/pin sexp (env/project env sexp))]
+     (trace! "\n  pass:\n")
      (let [next (walk sexp)]
        (if (= sexp next)
          sexp
