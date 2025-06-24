@@ -41,36 +41,30 @@
                 env
                 (keys (names env)))))
 
+(defn shadow [{inner :form :as outer}]
+  (if (= (:syms inner) (:syms outer))
+    (assoc outer :form (:form inner))
+    outer))
+
+(defn resolve [{:keys [form ctx]}]
+  (if-let [v (lookup ctx (:form form))]
+    v
+    form))
+
+(defn c-or-d [{{im :form syms :syms :as decl} :form :as ctx}]
+  (if (contains? syms (:form im))
+    decl
+    (assoc ctx :form im)))
+
+(defn bind-arg [{{{sym :form} :form syms :syms :as decl} :form bs :bindings :as bind}]
+  (if (and (= (:id decl) (:id bind)) (contains? syms sym) (contains? bs sym))
+    (get bs sym)
+    ;; If the binding doesn't apply to this declaration, toss it.
+    decl))
+
 ;;;;; Contexts
 
-(defprotocol ContextSwitch
-  (resolve [this])
-  (reresolve [this]))
-
-(defrecord DeclaredSymbol [symbol id]
-  Object
-  (toString [_]
-    (str symbol "{" id "}"))
-
-  janus.ast.Contextual
-  janus.ast.Symbolic
-  (symbols [_]
-    #{symbol}))
-
-(defrecord ResolvedSymbol [symbol binding]
-  Object
-  (toString [_]
-    (str symbol "{=" binding "}"))
-
-  janus.ast.Contextual
-  janus.ast.Symbolic
-  (symbols [_]
-    #{symbol}))
-
-(ast/ps ResolvedSymbol)
-
-(defmethod pp/simple-dispatch ResolvedSymbol [o]
-  (pp/write-out (str o)))
+(defprotocol ContextSwitch)
 
 (defrecord Context [form ctx]
   Object
@@ -80,15 +74,7 @@
   janus.ast.Symbolic
   (symbols [_]
     (ast/symbols form))
-  ContextSwitch
-  (resolve [_]
-    (if-let [binding (lookup ctx form)]
-      (->ResolvedSymbol form binding)
-      form))
-  (reresolve [_]
-    (if (contains? (decls ctx) (:symbol form))
-      (:symbol form)
-      form)))
+  ContextSwitch)
 
 (ast/ps Context)
 
@@ -100,17 +86,11 @@
   janus.ast.Symbolic
   (symbols [_]
     (ast/symbols form))
-  ContextSwitch
-  (resolve [_]
-    form)
-  (reresolve [_]
-    (if (contains? syms (:symbol form))
-      (:symbol form)
-      form)))
+  ContextSwitch)
 
 (ast/ps Declaration)
 
-(defrecord Binding [form bindings]
+(defrecord Binding [form id bindings]
   Object
   (toString [_]
     (str "#B" bindings "::" form))
@@ -118,13 +98,7 @@
   janus.ast.Symbolic
   (symbols [_]
     (ast/symbols form))
-  ContextSwitch
-  (resolve [_]
-    (if-let [binding (get bindings form)]
-      (->ResolvedSymbol form binding)
-      form))
-  (reresolve [_]
-    form))
+  ContextSwitch)
 
 (ast/ps Binding)
 
@@ -133,13 +107,6 @@
   (pp/simple-dispatch form))
 
 (extend-protocol ast/Inspectable
-  ResolvedSymbol
-  (insp [{:keys [form]} ^Writer w level]
-    (ast/spacer w level)
-    (.write w "S*[")
-    (.write w (str form))
-    (.write w "]\n"))
-
   Context
   (insp [{:keys [form]} ^Writer w level]
     (ast/spacer w level)
@@ -193,57 +160,5 @@
       (ast/emission? inner)    (pushall ctx inner)
       (vector? inner)          (mapv #(assoc ctx :form %) inner)
       (ast/μ? inner)           (assoc inner :body (assoc ctx :form (:body inner)))
+      (ctx? inner)             ctx
       true                     inner)))
-
-
-;; REVIEW: Really going with the metaphor...
-(defn bore [{{:keys [form ctx]} :form syms :syms}]
-  (pin form (reduce declare* ctx syms)))
-
-
-(defn filter-names [bindings decls]
-  (into {} (filter #(contains? decls (key %))) bindings))
-
-(defn merge-bind [ctx bindings]
-  (reduce (fn [e [k v]] (bind* e k v)) ctx bindings))
-
-(defn merge-decl [ctx decls]
-  (reduce declare* ctx decls))
-
-(defn merge-ctx [{:keys [ctx form]}]
-  (let [outer-bindings (names ctx)
-        outer-decls    (decls ctx)
-        inner-bindings (names (:ctx form))
-        inner-decls    (decls (:ctx form))
-        inner-form     (:form form)
-
-        bindings (into {} (concat (remove #(contains? outer-decls (key %))
-                                          inner-bindings)
-                                  (filter #(contains? inner-decls (key %))
-                                          outer-bindings)))
-        decls    (remove #(contains? bindings %)
-                         (set/union inner-decls outer-decls))]
-    (pin inner-form (assoc empty-ns :names bindings :declarations decls))))
-
-#_(defn merge-ctx [{:keys [ctx form] :as outer}]
-  (let [ictx (:ctx form)
-        iform (:form form)
-        tag [(t2 (type outer)) (t2 (type form))]]
-    (case tag
-      [:C :C] form
-
-      [:C :D] (pin iform (merge-decl ctx ictx))
-      [:D :C] (pin iform (merge-decl ictx ctx))
-
-      [:C :B] (pin iform (merge-bind ctx ictx))
-      [:B :C] (pin iform (merge-bind ictx (filter-names ctx (decls ictx))))
-
-      [:B :B] (->Binding iform (merge ctx ictx))
-      [:D :D] (->Declaration iform (set/union ctx ictx))
-
-      ;; Binding and declaration happen at different points in the lifecycle of
-      ;; a μ. But can the bindings of one abut the declarations of another? I'm
-      ;; not positive they can't. I don't have a good intuition yet.
-      [:B :D] ; remove inner decls if bound
-      [:D :B] ; remove inner bindings if declared
-      )))

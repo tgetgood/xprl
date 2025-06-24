@@ -102,19 +102,26 @@
    :A apply-error ; REVIEW: Should application be extensible?
 
    [:I :S] identity              ; unresolved symbols can't be evaluated
-   [:I :R] (comp :binding :form) ; resolved symbols store their referrent
-
-   [:C :S] env/resolve
-   [:C :R] env/reresolve
-   [:D :S]
-
-   [:D :B :I :I] (fn [& args] (throw (RuntimeException. "DBII")))
 
    [:C :C] inconceivable?
-   [:D :D] inconceivable?
-   [:B :B] inconceivable?
 
-   [:D :C] env/bore
+   [:D :D] env/shadow
+
+   [:D :C] (fn [{{:keys [form ctx]} :form :keys [syms id]}] ; -> [:C :D]
+             (env/pin (env/declare form id syms) ctx))    ; i.e. invert the nodes.
+
+   [:D :I :S] (fn [{{sym :form :as im} :form syms :syms :as decl}]
+                (if (contains? syms sym)
+                  decl
+                  im))
+
+   [:B :I :S] (fn [x] (throw (RuntimeException.
+                              (str "undeclared symbol" (:form (:form x))))))
+
+   [:C :I :S] env/resolve
+
+   [:B :D :I :S] env/bind-arg
+   [:C :D :I :S] env/c-or-d
 
    :C env/push-down
    :D env/push-down
@@ -155,14 +162,14 @@
 (defn trace-env [sexp]
   (ast/symbols sexp))
 
-(defn walk1 [sexp]
+(defn walk [sexp]
   (let [[rule f] (rule-match sexp)]
     (trace! "rule match:" rule sexp "\n  syms:" (trace-env sexp))
     (let [v (f sexp)]
       (trace! "result:" rule "\n" sexp "\n->\n" v)
       (debug/tag v rule sexp))))
 
-(def walk (memoize walk1))
+;; (def walk (memoize walk1))
 
 (defn walk*
   ([env sexp]
