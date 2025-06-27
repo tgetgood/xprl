@@ -105,24 +105,28 @@
 
    [:C :C] inconceivable?
 
-   [:D :D] env/shadow
+   [:B :D] eval-inner
 
-   [:D :C] (fn [{{:keys [form ctx]} :form :keys [syms id]}] ; -> [:C :D]
-             (env/pin (env/declare form id syms) ctx))    ; i.e. invert the nodes.
+   [:D :C] (fn [{{form :form :as c} :form :as d}]   ; -> [:C :D]
+             (assoc c :form (assoc d :form form)))  ; i.e. invert the nodes.
 
-   [:C :D] eval-inner
+
+   [:D :D] env/merge-decls
+   [:B :B] env/merge-binds
 
    [:D :S] (fn [{sym :form syms :syms :as decl}]
                 (if (contains? syms sym)
                   decl
                   sym))
 
+   [:C :D :S] env/c-or-d
+   [:C :D] eval-inner
+
    [:B :S] (fn [x] (throw (RuntimeException. (str "undeclared symbol: " (:form x)))))
 
    [:I :C :S] env/resolve
 
    [:I :B :D :S] env/bind-arg
-   [:I :C :D :S] env/c-or-d
 
    :C env/push-down
    :D env/push-down

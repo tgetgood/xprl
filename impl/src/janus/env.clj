@@ -51,18 +51,18 @@
     v
     (assoc im :form sym)))
 
-(defn c-or-d [{{{sym :form :as decl} :form :as ctx} :form :as im}]
-  (if (contains? (:syms decl) sym)
-    (assoc im :form decl)
-    (assoc im :form (assoc ctx :form sym))))
+(defn c-or-d [{{sym :form syms :syms :as decl} :form :as ctx}]
+  (if (contains? syms sym)
+    decl
+    (assoc ctx :form sym)))
 
 (defn bind-arg [{{{sym :form :as decl} :form :as bind} :form :as im}]
-  (if (and (= (:id decl) (:id bind))
-           (contains? (:syms decl) sym)
-           (contains? (:bindings bind) sym))
-    (get (:bindings bind) sym)
-    ;; If the binding doesn't apply to this declaration, toss it.
-    (assoc im :form decl)))
+  (let [did (get (:syms decl) sym)
+        bids (get (:bindings bind) sym)]
+    (if (contains? bids did)
+      (get bids did)
+      ;; If the binding doesn't apply to this declaration, toss it.
+      (assoc im :form decl))))
 
 ;;;;; Contexts
 
@@ -84,7 +84,7 @@
   (pp/write-out (str "#C" (keys (names ctx)) "," (decls ctx) "::"))
   (pp/simple-dispatch form))
 
-(defrecord Declaration [form id syms]
+(defrecord Declaration [form syms]
   Object
   (toString [_]
     (str "#D" syms "::" form))
@@ -100,7 +100,7 @@
   (pp/write-out (str "#D" syms "::"))
   (pp/simple-dispatch form))
 
-(defrecord Binding [form id bindings]
+(defrecord Binding [form bindings]
   Object
   (toString [_]
     (str "#B" bindings "::" form))
@@ -145,15 +145,23 @@
     body))
 
 (defn declare [body id syms]
-  (->Declaration body id (into #{} syms)))
+  (->Declaration body (into {} (map (fn [x] [x id])) syms)))
 
 (defn bind [body id bindings]
-  (->Binding body id bindings))
+  (->Binding
+   body
+   (into {} (map (fn [[k v]] [k {id v}])) bindings)))
 
 (def type-table
   {Context        :C
    Declaration    :D
    Binding        :B})
+
+(defn merge-decls [{{form :form isyms :syms} :form osyms :syms}]
+  (->Declaration form (merge isyms osyms)))
+
+(defn merge-binds [{{form :form ibs :bindings} :form obs :bindings}]
+  (->Binding form (merge-with merge ibs obs)))
 
 (defn ctx? [x]
   (satisfies? ContextSwitch x))
