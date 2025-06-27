@@ -110,14 +110,16 @@
    [:D :C] (fn [{{:keys [form ctx]} :form :keys [syms id]}] ; -> [:C :D]
              (env/pin (env/declare form id syms) ctx))    ; i.e. invert the nodes.
 
+   [:C :D] eval-inner
+
    [:D :S] (fn [{sym :form syms :syms :as decl}]
                 (if (contains? syms sym)
                   decl
                   sym))
 
-   [:B :S] (fn [x] (throw (RuntimeException. (str "undeclared symbol" (:form x)))))
+   [:B :S] (fn [x] (throw (RuntimeException. (str "undeclared symbol: " (:form x)))))
 
-   [:I :C :S] env/resolve ; FIXME: I-C-S
+   [:I :C :S] env/resolve
 
    [:I :B :D :S] env/bind-arg
    [:I :C :D :S] env/c-or-d
