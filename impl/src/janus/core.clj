@@ -115,9 +115,6 @@
 (defmacro inspect [n]
   `(ast/inspect (gs ~n)))
 
-#_(defn el [form name]
-  (env/lookup (env/get-env form) (ast/symbol name)))
-
 (defn check [s]
   (ast/inspect (:form (r/read (r/string-reader s) @the-env))))
 

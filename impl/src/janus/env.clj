@@ -87,7 +87,7 @@
 (defrecord Declaration [form syms]
   Object
   (toString [_]
-    (str "#D" syms "::" form))
+    (str "#D" (sort-by :names (keys syms)) "::" form))
   janus.ast.Contextual
   janus.ast.Symbolic
   (symbols [_]
@@ -97,13 +97,13 @@
 (ast/ps Declaration)
 
 (defmethod pp/simple-dispatch Declaration [{:keys [form syms]}]
-  (pp/write-out (str "#D" syms "::"))
+  (pp/write-out (str "#D" (sort-by :names (keys syms)) "::"))
   (pp/simple-dispatch form))
 
 (defrecord Binding [form bindings]
   Object
   (toString [_]
-    (str "#B" bindings "::" form))
+    (str "#B" (sort-by :names (keys bindings)) "::" form))
   janus.ast.Contextual
   janus.ast.Symbolic
   (symbols [_]
@@ -113,7 +113,7 @@
 (ast/ps Binding)
 
 (defmethod pp/simple-dispatch Binding [{:keys [form bindings]}]
-  (pp/write-out (str "#B" bindings "::"))
+  (pp/write-out (str "#B" (sort-by :names (keys bindings)) "::"))
   (pp/simple-dispatch form))
 
 (extend-protocol ast/Inspectable

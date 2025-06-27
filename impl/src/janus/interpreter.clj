@@ -87,9 +87,7 @@
    [:A :A] apply-head ;   iff `head` is unevaluated.
    [:A :C] apply-head
    [:A :B] apply-head
-   ;; REVIEW: Declarations should get pushed down before pairs become
-   ;; applications, no?
-   [:A :D] inconceivable?
+   [:A :D] apply-head
 
    ;; An emission which includes a message to :return can trigger off the
    ;; application. But the connection logic isn't sophisticated enough for this
@@ -106,6 +104,7 @@
    [:C :C] inconceivable?
 
    [:B :D] eval-inner
+   [:B :C] eval-inner
 
    [:D :C] (fn [{{form :form :as c} :form :as d}]   ; -> [:C :D]
              (assoc c :form (assoc d :form form)))  ; i.e. invert the nodes.
@@ -122,7 +121,7 @@
    [:C :D :S] env/c-or-d
    [:C :D] eval-inner
 
-   [:B :S] (fn [x] (throw (RuntimeException. (str "undeclared symbol: " (:form x)))))
+   [:I :B :S] (fn [x] (throw (RuntimeException. (str "undeclared symbol: " (:form x)))))
 
    [:I :C :S] env/resolve
 
