@@ -109,8 +109,11 @@
   (reset! the-env base-env)
   (loadfile the-env fname))
 
+(defmacro gs [n]
+  `(-> @the-env (get-in [:names (ast/symbol ~(clojure.core/name n))])))
+
 (defmacro inspect [n]
-  `(-> @the-env (get-in [:names (ast/symbol ~(clojure.core/name n))]) ast/inspect))
+  `(ast/inspect (gs ~n)))
 
 #_(defn el [form name]
   (env/lookup (env/get-env form) (ast/symbol name)))
