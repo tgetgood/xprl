@@ -80,6 +80,10 @@
 
 (ast/ps Context)
 
+(defmethod pp/simple-dispatch Context [{:keys [form ctx]}]
+  (pp/write-out (str "#C" (keys (names ctx)) "," (decls ctx) "::"))
+  (pp/simple-dispatch form))
+
 (defrecord Declaration [form id syms]
   Object
   (toString [_]
@@ -91,6 +95,10 @@
   ContextSwitch)
 
 (ast/ps Declaration)
+
+(defmethod pp/simple-dispatch Declaration [{:keys [form syms]}]
+  (pp/write-out (str "#D" syms "::"))
+  (pp/simple-dispatch form))
 
 (defrecord Binding [form id bindings]
   Object
@@ -104,8 +112,8 @@
 
 (ast/ps Binding)
 
-(defmethod pp/simple-dispatch Context [{:keys [form ctx]}]
-  (pp/write-out (str "#C" (keys (names ctx)) "," (decls ctx) "::"))
+(defmethod pp/simple-dispatch Binding [{:keys [form bindings]}]
+  (pp/write-out (str "#B" bindings "::"))
   (pp/simple-dispatch form))
 
 (extend-protocol ast/Inspectable
