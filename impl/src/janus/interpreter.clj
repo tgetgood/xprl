@@ -130,10 +130,7 @@
                   (assoc b :form sym)
                   c))
 
-   [:I :B :S] (fn [{{sym :form bindings :bindings} :form :as im}]
-                (if (contains? bindings sym)
-                  (throw (RuntimeException. (str sym " is not declared.")))
-                  (assoc im :form sym)))
+   [:B :S] :form ; Binding without declaration is a noop
 
    [:I :C :S] env/resolve
 
