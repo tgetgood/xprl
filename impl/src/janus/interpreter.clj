@@ -103,8 +103,14 @@
 
    [:C :C] inconceivable?
 
+   [:D :B] eval-inner
    [:B :D] eval-inner
    [:B :C] eval-inner
+   [:C :D] eval-inner
+   [:C :S] (fn [{sym :form ctx :ctx :as c}]
+             (if (contains? (env/names ctx) sym)
+               c
+               sym))
 
    [:D :C] (fn [{{form :form :as c} :form :as d}]   ; -> [:C :D]
              (assoc c :form (assoc d :form form)))  ; i.e. invert the nodes.
@@ -119,11 +125,20 @@
                   sym))
 
    [:C :D :S] env/c-or-d
-   [:C :D] eval-inner
+   [:B :C :S] (fn [{{sym :form ctx :ctx :as c} :form bindings :bindings :as b}]
+                (if (contains? bindings sym)
+                  (assoc b :form sym)
+                  c))
 
-   [:I :B :S] (fn [x] (throw (RuntimeException. (str "undeclared symbol: " (:form x)))))
+   [:I :B :S] (fn [{{sym :form bindings :bindings} :form :as im}]
+                (if (contains? bindings sym)
+                  (throw (RuntimeException. (str sym " is not declared.")))
+                  (assoc im :form sym)))
 
    [:I :C :S] env/resolve
+
+   [:I :D :B :D :S] (fn [{{b :form :as d} :form :as im}]
+                      (assoc d :form (walk (assoc im :form b))))
 
    [:I :B :D :S] env/bind-arg
 
