@@ -71,7 +71,7 @@
 (defrecord Context [form ctx]
   Object
   (toString [_]
-    (str "#C" (keys (names ctx)) "::" form))
+    (str "#C" (keys (names ctx)) "<" form ">"))
   janus.ast.Contextual
   janus.ast.Symbolic
   (symbols [_]
@@ -81,13 +81,16 @@
 (ast/ps Context)
 
 (defmethod pp/simple-dispatch Context [{:keys [form ctx]}]
-  (pp/write-out (str "#C" (keys (names ctx)) "," (decls ctx) "::"))
-  (pp/simple-dispatch form))
+  (pp/write-out (symbol "#C"))
+  (pp/write-out (keys (names ctx)))
+  (pp/write-out  (symbol "<"))
+  (pp/simple-dispatch form)
+  (pp/write-out  (symbol ">")))
 
 (defrecord Declaration [form syms]
   Object
   (toString [_]
-    (str "#D" (sort-by :names (keys syms)) "::" form))
+    (str "#D" (sort-by :names (keys syms)) "<" form ">"))
   janus.ast.Contextual
   janus.ast.Symbolic
   (symbols [_]
@@ -97,13 +100,16 @@
 (ast/ps Declaration)
 
 (defmethod pp/simple-dispatch Declaration [{:keys [form syms]}]
-  (pp/write-out (str "#D" (sort-by :names (keys syms)) "::"))
-  (pp/simple-dispatch form))
+  (pp/write-out (symbol "#D"))
+  (pp/write-out (sort-by :names (keys syms)))
+  (pp/write-out  (symbol "<"))
+  (pp/simple-dispatch form)
+  (pp/write-out  (symbol ">")))
 
 (defrecord Binding [form bindings]
   Object
   (toString [_]
-    (str "#B" (sort-by :names (keys bindings)) "::" form))
+    (str "#B" (sort-by :names (keys bindings)) "<" form ">"))
   janus.ast.Contextual
   janus.ast.Symbolic
   (symbols [_]
@@ -113,21 +119,26 @@
 (ast/ps Binding)
 
 (defmethod pp/simple-dispatch Binding [{:keys [form bindings]}]
-  (pp/write-out (str "#B" (sort-by :names (keys bindings)) "::"))
-  (pp/simple-dispatch form))
+  (pp/write-out (symbol "#B"))
+  (pp/write-out (sort-by :names (keys bindings)))
+  (pp/write-out  (symbol "<"))
+  (pp/simple-dispatch form)
+  (pp/write-out '>))
 
 (extend-protocol ast/Inspectable
   Context
-  (insp [{:keys [form]} ^Writer w level]
+  (insp [{:keys [form ctx]} ^Writer w level]
     (ast/spacer w level)
-    (.write w "C\n")
+    (.write w "C")
+    (.write w (str (sort-by :names (keys (names ctx)))))
+    (.write w "\n")
     (ast/insp form w (inc level)))
 
   Declaration
   (insp [{:keys [form syms]} ^Writer w level]
     (ast/spacer w level)
     (.write w "D")
-    (.write w (str syms))
+    (.write w (str (sort-by :names (keys syms))))
     (.write w "\n")
     (ast/insp form w (inc level)))
 
@@ -135,7 +146,7 @@
   (insp [{:keys [form bindings]} ^Writer w level]
     (ast/spacer w level)
     (.write w "B")
-    (.write w (str bindings))
+    (.write w (str (sort-by :names (keys bindings))))
     (.write w "\n")
     (ast/insp form w (inc level))))
 
