@@ -63,6 +63,11 @@
 (defn walk-list [l]
   (ast/list (map walk l)))
 
+(defn walk-pair [p]
+  (-> p
+      (update :head walk)
+      (update :tail walk)))
+
 ;;;;; Tree walker
 
 (defn inconceivable? [& args]
@@ -73,21 +78,16 @@
    [:I :L] eval-list   ; (I (L x y ...)) => (L (I x) (I y) ...)
    [:I :I] eval-inner
    [:I :A] eval-inner
-   [:I :C] eval-inner
-   [:I :B] eval-inner
-   [:I :D] eval-inner
 
    :I :form     ; (I V) => V. values are fixed points of eval.
 
    :L walk-list ; Walk has to recur into some structures, but most are data
    :μ walk-μ
    :E walk-emit
+   :P walk-pair
 
    [:A :I] apply-head ; (A head tail) => (A (walk head) tail)
    [:A :A] apply-head ;   iff `head` is unevaluated.
-   [:A :C] apply-head
-   [:A :B] apply-head
-   [:A :D] apply-head
 
    ;; An emission which includes a message to :return can trigger off the
    ;; application. But the connection logic isn't sophisticated enough for this
@@ -101,12 +101,21 @@
 
    [:I :S] identity              ; unresolved symbols can't be evaluated
 
+   [:I :C] eval-inner
+   [:I :B] eval-inner
+   [:I :D] eval-inner
+
+   [:A :C] apply-head
+   [:A :B] apply-head
+   [:A :D] apply-head
+
    [:C :C] inconceivable?
 
    [:D :B] eval-inner
    [:B :D] eval-inner
    [:B :C] eval-inner
    [:C :D] eval-inner
+
    [:C :S] (fn [{sym :form ctx :ctx :as c}]
              (if (contains? (env/names ctx) sym)
                c
@@ -125,6 +134,7 @@
                   sym))
 
    [:C :D :S] env/c-or-d
+
    [:B :C :S] (fn [{{sym :form ctx :ctx :as c} :form bindings :bindings :as b}]
                 (if (contains? bindings sym)
                   (assoc b :form sym)
@@ -138,6 +148,19 @@
                       (assoc d :form (walk (assoc im :form b))))
 
    [:I :B :D :S] env/bind-arg
+
+   ;; FIXME:
+   ;; [:I :B :D :B :D :S] (fn [_] (throw (RuntimeException. "not implemented")))
+
+   ;; FIXME: I need a regex style [:I (:B :D)+ :S] style rule. Probably [:I :D
+   ;; (:B :D)+ :S] as well.
+   ;;
+   ;; That's getting nice and fugly.
+   ;;
+   ;; That probably means I need a new design. This one has gotten me
+   ;; impressively far, but has some serious kinks. Can I ignore those and move
+   ;; on to new problems for a bit (like ν)? I'm starting to lose steam over
+   ;; this for now.
 
    :C env/push-down
    :D env/push-down
@@ -201,12 +224,13 @@
 (defn μ-ready? [args]
   (and
    (ast/list? args)
-   (ast/symbol? (first args))
-   (or (= 2 (count args)) (ast/symbol? (second args)))))
+   (ast/symbol? (env/peel (first args)))
+   (or (= 2 (count args)) (ast/symbol? (env/peel (second args))))))
 
 (defn μ [args]
-  (let [id (gensym)]
-    (apply ast/μ id (update args (dec (count args)) env/declare id (butlast args)))))
+  (let [id    (gensym)
+        names (into [] (map env/peel) (butlast args))]
+    (apply ast/μ id (conj names (env/declare (last args) id names)))))
 
 (defn emit [kvs]
   (assert (even? (count kvs)))
@@ -215,7 +239,10 @@
                   (partition 2 kvs)))))
 
 (defn check-select [args]
-  (boolean? (nth args 0)))
+  (let [p (nth args 0)]
+    (when (evaluated? p)
+      (assert (boolean? p) (str "Non boolean passed to select: " p))
+      true)))
 
 (defn select [[p t f]]
   ;; `t` & `f` have already been walked, so we've nothing to do but pick one.

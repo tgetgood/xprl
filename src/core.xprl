@@ -7,37 +7,9 @@
 ;; REVIEW: This initial def cannot accept metadata like docstrings, file line &
 ;; col numbers, etc. So we'll need to use it to write a better one eventually.
 
-(def defμ
-  (μ x
-     ~(def ~(nth* ~x 1)
-        (μ ~(nth* ~x 1) ~(nth* ~x 2) ~~(nth* ~x 3)))))
-
-(defμ fn x
-  (μ args
-     ~((μ ~(nth* ~x 1) ~~(nth* ~x 2)) . ~~args)))
-
-(defμ defn x
-  (defμ ~(nth* ~x 1) args
-    ((μ ~(nth* ~x 2) ~~(nth* ~x 3)) . ~~args)))
-
-(defμ if x
-  ~~(select ~~(nth* ~x 1) ~(nth* ~x 2) ~(nth* ~x 3)))
-
-;; (defμ cond body
-;;   ~~(select ~~(<* ~(count* ~body) 1)
-;;     ~(emit)
-;;     ~~(select ~~(nth* ~body 1)
-;;        ~(nth* ~body 2)
-;;        ~(cond ~(rest* ~(rest* ~body))))))
-
-(defμ when x
-  (if ~(nth* ~x 1) ~(nth* ~x 2) ~(emit)))
-
-;; Primitive elevation
-
+;; "Wraps a μ or primitive that takes only literal values in a function that
+;; evals its arguments."
 (def wrap
-  ;; "Wraps a μ or primitive that takes only literal values in a function that
-  ;; evals its arguments."
   (μ f
      ~(μ args
          ~(~f . ~~args))))
@@ -46,8 +18,8 @@
 
 (def count (wrap . count*))
 
-;; (def first (wrap . first*))
-;; (def rest (wrap . rest*))
+(def first (wrap . first*))
+(def rest (wrap . rest*))
 
 (def + (wrap . +*))
 (def - (wrap . -*))
@@ -58,8 +30,44 @@
 (def < (wrap . <*))
 (def = (wrap . =*))
 
-(def first (wrap . first*))
-(def rest (wrap . rest*))
+;;;;; Core
+
+(def if
+  (μ x
+     ~~(select ~~(nth* ~x 1) ~(nth* ~x 2) ~(nth* ~x 3))))
+
+(def defμ
+  (μ x
+     ~(def ~(nth* ~x 1)
+        (μ ~(nth* ~x 1) ~(nth* ~x 2) ~~(nth* ~x 3)))))
+
+;; This fn is not named and thus cannot call itself recursively.
+(def fn
+  (μ x
+     ~(μ args
+         ~((μ ~(nth* ~x 1) ~~(nth* ~x 2)) . ~~args))))
+
+;;(μ x ~(wrap . ~(μ  ~(nth x 1) ~~(nth x 2)))))
+
+;; This one is named. Note it's the outer μ that bears the name.
+(def fn*
+  (μ x
+     ~(μ ~(nth* ~x 1) args
+         ~((μ ~(nth* ~x 2) ~~(nth* ~x 3)) . ~~args))))
+
+(def defn
+  (μ x
+     ~(def ~(nth* ~x 1) (fn* . ~x))))
+
+(defμ cond body
+  (if (< (count body) 2)
+    (emit)
+    (if (nth body 1)
+      (nth body 2)
+      (cond . ~~(rest (rest body))))))
+
+(defμ when x
+  (if ~(nth* ~x 1) ~(nth* ~x 2) (emit)))
 
 (defn inc x (+ 1 (nth x 1)))
 

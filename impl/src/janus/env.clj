@@ -177,6 +177,11 @@
 (defn ctx? [x]
   (satisfies? ContextSwitch x))
 
+(defn peel [x]
+  (if (ctx? x)
+    (recur (:form x))
+    x))
+
 (defn pushall [ctx form]
   (reduce (fn [acc [k v]] (assoc acc k (assoc ctx :form v))) form form))
 
