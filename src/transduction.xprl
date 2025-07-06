@@ -23,6 +23,7 @@
         ;; REVIEW: will this cause the compiler to loop forever?
         (connect (map f) (rest xs) ccs)))))
 
+
 (defn comp [f g]
   (ν [x] ccs
      (let [inner (chan)]
@@ -54,7 +55,7 @@
         ;; (emit (:return ccs) (first state)) might be more appropriate if that
         ;; were not the case.
         ;; But is that any better than (connect identity ...)?
-        (connect identity (first state) ccs)))))
+        (connect identity [(first state)] ccs)))))
 
 (defn into [coll]
   (fn [xs]
@@ -105,5 +106,5 @@
                    (when-not (empty? state) state))
                  ;; N.B.: We can't map over `state` since a last-ch will not
                  ;; close of its own accord.
-                 (first state)
+                 [(first state)]
                  ccs)))))
