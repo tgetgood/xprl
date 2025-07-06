@@ -24,8 +24,6 @@
 (defn apply-primitive [app]
   (let [h    (:head app)
         args (walk (:tail app))]
-    ;; REVIEW: This assumes that all primitives take a list as args.
-    ;; That seems innocuous, but what are the ramifications?
     (if (and (evaluated? args) ((:check h) args))
       ((:fn h) args)
       (ast/application h args))))
@@ -224,13 +222,15 @@
 (defn μ-ready? [args]
   (and
    (ast/list? args)
-   (ast/symbol? (env/peel (first args)))
-   (or (= 2 (count args)) (ast/symbol? (env/peel (second args))))))
+   (every? #(ast/symbol? (env/peel %)) (butlast args))))
 
 (defn μ [args]
   (let [id    (gensym)
         names (into [] (map env/peel) (butlast args))]
     (apply ast/μ id (conj names (env/declare (last args) id names)))))
+
+(defn ν [args]
+  )
 
 (defn emit [kvs]
   (assert (even? (count kvs)))

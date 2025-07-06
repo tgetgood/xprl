@@ -175,12 +175,19 @@
   (->Macro f))
 
 
-(defrecord Nu [name params body]
+;; REVIEW: νs don't ~seem~ to need names since recursion is so far always
+;; handled at the level of a wrapping fn, thus creating a (potentially infinite)
+;; tower of networks. Watch out for overflows while walking the code.
+(defrecord Nu [params ccs body]
   Contextual
   Symbolic
+  (symbols [_] (symbols body))
   Object
   (toString [_]
-    (str "(#ν " params " " body ")")))
+    (str "(#ν " params " " ccs " " body ")")))
+
+(defn ν [params ccs body]
+  (->Nu params ccs body))
 
 
 (defrecord Emission [kvs]
@@ -206,6 +213,7 @@
 (defmacro ps [type]
   `(do (defmethod print-method ~type [o# ^Writer w#]
          (.write w# (str o#)))))
+
 ;;; Symbol
 
 (ps Symbol)
@@ -289,7 +297,6 @@
 (ps Immediate)
 
 (defmethod pp/simple-dispatch Immediate [i]
-  ;; REVIEW: Is this advisable?
   (.write ^Writer *out* "~")
   (pp/write-out (:form i)))
 
@@ -343,6 +350,10 @@
    (if-let [name (:name (meta f))]
      (pp/write-out name)
      (pp/write-out f))))
+
+;;; Nu
+
+(ps Nu)
 
 ;;; Emission
 

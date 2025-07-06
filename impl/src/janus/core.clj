@@ -25,7 +25,7 @@
   "Things that would traditionally be special forms."
   (macros
    {"μ"      [i/μ-ready? #'i/μ]
-    ;;   "ν"       createν
+    "ν"      [i/μ-ready? #'i/ν]
     "emit"   [(constantly true) #'i/emit]
     "select" [i/check-select #'i/select]
     ;; "first*" first*
