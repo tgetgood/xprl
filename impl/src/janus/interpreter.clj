@@ -21,6 +21,7 @@
                                        (when-let [name (:name μ)]
                                          {name μ})))))
 
+
 (defn apply-primitive [app]
   (let [h    (:head app)
         args (walk (:tail app))]
@@ -52,19 +53,20 @@
 
 ;;;;; Reduction
 
-(defn walk-μ [μ]
-  (update μ :body walk))
+(defn walk-keys [els]
+  (fn [x]
+    (reduce (fn [x k] (update x k walk)) x els)))
 
-(defn walk-emit [e]
-  (update e :kvs walk))
+;; This isn't necessary, just an optimisation.
+(def walk-body (walk-keys [:body]))
 
+(defn walk-all [x]
+  ((walk-keys (keys x)) x))
+
+;; This is an ugly necessity since we're using native vectors instead of our own
+;; record type.
 (defn walk-list [l]
   (ast/list (map walk l)))
-
-(defn walk-pair [p]
-  (-> p
-      (update :head walk)
-      (update :tail walk)))
 
 ;;;;; Tree walker
 
@@ -79,10 +81,14 @@
 
    :I :form     ; (I V) => V. values are fixed points of eval.
 
-   :L walk-list ; Walk has to recur into some structures, but most are data
-   :μ walk-μ
-   :E walk-emit
-   :P walk-pair
+   :μ walk-body ; Walk has to recur into some structures, but most are data
+   :ν walk-body
+   :E walk-all
+   :P walk-all
+
+   :L    walk-list
+   :seq  walk-all
+   :conc walk-all
 
    [:A :I] apply-head ; (A head tail) => (A (walk head) tail)
    [:A :A] apply-head ;   iff `head` is unevaluated.
@@ -90,6 +96,11 @@
    ;; An emission which includes a message to :return can trigger off the
    ;; application. But the connection logic isn't sophisticated enough for this
    ;; yet.
+   ;; Somehow, the emission has to percolate up to the top level so that the
+   ;; runtime can see it...
+   ;;
+   ;; I could just disallow this and require the programmer to jump through a
+   ;; (ν ccs (apply (connect ... ccs) tail)) shaped hoop... but I don't like it.
    ;; [:A :E] apply-emit
 
    [:A :F] apply-primitive ; Two kinds of operators are built in.
@@ -98,6 +109,11 @@
    :A apply-error ; REVIEW: Should application be extensible?
 
    [:I :S] identity              ; unresolved symbols can't be evaluated
+
+   ;;;;; Environmental manipulation
+   ;;
+   ;; The fact that most of the rules are here says to me that this is overly
+   ;; complicated, but I don't yet know how to simplify.
 
    [:I :C] eval-inner
    [:I :B] eval-inner
@@ -127,9 +143,9 @@
    [:B :B] env/merge-binds
 
    [:D :S] (fn [{sym :form syms :syms :as decl}]
-                (if (contains? syms sym)
-                  decl
-                  sym))
+             (if (contains? syms sym)
+               decl
+               sym))
 
    [:C :D :S] env/c-or-d
 
@@ -230,7 +246,7 @@
     (apply ast/μ id (conj names (env/declare (last args) id names)))))
 
 (defn ν [args]
-  )
+  (apply ast/ν (update args (dec (count args)) env/declare :ν (butlast args))))
 
 (defn emit [kvs]
   (assert (even? (count kvs)))

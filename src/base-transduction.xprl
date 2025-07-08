@@ -7,20 +7,13 @@
 ;; I'm very keen to see how this pans out. There might be something very deep
 ;; here.
 
-(defn map [f]
-  (ν params ccs
-     ;; (if (empty? (nth params 1))
-     ;;   ;; Should closing channels be manual? What about subcomputations that
-     ;;   ;; simply `(emit)` and die? This seems like a source of errors.
-     ;;   ;;
-     ;;   ;; Ideally we'd reference count and cleanup automatically, but that will
-     ;;   ;; have implications for timing.
-     ;;   (close! ccs)
-     ;;   ...)
-     (when (not (empty? (nth params 1)))
-       (seq
-        (connect (f (first (nth params 1))) ccs)
-        (connect ((map f) [(rest (nth params 1))]) ccs)))))
+(defn map fparams
+  (μ params
+     (ν ccs
+        (when (not (empty? (nth params 1)))
+          (seq
+           (connect ((nth fparams 1) (first (nth params 1))) ccs)
+           (connect ((map . fparams) (rest (nth params 1))) ccs))))))
 
 ;; REVIEW: How does the return channel "close" in this case?
 ;; i.e. how does `seq` know when to move on from one computation to the next?
@@ -42,6 +35,9 @@
 ;; So we need to walk the "bodies" of the connect calls (which come first) and
 ;; return some sort of AST node that *can* be manipulated until it bubbles up to
 ;; a connection attempt.
+;;
+;; Should we rely on the fact that `ccs` won't resolve until after connection?
+;; What happens if one of the processes doesn't depend on external ccs?
 ;;
 ;; Are `seq` & `conc` then just ast nodes which handle connection attempts
 ;; differently? That sounds too good to be true...

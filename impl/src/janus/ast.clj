@@ -1,7 +1,7 @@
 (ns janus.ast
   (:refer-clojure
    :exclude
-   [symbol symbol? keyword keyword? destructure type list list?])
+   [symbol symbol? keyword keyword? destructure type list list? seq])
   (:require
    [clojure.pprint :as pp]
    [clojure.set :as set]
@@ -178,16 +178,40 @@
 ;; REVIEW: νs don't ~seem~ to need names since recursion is so far always
 ;; handled at the level of a wrapping fn, thus creating a (potentially infinite)
 ;; tower of networks. Watch out for overflows while walking the code.
-(defrecord Nu [params ccs body]
+(defrecord Nu [params body]
   Contextual
   Symbolic
   (symbols [_] (symbols body))
   Object
   (toString [_]
-    (str "(#ν " params " " ccs " " body ")")))
+    (str "(#ν " params " "  body ")")))
 
-(defn ν [params ccs body]
-  (->Nu params ccs body))
+(defn ν [params body]
+  (->Nu params body))
+
+
+(defrecord Seq [elements]
+  Contextual
+  Symbolic
+  (symbols [_] (symbols elements))
+  Object
+  (toString [_]
+    (str "#seq" elements)))
+
+(defn seq [xs]
+  (->Seq (list xs)))
+
+
+(defrecord Conc [elements]
+  Contextual
+  Symbolic
+  (symbols [_] (symbols elements))
+  Object
+  (toString [_]
+    (str "#conc" elements)))
+
+(defn conc [xs]
+  (->Conc (list xs)))
 
 
 (defrecord Emission [kvs]
@@ -246,8 +270,8 @@
 
 (defmethod format-pair :default
   [_ tail]
-  (when (seq tail)
-    (pp/print-length-loop [tail (seq tail)]
+  (when (clojure.core/seq tail)
+    (pp/print-length-loop [tail (clojure.core/seq tail)]
                           (.write ^Writer *out* " ")
                           (pp/write-out (first tail))
                           (when (next tail)
@@ -354,6 +378,9 @@
 ;;; Nu
 
 (ps Nu)
+
+(ps Seq)
+(ps Conc)
 
 ;;; Emission
 
@@ -473,7 +500,7 @@
     (spacer w level)
     (.write w "E\n")
     (loop [kvs (elements (:kvs form))]
-      (when (seq kvs)
+      (when (clojure.core/seq kvs)
         (insp (first kvs) w (inc level))
         (insp (second kvs) w (inc level))
         (recur (drop 2 kvs))))))
@@ -494,7 +521,14 @@
    Primitive   :F
    Macro       :M
    Mu          :μ
-   Emission    :E})
+
+   Emission :E
+
+   Nu   :ν
+   Seq  :seq
+   Conc :conc
+
+   })
 
 (defn type [x]
   ;; There's nothing to gain in wrapping value types.
