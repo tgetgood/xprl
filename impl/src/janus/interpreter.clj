@@ -21,7 +21,6 @@
                                        (when-let [name (:name μ)]
                                          {name μ})))))
 
-
 (defn apply-primitive [app]
   (let [h    (:head app)
         args (walk (:tail app))]
@@ -246,7 +245,9 @@
     (apply ast/μ id (conj names (env/declare (last args) id names)))))
 
 (defn ν [args]
-  (apply ast/ν (update args (dec (count args)) env/declare :ν (butlast args))))
+  (let [body (env/declare (last args) :ν (butlast args))]
+    ;; REVIEW: νs evaluate their bodies. I think that's the right thing.
+    (ast/ν (first args) (ast/immediate body))))
 
 (defn emit [kvs]
   (assert (even? (count kvs)))
