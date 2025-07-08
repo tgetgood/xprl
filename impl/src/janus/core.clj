@@ -86,7 +86,13 @@
    (rt/run!)))
 
 (defn ev [s]
-  (go! @the-env (:form (r/read (r/string-reader s)))))
+  (let [conts {(ast/xkeys :env)    (fn [l]
+                                     (let [[sym value] l]
+                                       (swap! the-env env/bind* sym value)))
+               (ast/xkeys :return) println
+               (ast/xkeys :error)  (fn [x]
+                                     (println "Error: " x))}]
+    (go! @the-env (:form (r/read (r/string-reader s))) conts)))
 
 
 (defn iev [s]
