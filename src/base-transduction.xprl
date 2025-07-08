@@ -9,11 +9,11 @@
 
 (defn map fparams
   (μ params
-     (ν ccs
-        (when (not (empty? (nth params 1)))
-          (seq
-           (connect ((nth fparams 1) (first (nth params 1))) ccs)
-           (connect ((map . fparams) (rest (nth params 1))) ccs))))))
+     ~(ν ccs
+         (when (not (empty? (nth params 1)))
+           (seq
+            (connect ((nth fparams 1) (first (nth params 1))) ccs)
+            (connect ((map . fparams) (rest (nth params 1))) ccs))))))
 
 ;; REVIEW: How does the return channel "close" in this case?
 ;; i.e. how does `seq` know when to move on from one computation to the next?

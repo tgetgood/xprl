@@ -50,7 +50,7 @@
       (recur (rest kvs)))))
 
 (defn pass-ccs [ν ccs]
-  (i/walk (env/bind (:body ν) :ν (:params ν) ccs)))
+  (i/walk (env/bind (:body ν) :ν [(:params ν) ccs])))
 
 (defn send-return! [v ccs]
   (send! ccs (ast/xkeys :return) v))
@@ -61,7 +61,7 @@
   ;; Assume every element is connectable and let the runtime sort it out.
   ;; The only dependencies between concurrent tasks are data dependencies
   ;; managed by channels/streams
-  (dorun (map (fn [x] (schedule (ast/list [(fn [_] (connect x ccs)) []]))) xs)))
+  (dorun (map (fn [x] (schedule (ast/list [(fn [_] (connect x ccs))]))) xs)))
 
 (defn run-sequential! [{xs :elements} ccs]
   ;; FIXME: This will not work for concs nested within seqs since we need some
