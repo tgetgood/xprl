@@ -245,9 +245,10 @@
     (apply ast/μ id (conj names (env/declare (last args) id names)))))
 
 (defn ν [args]
-  (let [body (env/declare (last args) :ν (butlast args))]
+  (let [params (env/peel (first args))
+        body   (env/declare (last args) :ν [params])]
     ;; REVIEW: νs evaluate their bodies. I think that's the right thing.
-    (ast/ν (first args) (ast/immediate body))))
+    (ast/ν params (ast/immediate body))))
 
 (defn emit [kvs]
   (assert (even? (count kvs)))

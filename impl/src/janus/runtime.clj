@@ -50,7 +50,7 @@
       (recur (rest kvs)))))
 
 (defn pass-ccs [ν ccs]
-  (i/walk (env/bind (:body ν) :ν [(:params ν) ccs])))
+  (i/walk (env/bind (:body ν) :ν {(:params ν) ccs})))
 
 (defn send-return! [v ccs]
   (send! ccs (ast/xkeys :return) v))
