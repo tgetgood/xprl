@@ -30,6 +30,14 @@
 (def < (wrap . <*))
 (def = (wrap . =*))
 
+(def not (wrap . not*))
+
+(def empty? (wrap . empty?*))
+
+(def seq (wrap . seq*))
+(def conc (wrap . conc*))
+
+(def connect (wrap . connect*))
 ;;;;; Core
 
 (def if

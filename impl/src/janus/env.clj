@@ -192,7 +192,13 @@
       (ast/application? inner) (pushall ctx inner)
       (ast/immediate? inner)   (pushall ctx inner)
       (ast/emission? inner)    (pushall ctx inner)
-      (vector? inner)          (mapv #(assoc ctx :form %) inner)
-      (ast/μ? inner)           (assoc inner :body (assoc ctx :form (:body inner)))
-      (ctx? inner)             ctx
-      true                     inner)))
+
+      (ast/list? inner)  (mapv #(assoc ctx :form %) inner)
+      (ast/elist? inner) (update inner :elements (fn [els] (mapv #(assoc ctx :form %) els)))
+
+      (ast/μ? inner) (assoc inner :body (assoc ctx :form (:body inner)))
+      (ast/ν? inner) (assoc inner :body (assoc ctx :form (:body inner)))
+
+      (ctx? inner) ctx
+
+      true inner)))

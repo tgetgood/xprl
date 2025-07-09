@@ -53,6 +53,9 @@
     "<*"   #'<
     "=*"   #'=
     "mod*" #'mod
+    "not*" #'not
+
+    "empty?*" (fn [x] (boolean (empty? x)))
 
     "first*" #'first
     "rest*"  #'rest*
@@ -60,9 +63,9 @@
     "count*" #'count
     "nth*"   #'nth* ; Base 1 indexing
 
-    "seq"     #'ast/seq
-    "conc"    #'ast/conc
-    "connect" #'rt/connect
+    "seq*"     #'ast/seq
+    "conc*"    #'ast/conc
+    "connect*" #'rt/connect
     }))
 
 (def base-env

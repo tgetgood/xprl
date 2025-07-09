@@ -1,7 +1,7 @@
 (ns janus.ast
   (:refer-clojure
    :exclude
-   [symbol symbol? keyword keyword? destructure type list list? seq])
+   [symbol symbol? keyword keyword? destructure type list list? seq seq?])
   (:require
    [clojure.pprint :as pp]
    [clojure.set :as set]
@@ -189,6 +189,9 @@
 (defn ν [params body]
   (->Nu params body))
 
+(defn ν? [x]
+  (instance? Nu x))
+
 
 (defrecord Seq [elements]
   Contextual
@@ -201,6 +204,9 @@
 (defn seq [xs]
   (->Seq (list xs)))
 
+(defn seq? [x]
+  (instance? Seq x))
+
 
 (defrecord Conc [elements]
   Contextual
@@ -212,6 +218,12 @@
 
 (defn conc [xs]
   (->Conc (list xs)))
+
+(defn conc? [x]
+  (instance? Conc x))
+
+(defn elist? [x]
+  (or (seq? x) (conc? x)))
 
 
 (defrecord Emission [kvs]
@@ -379,8 +391,32 @@
 
 (ps Nu)
 
-(ps Seq)
-(ps Conc)
+(defmethod pp/simple-dispatch Nu [{:keys [params body]}]
+  (pp/pprint-logical-block
+   :prefix ")" :suffix ")"
+   (pp/write-out (symbol "#ν"))
+   (format-pair (symbol "#μ") [params body])))
+
+
+;;; seq & conc
+
+(defmethod print-method Seq [{:keys [elements]} ^Writer w]
+  (.write w "#seq")
+  (print-method elements w))
+
+(defmethod pp/simple-dispatch Seq [{:keys [elements]}]
+  (pp/write-out "#seq")
+  (pp/simple-dispatch elements))
+
+
+(defmethod print-method Conc [{:keys [elements]} ^Writer w]
+  (.write w "#conc")
+  (print-method elements w))
+
+(defmethod pp/simple-dispatch Conc [{:keys [elements]}]
+  (pp/write-out "#conc")
+  (pp/simple-dispatch elements))
+
 
 ;;; Emission
 
