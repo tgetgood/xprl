@@ -53,8 +53,8 @@
 
 (defn c-or-d [{{sym :form syms :syms :as decl} :form :as ctx}]
   (if (contains? syms sym)
-    decl
-    (assoc ctx :form sym)))
+    (update decl :syms select-keys [sym])
+    (-> ctx (assoc :form sym) (update :ctx project sym))))
 
 (defn bind-arg [{{{sym :form :as decl} :form :as bind} :form :as im}]
   (let [did (get (:syms decl) sym)
@@ -63,6 +63,9 @@
       (get bids did)
       ;; If the binding doesn't apply to this declaration, toss it.
       (assoc im :form decl))))
+
+(defn simplify-bindings [{{syms :syms} :form :as b}]
+  (update b :bindings select-keys (keys syms)))
 
 ;;;;; Contexts
 

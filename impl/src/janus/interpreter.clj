@@ -67,6 +67,11 @@
 (defn walk-list [l]
   (ast/list (map walk l)))
 
+;;;;; Env
+
+(defn resolve-inner-binding [{{{inner :form :as od} :form :as ob} :form :as i}]
+  (assoc ob :form (assoc od :form (walk (assoc i :form inner)))))
+
 ;;;;; Tree walker
 
 (defn inconceivable? [& args]
@@ -125,7 +130,7 @@
    [:C :C] inconceivable?
 
    [:D :B] eval-inner
-   [:B :D] eval-inner
+   [:B :D] #(eval-inner (env/simplify-bindings %))
    [:B :C] eval-inner
    [:C :D] eval-inner
 
@@ -143,7 +148,7 @@
 
    [:D :S] (fn [{sym :form syms :syms :as decl}]
              (if (contains? syms sym)
-               decl
+               (update decl :syms select-keys [sym])
                sym))
 
    [:C :D :S] env/c-or-d
@@ -160,6 +165,7 @@
    [:I :D :B :D :S] (fn [{{b :form :as d} :form :as im}]
                       (assoc d :form (walk (assoc im :form b))))
 
+   [:I :B :D :B :D :S] resolve-inner-binding
    [:I :B :D :S] env/bind-arg
 
    ;; FIXME:
