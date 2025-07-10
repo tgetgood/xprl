@@ -30,6 +30,10 @@
     "ν"      [i/μ-ready? #'i/ν]
     "emit"   [(constantly true) #'i/emit]
     "select" [i/check-select #'i/select]
+
+    "seq*"  [(constantly true) #'ast/seq]
+    "conc*" [(constantly true) #'ast/conc]
+
     ;; "first*" first*
     ;; "rest*"  rest*
     }))
@@ -69,9 +73,7 @@
     "count*" #'count
     "nth*"   #'nth* ; Base 1 indexing
 
-    "seq*"     #'ast/seq
-    "conc*"    #'ast/conc
-    "connect*" #'rt/connect
+   "connect*" #'rt/connect
     }))
 
 (def base-env

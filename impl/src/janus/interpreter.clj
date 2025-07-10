@@ -41,6 +41,9 @@
 (defn eval-list [im]
   (ast/list (map ast/immediate (:form im))))
 
+(defn eval-seq [{{:keys [elements] :as seq} :form :as im}]
+  (update seq :elements (partial mapv #(assoc im :form %))))
+
 (defn eval-pair [im]
   (let [p (:form im)]
     (ast/application (ast/immediate (:head p)) (:tail p))))
@@ -82,6 +85,9 @@
    [:I :L] eval-list   ; (I (L x y ...)) => (L (I x) (I y) ...)
    [:I :I] eval-inner
    [:I :A] eval-inner
+
+   [:I :seq]  eval-seq
+   [:I :conc] eval-seq
 
    :I :form     ; (I V) => V. values are fixed points of eval.
 
@@ -159,7 +165,7 @@
                   c))
 
    [:B :D :S] env/simplify-bindings
-   [:B :S] :form ; Binding without declaration is a noop
+   [:B :S]    :form ; Binding without declaration is a noop
 
    [:I :C :S] env/resolve
 
@@ -167,7 +173,7 @@
                       (assoc d :form (walk (assoc im :form b))))
 
    [:I :B :D :B :D :S] resolve-inner-binding
-   [:I :B :D :S] env/bind-arg
+   [:I :B :D :S]       env/bind-arg
 
    ;; FIXME:
    ;; [:I :B :D :B :D :S] (fn [_] (throw (RuntimeException. "not implemented")))
