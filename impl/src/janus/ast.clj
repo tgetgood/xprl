@@ -531,6 +531,25 @@
     (insp (:params form) w (inc level))
     (insp (:body form) w (inc level)))
 
+  Nu
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "ν\n")
+    (insp (:params form) w (inc level))
+    (insp (:body form) w (inc level)))
+
+  Seq
+  (insp [{:keys [elements]} ^Writer w level]
+    (spacer w level)
+    (.write w "seq\n")
+    (dorun (map #(insp % w (inc level)) elements)))
+
+  Conc
+  (insp [{:keys [elements]} ^Writer w level]
+    (spacer w level)
+    (.write w "conc\n")
+    (dorun (map #(insp % w (inc level)) elements)))
+
   Emission
   (insp [form ^Writer w level]
     (spacer w level)

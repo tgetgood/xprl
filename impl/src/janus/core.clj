@@ -38,8 +38,12 @@
 (defn rest* [xs]
   (into [] (rest xs)))
 
-(defn fn-reduced? [args]
-  (every? i/evaluated? args))
+(defn empty?* [x]
+  (boolean (empty? x)))
+
+(defn not* [x]
+  (assert (boolean? x))
+  (not x))
 
 (def fns
   (primitives
@@ -53,9 +57,9 @@
     "<*"   #'<
     "=*"   #'=
     "mod*" #'mod
-    "not*" #'not
+    "not*" #'not*
 
-    "empty?*" (fn [x] (boolean (empty? x)))
+    "empty?*" #'empty?*
 
     "first*" #'first
     "rest*"  #'rest*
@@ -99,7 +103,7 @@
 
 
 (defn iev [s]
-  (ast/inspect (ev s)))
+  (ast/inspect (go! @the-env (:form (r/read (r/string-reader s))))))
 
 (defn loadfile [envatom fname]
   (let [conts {(ast/xkeys :env)    (fn [l]
