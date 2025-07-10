@@ -10,6 +10,8 @@
 
 ;;;;; Builtins
 
+(defn fn-reduced? [args]
+  (every? i/evaluated? args))
 
 (defn primitive [p f]
   (ast/primitive p (with-meta #(apply f %) (meta f))))

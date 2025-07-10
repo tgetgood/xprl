@@ -64,8 +64,11 @@
       ;; If the binding doesn't apply to this declaration, toss it.
       (assoc im :form decl))))
 
-(defn simplify-bindings [{{syms :syms} :form :as b}]
-  (update b :bindings select-keys (keys syms)))
+(defn simplify-bindings [{{syms :syms :as d} :form :as b}]
+  (let [binds (select-keys (:bindings b) (keys syms))]
+    (if (empty? binds)
+      d
+      (assoc b :bindings binds))))
 
 ;;;;; Contexts
 

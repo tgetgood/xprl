@@ -130,7 +130,7 @@
    [:C :C] inconceivable?
 
    [:D :B] eval-inner
-   [:B :D] #(eval-inner (env/simplify-bindings %))
+   [:B :D] eval-inner
    [:B :C] eval-inner
    [:C :D] eval-inner
 
@@ -158,6 +158,7 @@
                   (assoc b :form sym)
                   c))
 
+   [:B :D :S] env/simplify-bindings
    [:B :S] :form ; Binding without declaration is a noop
 
    [:I :C :S] env/resolve
@@ -230,13 +231,15 @@
 ;; (def walk (memoize walk1))
 
 (defn walk*
+  ([sexp]
+   (trace! "\n  pass:\n")
+   (let [next (walk sexp)]
+     (cond
+       (= sexp next) sexp
+       (nil? next)   :end-of-computation
+       true          (recur next))))
   ([env sexp]
-   (loop [sexp (env/pin sexp (env/project env sexp))]
-     (trace! "\n  pass:\n")
-     (let [next (walk sexp)]
-       (if (= sexp next)
-         sexp
-         (recur next))))))
+   (walk* (env/pin sexp (env/project env sexp)))))
 
 ;;;;; Builtins
 
