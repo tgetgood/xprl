@@ -86,6 +86,7 @@
 (def srcpath "../src/")
 (def recxprl (str srcpath "recur.xprl"))
 (def core (str srcpath "core.xprl"))
+(def td (str srcpath "base-transduction.xprl"))
 (def testxprl (str srcpath "test.xprl"))
 
 (defn go!

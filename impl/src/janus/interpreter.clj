@@ -65,6 +65,18 @@
 (defn walk-all [x]
   ((walk-keys (keys x)) x))
 
+(defn walk-sequential
+  "Walks a seq in order, making sure each element has halted before walking the
+  next."
+  [{xs :elements}]
+  (loop [[x & xs] xs]
+    (let [v (walk x)]
+      (if (= v :end-of-computation)
+        (if (seq xs)
+          (recur xs)
+          :end-of-computation)
+        (ast/seq (into [v] xs))))))
+
 ;; This is an ugly necessity since we're using native vectors instead of our own
 ;; record type.
 (defn walk-list [l]
@@ -97,7 +109,7 @@
    :P walk-all
 
    :L    walk-list
-   :seq  walk-all
+   :seq  walk-sequential
    :conc walk-all
 
    [:A :I] apply-head ; (A head tail) => (A (walk head) tail)
@@ -242,7 +254,7 @@
    (let [next (walk sexp)]
      (cond
        (= sexp next) sexp
-       (nil? next)   :end-of-computation
+       (nil? next)   (assert false "inconceivable!")
        true          (recur next))))
   ([env sexp]
    (walk* (env/pin sexp (env/project env sexp)))))

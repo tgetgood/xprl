@@ -55,11 +55,12 @@
   (i/walk* (env/bind (:body ν) :ν {(:params ν) ccs})))
 
 (defn send-return! [v ccs]
-  (send! ccs (ast/xkeys :return) v)
-  :end-of-computation)
+  (send! ccs (ast/xkeys :return) v))
 
 (declare connect)
 
+;; REVIEW: seqs and concs can't actually bubble up to connect can they? I think
+;; this is a dead end.
 (defn schedule-concurrent! [{xs :elements} ccs]
   ;; Assume every element is connectable and let the runtime sort it out.
   ;; The only dependencies between concurrent tasks are data dependencies
@@ -88,4 +89,5 @@
   (get connection-rules (ast/type x) send-return!))
 
 (defn connect [form ccs]
-  ((connection form) form ccs))
+  ((connection form) form ccs)
+  :end-of-computation)

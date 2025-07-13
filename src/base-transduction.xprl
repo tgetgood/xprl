@@ -7,13 +7,12 @@
 ;; I'm very keen to see how this pans out. There might be something very deep
 ;; here.
 
-(defn map fparams
-  (μ params
-     ~(ν ccs
-         (when (not (empty? (nth params 1)))
-           (seq
-            (connect ((nth fparams 1) (first (nth params 1))) ccs)
-            (connect ((map . fparams) ~(rest (nth params 1))) ccs))))))
+(defn map params
+  (ν ccs
+     (when (not (empty? (nth params 2)))
+       (seq
+        (connect ((nth params 1) (first (nth params 2))) ccs)
+        (connect (map (nth params 1) (rest (nth params 2))) ccs)))))
 
 ;; REVIEW: How does the return channel "close" in this case?
 ;; i.e. how does `seq` know when to move on from one computation to the next?
@@ -44,16 +43,17 @@
 
 (defn comp [f g]
   ;; This version of `comp` assumes `f` & `g` are both νs.
-  (ν params ccs
-     (let [inner (chan)]
-       (conc
-        (connect (f (nth params 1)) (assoc ccs :return inner))
-        (connect (g inner) ccs))))) ; ccs points to original return location.
+  (μ params
+     ~(ν ccs
+        (let [inner (chan)]
+          (conc
+           (connect (f (nth params 1)) (assoc ccs :return inner))
+           (connect (g inner) ccs)))))) ; ccs points to original return location.
 
 ;; TODO: Ensure that ((comp (map f) (map g)) xs) == ((map g) ((map f) xs))
 
-(defn filter [p]
-  (map (fn [x] (when (p x) x))))
+(defn filter p
+  (map (fn x (when ((nth p 1) (nth x 1)) (nth x 1)))))
 
 (defn accumulate [rf init]
   (ν x ccs
