@@ -88,7 +88,7 @@
 
 (defmethod pp/simple-dispatch Context [{:keys [form ctx]}]
   (pp/write-out (symbol "#C"))
-  (pp/write-out (keys (names ctx)))
+  (pp/write-out (str (sort-by :names (keys (names ctx)))))
   (pp/write-out  (symbol "<"))
   (pp/simple-dispatch form)
   (pp/write-out  (symbol ">")))
@@ -107,7 +107,7 @@
 
 (defmethod pp/simple-dispatch Declaration [{:keys [form syms]}]
   (pp/write-out (symbol "#D"))
-  (pp/write-out (sort-by :names (keys syms)))
+  (pp/write-out (str (sort-by :names (keys syms))))
   (pp/write-out  (symbol "<"))
   (pp/simple-dispatch form)
   (pp/write-out  (symbol ">")))
@@ -126,7 +126,7 @@
 
 (defmethod pp/simple-dispatch Binding [{:keys [form bindings]}]
   (pp/write-out (symbol "#B"))
-  (pp/write-out (sort-by :names (keys bindings)))
+  (pp/write-out (str (sort-by :names (keys bindings))))
   (pp/write-out  (symbol "<"))
   (pp/simple-dispatch form)
   (pp/write-out '>))
