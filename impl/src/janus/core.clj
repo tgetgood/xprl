@@ -64,8 +64,14 @@
     "=*"   #'=
     "mod*" #'mod
     "not*" #'not*
+    "str*" #'str
 
+    "list?*"  #'ast/list?
+    "map?*"   #'map?
+    "merge*"  #'merge
     "empty?*" #'empty?*
+
+    "symbol?*" #'ast/symbol?
 
     "first*" #'first
     "rest*"  #'rest*
@@ -73,7 +79,7 @@
     "count*" #'count
     "nth*"   #'nth* ; Base 1 indexing
 
-   "connect*" #'rt/connect
+    "connect*" #'rt/connect
     }))
 
 (def base-env

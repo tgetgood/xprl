@@ -32,12 +32,20 @@
 
 (def not (wrap . not*))
 
+(def symbol? (wrap . symbol?*))
 (def empty? (wrap . empty?*))
+(def map? (wrap . map?*))
+(def list? (wrap . list?*))
+(def merge (wrap . merge*))
+
+(def str (wrap . str*))
 
 (def seq (wrap . seq*))
 (def conc (wrap . conc*))
 
 (def connect (wrap . connect*))
+
+
 ;;;;; Core
 
 (def if
@@ -49,11 +57,46 @@
      ~(def ~(nth* ~x 1)
         (μ ~(nth* ~x 1) ~(nth* ~x 2) ~~(nth* ~x 3)))))
 
+(defμ cond body
+  (if (< (count body) 2)
+    (emit)
+    (if (nth body 1)
+      (nth body 2)
+      (cond . ~(rest (rest body))))))
+
+(def destructure-map
+  (μ mp
+     ~(emit :error "not implemented")))
+
+(def destructure
+  (μ destructure xy
+     ~(cond
+        ~(empty? (nth xy 1))  {}
+        ~(symbol? (nth xy 1)) ~{(nth xy 1) (nth xy 2)}
+
+        ~(list? (nth xy 1)) ~(merge
+                              (destructure ~(first (nth xy 1)) ~(first (nth xy 2)))
+                              (destructure ~(rest (nth xy 1)) ~(rest (nth xy 2))))
+        ~(map? (nth xy 1))  ~(merge
+                              (destructure-map ~(first (nth xy 1)) ~(first (nth xy 2)))
+                              (destructure ~(rest (nth xy 1)) ~(rest (nth xy 2))))
+        true                ~(emit :error (str "Cannot destructure " xy)))))
+
+;; (def defmulti
+;;   (μ x
+;;      ))
+
+;; (defmulti fn [params body]
+;;   (μ x
+;;      ~(μ args
+;;          ~((μ ~(nth* ~x 1) ~~(nth* ~x 2)) . ~~args))))
+
+;; (defmulti fn [name params body]
+;;   )
+
 ;; This fn is not named and thus cannot call itself recursively.
-(def fn
-  (μ x
-     ~(μ args
-         ~((μ ~(nth* ~x 1) ~~(nth* ~x 2)) . ~~args))))
+#_(def fn
+  )
 
 ;;(μ x ~(wrap . ~(μ  ~(nth x 1) ~~(nth x 2)))))
 
@@ -66,13 +109,6 @@
 (def defn
   (μ x
      ~(def ~(nth* ~x 1) (fn* . ~x))))
-
-(defμ cond body
-  (if (< (count body) 2)
-    (emit)
-    (if (nth body 1)
-      (nth body 2)
-      (cond . ~~(rest (rest body))))))
 
 (defμ when x
   (if ~(nth* ~x 1) ~(nth* ~x 2) (emit)))
