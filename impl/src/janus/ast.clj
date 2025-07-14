@@ -166,13 +166,13 @@
 
 
 
-(defrecord Macro [f]
-  Object
-  (toString [_]
-    (str "#M[" (fname f) "]")))
+;; (defrecord Macro [f]
+;;   Object
+;;   (toString [_]
+;;     (str "#M[" (fname f) "]")))
 
-(defn macro [f]
-  (->Macro f))
+;; (defn macro [f]
+;;   (->Macro f))
 
 
 ;; REVIEW: νs don't ~seem~ to need names since recursion is so far always
@@ -371,21 +371,21 @@
      (pp/write-out (clojure.core/symbol n))
      (pp/write-out fn))))
 
-;;; Macro
+;; ;;; Macro
 
-(defmethod print-method Macro [{:keys [f]} ^Writer w]
-  (.write w "#M[")
-  (if-let [n (:name (meta f))]
-    (.write w (str n))
-    (print-method f w))
-  (.write w "]"))
+;; (defmethod print-method Macro [{:keys [f]} ^Writer w]
+;;   (.write w "#M[")
+;;   (if-let [n (:name (meta f))]
+;;     (.write w (str n))
+;;     (print-method f w))
+;;   (.write w "]"))
 
-(defmethod pp/simple-dispatch Macro [{:keys [f]}]
-  (pp/pprint-logical-block
-   :prefix "#M[" :suffix "]"
-   (if-let [name (:name (meta f))]
-     (pp/write-out name)
-     (pp/write-out f))))
+;; (defmethod pp/simple-dispatch Macro [{:keys [f]}]
+;;   (pp/pprint-logical-block
+;;    :prefix "#M[" :suffix "]"
+;;    (if-let [name (:name (meta f))]
+;;      (pp/write-out name)
+;;      (pp/write-out f))))
 
 ;;; Nu
 
@@ -510,12 +510,12 @@
     (.write w "L\n")
     (dorun (map #(insp % w (inc level)) form)))
 
-  Macro
-  (insp [form ^Writer w level]
-    (spacer w level)
-    (.write w "M[")
-    (.write w (str (:name (meta (:f form)))))
-    (.write w "]\n"))
+  ;; Macro
+  ;; (insp [form ^Writer w level]
+  ;;   (spacer w level)
+  ;;   (.write w "M[")
+  ;;   (.write w (str (:name (meta (:f form)))))
+  ;;   (.write w "]\n"))
 
   Primitive
   (insp [form ^Writer w level]
@@ -574,7 +574,6 @@
    Symbol      :S
    Application :A
    Primitive   :F
-   Macro       :M
    Mu          :μ
 
    Emission :E
