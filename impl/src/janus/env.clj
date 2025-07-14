@@ -200,6 +200,11 @@
       (ast/emission? inner)    (pushall ctx inner)
 
       (ast/list? inner)  (mapv #(assoc ctx :form %) inner)
+      (ast/map? inner)   (into (empty inner)
+                               (map (fn [[k v]]
+                                      [(assoc ctx :form k) (assoc ctx :form v)]))
+                               inner)
+      (ast/set? inner)   (into (empty inner) (map #(assoc ctx :form %)) inner)
       (ast/elist? inner) (update inner :elements (fn [els] (mapv #(assoc ctx :form %) els)))
 
       (ast/μ? inner) (assoc inner :body (assoc ctx :form (:body inner)))

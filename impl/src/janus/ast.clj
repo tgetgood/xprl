@@ -1,7 +1,7 @@
 (ns janus.ast
   (:refer-clojure
    :exclude
-   [symbol symbol? keyword keyword? destructure type list list? seq seq?])
+   [symbol symbol? keyword keyword? destructure type list list? seq seq? map? set?])
   (:require
    [clojure.pprint :as pp]
    [clojure.set :as set]
@@ -27,6 +27,22 @@
   clojure.lang.PersistentVector
   (symbols [xs]
     (into #{} (mapcat symbols) xs))
+
+  clojure.lang.PersistentArrayMap
+  (symbols [m]
+    (into #{} (mapcat symbols) m))
+
+  clojure.lang.PersistentHashMap
+  (symbols [m]
+    (into #{} (mapcat symbols) m))
+
+  clojure.lang.PersistentHashSet
+  (symbols [s]
+    (into #{} (mapcat symbols) s))
+
+  clojure.lang.MapEntry
+  (symbols [[k v]]
+    (set/union (symbols k) (symbols v)))
 
   Object
   (symbols [_] #{}))
@@ -82,6 +98,14 @@
 
 (defn list? [x]
   (vector?  x))
+
+(defn map? [x]
+  (or (instance? clojure.lang.PersistentArrayMap x)
+      (instance? clojure.lang.PersistentHashMap x)))
+
+(defn set? [x]
+  (instance? clojure.lang.PersistentHashSet x))
+
 
 (defrecord Pair [head tail]
   Contextual
@@ -503,6 +527,21 @@
     (.write w "A\n")
     (insp (:head form) w (inc level))
     (insp (:tail form) w (inc level)))
+
+  clojure.lang.PersistentArrayMap
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "M\n")
+    (dorun (map #(insp % w (inc level)) form)))
+
+  clojure.lang.MapEntry
+  (insp [[k v] ^Writer w level]
+    (insp k w level)
+    (spacer w level)
+    (.write w "=>\n")
+    (insp v w level)
+    (spacer w level)
+    (.write w "-\n"))
 
   clojure.lang.PersistentVector
   (insp [form ^Writer w level]
