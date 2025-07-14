@@ -567,22 +567,16 @@
 ;;;;; Sugar
 
 (def type-table
-  {clojure.lang.PersistentVector :L
-
-   Immediate   :I
+  {Immediate   :I
    Pair        :P
    Symbol      :S
    Application :A
    Primitive   :F
    Mu          :μ
-
-   Emission :E
-
-   Nu   :ν
-   Seq  :seq
-   Conc :conc
-
-   })
+   Nu          :ν
+   Emission    :E
+   Seq         :seq
+   Conc        :conc})
 
 (defn type [x]
   ;; There's nothing to gain in wrapping value types.

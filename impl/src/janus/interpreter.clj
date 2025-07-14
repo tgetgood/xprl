@@ -41,6 +41,9 @@
 (defn eval-list [im]
   (ast/list (map ast/immediate (:form im))))
 
+(defn eval-map [{m :form :as i}]
+  (into (empty m) (map (fn [[k v]] [(assoc i :form k) (assoc i :form v)])) m))
+
 (defn eval-seq [{{:keys [elements] :as seq} :form :as im}]
   (update seq :elements (partial mapv #(assoc im :form %))))
 
@@ -82,6 +85,9 @@
 (defn walk-list [l]
   (ast/list (map walk l)))
 
+(defn walk-map [m]
+  (into (empty m) (map (fn [[k v]] [(walk k) (walk v)])) m))
+
 ;;;;; Env
 
 (defn resolve-inner-binding [{{{inner :form :as od} :form :as ob} :form :as i}]
@@ -95,6 +101,7 @@
 (def rules
   {[:I :P] eval-pair   ; (I (P x y)) => (A (I x) y)
    [:I :L] eval-list   ; (I (L x y ...)) => (L (I x) (I y) ...)
+   [:I :M] eval-map    ; (I {x y ...}) => {(I x) (I y) ...}
    [:I :I] eval-inner
    [:I :A] eval-inner
 
@@ -108,6 +115,7 @@
    :E walk-all
    :P walk-all
 
+   :M    walk-map
    :L    walk-list
    :seq  walk-sequential
    :conc walk-all
@@ -216,9 +224,15 @@
     (env/ctx? x)         (:form x)
     true                 nil))
 
+(def default-types
+  {clojure.lang.PersistentVector   :L
+   clojure.lang.PersistentArrayMap :M
+   clojure.lang.PersistentHashMap  :M
+   clojure.lang.PersistentHashSet  :set})
+
 (defn node-type [x]
   (let [t (type x)]
-    (get env/type-table t (get ast/type-table t :V))))
+    (get (merge ast/type-table env/type-table default-types) t :V)))
 
 (defn unwind [rule trees]
   (cond
