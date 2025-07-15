@@ -48,10 +48,6 @@
 
 ;;;;; Core
 
-(def if
-  (μ x
-     ~~(select ~~(nth* ~x 1) ~(nth* ~x 2) ~(nth* ~x 3))))
-
 (def defμ
   (μ x
      ~(def ~(nth* ~x 1)
@@ -72,21 +68,27 @@
                      ~(nth* ~body 2)
                      (condμ . ~(rest* ~(rest* ~body))))))
 
+(def let*
+  (μ x
+     ~((μ ~(nth* ~(nth* ~x 1) 1) ~~(nth* ~x 2)) . ~~(nth* ~(nth* ~x 1) 2))))
+
 (def destructure-map
   (μ mp
      ~(emit :error "not implemented")))
 
-(defμ destructure x
-  (condμ
-   (empty?* ~(nth* ~x 1))  {}
-   (symbol?* ~(nth* ~x 1)) {(nth* ~x 1) (nth* ~x 2)}
-   (list?* ~(nth* ~x 1))   (merge
-                            (destructure ~(first* ~(nth* ~x 1)) ~(first* ~(nth* ~x 2)))
-                            (destructure ~(rest* ~(nth* ~x 1)) ~(rest* ~(nth* ~x 2))))
-   (map?* ~(nth* ~x 1))   (merge
-                            (destructure-map ~(first* ~(nth* ~x 1)) ~(first* ~(nth* ~x 2)))
-                            (destructure ~(rest* ~(nth* ~x 1)) ~(rest* ~(nth* ~x 2))))
-   true                   (emit :error ~(str* "Cannot destructure: " ~x))))
+(defμ destructure xy
+  (let* [x (nth* ~xy 1)]
+    (let* [y (nth* ~xy 2)]
+      (condμ
+        (empty?* ~x)  {}
+        (symbol?* ~x) {~x ~y}
+        (list?* ~x)   (merge
+                       (destructure ~(first* ~x) ~(first* ~y))
+                       (destructure ~(rest* ~x) ~(rest* ~y)))
+        (map?* ~x)    (merge
+                       (destructure-map ~(first* ~x) ~(first* ~y))
+                       (destructure ~(rest* ~x) ~(rest* ~y)))
+        true          (emit :error (str "Cannot destructure: " x ", " y))))))
 
 #_(def destructure
   (μ destructure xy
@@ -119,6 +121,10 @@
   )
 
 ;;(μ x ~(wrap . ~(μ  ~(nth x 1) ~~(nth x 2)))))
+
+(def if
+  (μ x
+     ~~(select ~~(nth* ~x 1) ~(nth* ~x 2) ~(nth* ~x 3))))
 
 ;; This one is named. Note it's the outer μ that bears the name.
 (def fn*

@@ -253,14 +253,14 @@
 (defn trace-env [sexp]
   (ast/symbols sexp))
 
-(defn walk1 [sexp]
+(defn walk [sexp]
   (let [[rule f] (rule-match sexp)]
     (trace! "rule match:" rule sexp "\n  syms:" (trace-env sexp))
     (let [v (f sexp)]
       (trace! "result:" rule "\n" sexp "\n->\n" v)
       (debug/tag v rule sexp))))
 
-(def walk (memoize walk1))
+;; (def walk (memoize walk1))
 
 (defn walk*
   ([sexp]
