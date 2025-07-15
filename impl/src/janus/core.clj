@@ -103,6 +103,9 @@
    (rt/schedule (ast/list [(fn [_] (rt/connect (go! env f) ccs))]))
    (rt/run!)))
 
+(defn evv [s]
+  (go! @the-env (:form (r/read (r/string-reader s)))))
+
 (defn ev [s]
   (let [conts {(ast/xkeys :env)    (fn [l]
                                      (let [[sym value] l]

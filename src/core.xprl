@@ -70,7 +70,7 @@
 
 (def let*
   (μ x
-     ~((μ ~(nth* ~(nth* ~x 1) 1) ~~(nth* ~x 2)) . ~~(nth* ~(nth* ~x 1) 2))))
+     ~~((μ ~(nth* ~(nth* ~x 1) 1) ~(nth* ~x 2)) . ~~(nth* ~(nth* ~x 1) 2))))
 
 (def destructure-map
   (μ mp
@@ -81,7 +81,7 @@
     (let* [y (nth* ~xy 2)]
       (condμ
         (empty?* ~x)  {}
-        (symbol?* ~x) {~x ~y}
+        (symbol?* ~x) {x ~y}
         (list?* ~x)   (merge
                        (destructure ~(first* ~x) ~(first* ~y))
                        (destructure ~(rest* ~x) ~(rest* ~y)))
@@ -89,20 +89,6 @@
                        (destructure-map ~(first* ~x) ~(first* ~y))
                        (destructure ~(rest* ~x) ~(rest* ~y)))
         true          (emit :error (str "Cannot destructure: " x ", " y))))))
-
-#_(def destructure
-  (μ destructure xy
-     ~(cond
-        ~(empty? (nth xy 1))  {}
-        ~(symbol? (nth xy 1)) ~{(nth xy 1) (nth xy 2)}
-
-        ~(list? (nth xy 1)) ~(merge
-                              (destructure ~(first (nth xy 1)) ~(first (nth xy 2)))
-                              (destructure ~(rest (nth xy 1)) ~(rest (nth xy 2))))
-        ~(map? (nth xy 1))  ~(merge
-                              (destructure-map ~(first (nth xy 1)) ~(first (nth xy 2)))
-                              (destructure ~(rest (nth xy 1)) ~(rest (nth xy 2))))
-        true                ~(emit :error (str "Cannot destructure " xy)))))
 
 ;; (def defmulti
 ;;   (μ x
