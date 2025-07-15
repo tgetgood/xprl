@@ -64,11 +64,31 @@
       (nth body 2)
       (cond . ~(rest (rest body))))))
 
+(defμ condμ body
+  ;; gets an extra `~` from `defμ`
+  ~(select ~(<* ~(count* ~body) 2)
+            (emit)
+            ~(select ~~(nth* ~body 1)
+                     ~(nth* ~body 2)
+                     (condμ . ~(rest* ~(rest* ~body))))))
+
 (def destructure-map
   (μ mp
      ~(emit :error "not implemented")))
 
-(def destructure
+(defμ destructure x
+  (condμ
+   (empty?* ~(nth* ~x 1))  {}
+   (symbol?* ~(nth* ~x 1)) {(nth* ~x 1) (nth* ~x 2)}
+   (list?* ~(nth* ~x 1))   (merge
+                            (destructure ~(first* ~(nth* ~x 1)) ~(first* ~(nth* ~x 2)))
+                            (destructure ~(rest* ~(nth* ~x 1)) ~(rest* ~(nth* ~x 2))))
+   (map?* ~(nth* ~x 1))   (merge
+                            (destructure-map ~(first* ~(nth* ~x 1)) ~(first* ~(nth* ~x 2)))
+                            (destructure ~(rest* ~(nth* ~x 1)) ~(rest* ~(nth* ~x 2))))
+   true                   (emit :error ~(str* "Cannot destructure: " ~x))))
+
+#_(def destructure
   (μ destructure xy
      ~(cond
         ~(empty? (nth xy 1))  {}
