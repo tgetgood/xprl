@@ -192,11 +192,11 @@
    [:I :D :B :D :S] (fn [{{b :form :as d} :form :as im}]
                       (assoc d :form (walk (assoc im :form b))))
 
-   [:I :B :D :B :D:B :D :B :D :B :D :S] resolve-inner-binding
-   [:I :B :D :B :D :B :D :B :D :S]      resolve-inner-binding
-   [:I :B :D :B :D :B :D :S]            resolve-inner-binding
-   [:I :B :D :B :D :S]                  resolve-inner-binding
-   [:I :B :D :S]                        env/bind-arg
+   ;; [:I :B :D :B :D :B :D :B :D :B :D :S] resolve-inner-binding
+   ;; [:I :B :D :B :D :B :D :B :D :S]       resolve-inner-binding
+   ;; [:I :B :D :B :D :B :D :S]             resolve-inner-binding
+   [:I :B :D :B :D] resolve-inner-binding
+   [:I :B :D :S]    env/bind-arg
 
    ;; FIXME:
    ;; [:I :B :D :B :D :S] (fn [_] (throw (RuntimeException. "not implemented")))
