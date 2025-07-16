@@ -75,8 +75,8 @@
 (defμ let* x
   ~(select ~(empty?* ~(nth* ~x 1))
            (nth* ~x 2)
-           ~((μ ~(nth* ~(nth* ~x 1) 1)
-                (let* ~(rest* ~(rest* ~(nth* ~x 1))) ~(nth* ~x 2)))
+           ((μ ~(nth* ~(nth* ~x 1) 1)
+                ~(let* ~(rest* ~(rest* ~(nth* ~x 1))) ~(nth* ~x 2)))
              . ~(nth* ~(nth* ~x 1) 2))))
 
 (defμ let-map x
@@ -84,25 +84,25 @@
            ~(nth* ~x 2)
            ~((μ ~(nth* ~(first* ~(nth* ~x 1)) 1)
                 (let-map ~(rest* ~(nth* ~x 1)) ~(nth* ~x 2)))
-             . ~~(nth* ~(first* ~(nth* ~x 1)) 2)))))
+             . ~~(nth* ~(first* ~(nth* ~x 1)) 2))))
 
 (def destructure-map
   (μ mp
      ~(emit :error "not implemented")))
 
 (defμ destructure xy
-  (let1 [x ~(nth* ~xy 1)]
-        ~(let1[y ~(nth* ~xy 2)]
-              ~(condμ
-                (empty?* ~x)  {}
-                (symbol?* ~x) {x ~y}
-                (list?* ~x)   (merge
-                               (destructure ~(first* ~x) ~(first* ~y))
-                               (destructure ~(rest* ~x) ~(rest* ~y)))
-                (map?* ~x)    (merge
-                               (destructure-map ~(first* ~x) ~(first* ~y))
-                               (destructure ~(rest* ~x) ~(rest* ~y)))
-                true          (emit :error (str "Cannot destructure: " x ", " y))))))
+  (let* [x ~(nth* ~xy 1)]
+    ~(let*[y ~(nth* ~xy 2)]
+       ~(condμ
+         (empty?* ~x)  {}
+         (symbol?* ~x) {x ~y}
+         (list?* ~x)   (merge
+                        (destructure ~(first* ~x) ~(first* ~y))
+                        (destructure ~(rest* ~x) ~(rest* ~y)))
+         (map?* ~x)    (merge
+                        (destructure-map ~(first* ~x) ~(first* ~y))
+                        (destructure ~(rest* ~x) ~(rest* ~y)))
+         true          (emit :error (str "Cannot destructure: " x ", " y))))))
 
 (def fn2
   (μ x
