@@ -74,17 +74,17 @@
 
 (defμ let* x
   ~(select ~(empty?* ~(nth* ~x 1))
-           (nth* ~x 2)
-           ((μ ~(nth* ~(nth* ~x 1) 1)
-                ~(let* ~(rest* ~(rest* ~(nth* ~x 1))) ~(nth* ~x 2)))
+           ~(nth* ~x 2)
+           ~((μ ~(nth* ~(nth* ~x 1) 1)
+                (let* ~(rest* ~(rest* ~(nth* ~x 1))) ~(nth* ~x 2)))
              . ~(nth* ~(nth* ~x 1) 2))))
 
 (defμ let-map x
   ~(select ~(empty?* ~(nth* ~x 1))
            ~(nth* ~x 2)
-           ~((μ ~(nth* ~(first* ~(nth* ~x 1)) 1)
-                (let-map ~(rest* ~(nth* ~x 1)) ~(nth* ~x 2)))
-             . ~~(nth* ~(first* ~(nth* ~x 1)) 2))))
+           ((μ ~(nth* ~(first* ~(nth* ~x 1)) 1)
+               ~(let-map ~(rest* ~(nth* ~x 1)) ~(nth* ~x 2)))
+            . ~~(nth* ~(first* ~(nth* ~x 1)) 2))))
 
 (def destructure-map
   (μ mp
@@ -92,7 +92,7 @@
 
 (defμ destructure xy
   (let* [x ~(nth* ~xy 1)]
-    ~(let*[y ~(nth* ~xy 2)]
+    ~(let* [y ~(nth* ~xy 2)]
        ~(condμ
          (empty?* ~x)  {}
          (symbol?* ~x) {x ~y}
@@ -104,13 +104,13 @@
                         (destructure ~(rest* ~x) ~(rest* ~y)))
          true          (emit :error (str "Cannot destructure: " x ", " y))))))
 
-(def fn2
+#_(def fn2
   (μ x
      ~(μ args
          ~(let-map ~(destructure ~(nth* ~x 1) ~~args)
             ~(nth* ~x 2)))))
 
-(def fn3
+#_(def fn3
   (μ x
      ~(μ ~(nth* ~x 1) args
          ~(let-map ~(destructure ~(nth* ~x 2) ~~args)
