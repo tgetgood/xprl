@@ -70,47 +70,45 @@
 
 (def let1
   (μ x
-     ~((μ ~(nth* ~(nth* ~x 1) 1) ~(nth* ~x 2)) . ~(nth* ~(nth* ~x 1) 2))))
+     ~~((μ ~(nth* ~(nth* ~x 1) 1) ~(nth* ~x 2)) . ~(nth* ~(nth* ~x 1) 2))))
 
 (defμ let* x
   ~(select ~(empty?* ~(nth* ~x 1))
-           ~(nth* ~x 2)
-           ~((μ ~(nth* ~(nth* ~x 1) 1)
-                (let* ~(rest* ~(rest* ~(nth* ~x 1))) ~(nth* ~x 2)))
-             . ~(nth* ~(nth* ~x 1) 2))))
+           (nth* ~x 2)
+           (let1 [~(nth* ~(nth* ~x 1) 1) ~(nth* ~(nth* ~x 1) 2)]
+                 (let* ~(rest* ~(rest* ~(nth* ~x 1))) ~(nth* ~x 2)))))
 
 (defμ let-map x
   ~(select ~(empty?* ~(nth* ~x 1))
-           ~(nth* ~x 2)
-           ((μ ~(nth* ~(first* ~(nth* ~x 1)) 1)
-               ~(let-map ~(rest* ~(nth* ~x 1)) ~(nth* ~x 2)))
-            . ~~(nth* ~(first* ~(nth* ~x 1)) 2))))
+           (nth* ~x 2)
+           (let1 [~(nth* ~(first* ~(nth* ~x 1)) 1) ~(nth* ~(first* ~(nth* ~x 1)) 2)]
+                 (let-map ~(rest* ~(nth* ~x 1)) ~(nth* ~x 2)))))
 
 (def destructure-map
   (μ mp
      ~(emit :error "not implemented")))
 
 (defμ destructure xy
-  (let* [x ~(nth* ~xy 1)]
-    ~(let* [y ~(nth* ~xy 2)]
-       ~(condμ
-         (empty?* ~x)  {}
-         (symbol?* ~x) {x ~y}
-         (list?* ~x)   (merge
-                        (destructure ~(first* ~x) ~(first* ~y))
-                        (destructure ~(rest* ~x) ~(rest* ~y)))
-         (map?* ~x)    (merge
-                        (destructure-map ~(first* ~x) ~(first* ~y))
-                        (destructure ~(rest* ~x) ~(rest* ~y)))
-         true          (emit :error (str "Cannot destructure: " x ", " y))))))
+  (let* [params ~(nth* ~xy 1)
+         args   ~(nth* ~xy 2)]
+    ~(condμ
+      (symbol?* ~params) {params ~args}
+      (empty?* ~params)  {}
+      (list?* ~params)   (merge
+                     (destructure ~(first* ~params) ~(first* ~args))
+                     (destructure ~(rest* ~params) ~(rest* ~args)))
+      (map?* ~params)    (merge
+                     (destructure-map ~(first* ~params) ~(first* ~args))
+                     (destructure ~(rest* ~params) ~(rest* ~args)))
+      true          (emit :error (str "Cannot destructure: " params ", " args)))))
 
-#_(def fn2
+(def fn2
   (μ x
      ~(μ args
          ~(let-map ~(destructure ~(nth* ~x 1) ~~args)
             ~(nth* ~x 2)))))
 
-#_(def fn3
+(def fn3
   (μ x
      ~(μ ~(nth* ~x 1) args
          ~(let-map ~(destructure ~(nth* ~x 2) ~~args)

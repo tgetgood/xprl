@@ -57,7 +57,7 @@
     (-> ctx (assoc :form sym) (update :ctx project sym))))
 
 (defn bind-arg [{{{sym :form :as decl} :form :as bind} :form :as im}]
-  (let [did (get (:syms decl) sym)
+  (let [did  (get (:syms decl) sym)
         bids (get (:bindings bind) sym)]
     (if (contains? bids did)
       (get bids did)

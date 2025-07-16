@@ -21,11 +21,16 @@
                                        (when-let [name (:name μ)]
                                          {name μ})))))
 
+(defonce error (atom nil))
+
 (defn apply-primitive [app]
   (let [h    (:head app)
         args (walk (:tail app))]
     (if (and (evaluated? args) ((:check h) args))
-      ((:fn h) args)
+      (try
+        ((:fn h) args)
+        (catch Exception e (reset! error {:app app :e e})
+               :error))
       (ast/application h args))))
 
 (defn apply-error [app]
