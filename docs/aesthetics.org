@@ -1693,6 +1693,9 @@ It's a big project. Be patient. Even I'm not holding my breath.
    but there are far more computers than people in the world now and that isn't
    likely to reverse.
 * The Language as it Stands
+  - Note taken on [2025-07-20 Sun 09:40] \\
+    This whole section should be edited for currency and moved into language.org.
+
   If you're going to try, go all the way, otherwise don't even start it. — Bukowski
 
   This is a constantly changing description of the form which the thing I'm
@@ -1732,6 +1735,11 @@ It's a big project. Be patient. Even I'm not holding my breath.
    have a periodic character which allows the work graph to be partitioned
    somehow. Whether or not I can actually make use of that remains to be seen.
 
+   A much more reasonable optimisation in the face of stateful receivers is
+   pipeline parallelism when the steps are complex enough that communication
+   overhead doesn't dominate. This can and should be handled automatically by
+   work stealing.
+
    Notably, receivers are not functions, proceedures, subroutines, etc.. They're
    routines in an old sense of the word. Every receiver terminates in an =emit=
    instruction which basically jumps back to the event loop after setting some
@@ -1742,12 +1750,22 @@ It's a big project. Be patient. Even I'm not holding my breath.
    is written because the namespace is the context in which the symbols in a
    unit of code are to be interpreted.
 
+   N.B.: This makes the Ur namespace something external to the language that has
+   to be coded separately — possibly by hand — before the language can be
+   bootstrapped.
+
+   Also note that since every tree of namespaces that can be created is created
+   by (persistent) modification of the Ur namespace tree, which lets us explore
+   the geneology of programs, so to speak, as data via the history. I have no
+   idea what the ramifications of this will be, or if they'll be practically
+   useful, but it's too novel a point to not mention it.
+
    There are two basic types of reference to other code:
 
    1. References to code in external libraries.
    2. References to code within the current project.
 
-   Every reference, or either type, has to be unambiguous and immutable. The
+   Every reference, of either type, has to be unambiguous and immutable. The
    code to which a symbol refers cannot be changed without changing the context
    of evaluation (namespace).
 
@@ -1761,8 +1779,8 @@ It's a big project. Be patient. Even I'm not holding my breath.
 
    Packages aren't a natural thing. They're an abstraction to help us
    organise. Ultimately it's the things symbols point to that have
-   versions. I'll refer to a think referred to by a symbol as a code unit, for
-   lack of a better term. It could be a function, it could be literal data. I
+   versions. I'll refer to a thing referred to by a symbol as a code unit, for
+   lack of a better term. It could be a μ or a ν, it could be literal data. I
    don't think there's much else it could be. Of course even a function is sent
    as literal data + context of evaluation (also literal data) + possible
    analysis and compile cache + possible cache of ready to execute binary for a
@@ -1776,16 +1794,16 @@ It's a big project. Be patient. Even I'm not holding my breath.
    like we're jit compiling (so that everything still works if the user starts
    to edit the code, for instance). This is getting off topic.
 
-   A package is just a (presumably curated) collection of code units from a
-   single publisher. A publisher can be an individual or an organisation. But
-   orgs don't write code, so a package published by an org is just a collection
-   of code units published (internally to the org) by individuals.
+   A package is just a (presumably curated) collection of code units by a single
+   publisher. A publisher can be an individual or an organisation. But orgs
+   don't write code, so a package published by an org is just a collection of
+   code units published (internally to the org) by individuals.
 
    So the real coordinates of an external code unit are (source, symbol,
    version). Packages aren't going away, it's useful to have something organised
    for you by the people who know it best, but they're not primary
-   artefacts. They're just directories. Source code listicles? Well there's no
-   shortage of junky packages out there in any ecosystem.
+   artefacts. They're just pseudo directories. Source code listicles? Well
+   there's no shortage of junky packages out there in any ecosystem.
 
    In theory everything published by a given publisher could be available on an
    à la carte basis. But that'll quickly become a soup of symbols. Documentation
@@ -1813,6 +1831,9 @@ It's a big project. Be patient. Even I'm not holding my breath.
    That sounds nice, but I don't know that it's necessary.
 
 ** Message Passing and Metaprogramming                          :reflection:
+   - Note taken on [2025-07-20 Sun 10:11] \\
+     This is radically out of date. So much so that it's an archeological artefact by
+     now. So should I keep it?
    These things actually play very closely together.
 
    We're going to adopt the planner convention that the form (f x y z) means
