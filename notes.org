@@ -34,8 +34,16 @@
    optional emission. It's entirely possible that a poorly written logger could
    force everything to be eager. But seems like a possibility in any language.
    What safeguards can we have?
+* Known Bugs
 * Observations
 ** [2024-11-30 Sat] Atemporality and Messaging
+   - Note taken on [2025-07-20 Sun 10:15] \\
+     This has been solved by separating emission, which is a runtime activity, from
+     walking sexps which is time independent. If a μ makes it up to the runtime, we
+     just wait for its args to come it. When the do, an emission bubbles up to the
+     runtime which then actually causes a send.
+
+     I think this scheme is sufficient. But time will tell.
    One assumption that I've been making about message passing is that if a μ
    emits messages, then we know that those message will be sent at a point in
    time strictly after μ receives its arguments.
