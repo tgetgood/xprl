@@ -106,13 +106,13 @@
   (μ x
      ~(μ args
          ~(let-map ~(destructure ~(nth* ~x 1) ~~args)
-            ~(nth* ~x 2)))))
+            ~~(nth* ~x 2)))))
 
 (def fn3
   (μ x
      ~(μ ~(nth* ~x 1) args
          ~(let-map ~(destructure ~(nth* ~x 2) ~~args)
-            ~(nth* ~x 3)))))
+            ~~(nth* ~x 3)))))
 
 ;; (def defmulti
 ;;   (μ x
