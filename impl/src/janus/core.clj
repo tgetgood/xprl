@@ -67,7 +67,7 @@
     "str*" #'str
 
     "list?*"  #'ast/list?
-    "map?*"   #'map?
+    "map?*"   #'ast/map?
     "merge*"  #'merge
     "empty?*" #'empty?*
 
