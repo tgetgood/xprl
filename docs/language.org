@@ -174,8 +174,7 @@ This is largely an aid to my own memory so bear with me.
   As covered in the previous section, whether or not an expression will ever be
   evaluated — that is whether a given expression is code or data — is expressed
   syntactically. Given =(f x)= the question of whether =x= will or will not be
-  evaluated doesn't depend on the *type* of =f=, but on its syntactic
-  representation.
+  evaluated doesn't depend on the *type* of =f=, but on its syntactic structure.
 
   Syntax is topological. But it has no notion of time. The question of *whether*
   an expression will be evaluated is syntactic, but the question of *when* an
@@ -206,7 +205,7 @@ This is largely an aid to my own memory so bear with me.
    is senseless and would result in error.
 
    In a traditional lisp, we have
-   =(eval (f . tail))= ⇒ =(apply (eval f) (eval tail))=.
+   =(eval (f . tail))= ⇒ =(apply (eval f) (map eval tail))=.
 
    But we aren't writing an applicative language, so we want something more
    like:
@@ -218,24 +217,27 @@ This is largely an aid to my own memory so bear with me.
    =~(f . tail)= ⇒ =#(~f . tail)=
 
    Thus ~(f x y) -> #(~f x y) which applies [x y] to whatever the symbol =f= is
-   bound to. The μ to which f is bound, might in turn choose to evaluate
-   (lookup) x and y to do something with them.
+   bound to. The μ to which f is bound might in turn choose to evaluate (lookup)
+   x and y to do something with them.
 
    The second thing we need to do is create actual μ objects. I don't believe
    its possible to implement μ in this language, so we need an escape hatch
-   which I've taken to calling primitive macros.
+   to define primitives.
 
-   Let =μ= be bound to the primitive =#M[μ]= then we have
+   Let =μ= be bound to the primitive =#F[μ]= — =#F= denotes "primitive function"
+   even though they aren't always functions, it's a legacy name that might
+   change one day — then we have
 
-   =~(μ params body)= ⇒ =#(#M[μ] params body)=
+   =~(μ params body)= ⇒ =#(#F[μ] params body)=
 
    which causes the underlying implementation of the primitive =μ= to be
    called with the tail of the application: =[params body]=.
 
-   It's up to a primitive macro to continue the evaluation appropriately, which
-   makes them very brittle. As of yet I need very few of them. They're all
-   related to creating and manipulating structures which are outside of the
-   scope of the syntax..
+   It's up to a primitive to continue the evaluation appropriately, which makes
+   them somewhat brittle. The vast majority of primitives simply expect literal
+   values and never evaluate their arguments. Only a small minority need to
+   manipulate their arguments as sexps. Those are all related to creating and
+   manipulating structures which are outside of the scope of the syntax.
 
    There are also primitive functions which can only be applied to literal
    values. These aren't essential to having a working language, but while you
@@ -243,8 +245,8 @@ This is largely an aid to my own memory so bear with me.
    machine's arithmetic capabilities (or those of the implementation language at
    least).
 
-   Primitive functions are best thought of as interpreters implemented in
-   another language. We'll come back to them later.
+   Primitives are best thought of as interpreters implemented in another
+   language with which we communicate via messages. But more on that later.
 
    Our third rule of execution involves what it means to apply arguments to a μ.
 
@@ -276,12 +278,12 @@ This is largely an aid to my own memory so bear with me.
    In particular =#((#μ X Y) . ~X)= ⇒ =Y=. This actually comes up often as an
    optimisation, so it's useful to recognise.
 
-   Finally, eval distributes over lists, and literal values are fixed points to
-   eval.
+   Finally, eval distributes over collections, and literal values are fixed
+   points to eval.
 
    That is: =~V= ⇒ =V= if V is a literal value (number, string, bool, etc.)
 
-   and: =~[X Y Z ...]= ⇒ =[~X ~Y ~Z ...]=
+   and: =~[X Y Z ...]= ⇒ =[~X ~Y ~Z ...]=, =~{X Y ...}= ⇒ ={~X ~Y ...}=, &c.
 
    N.B.: The interpreter is currently written to explicitly walk the ast and
    apply rules. the =core/rules= map defines the rules currently needed which is
@@ -296,8 +298,7 @@ This is largely an aid to my own memory so bear with me.
    application nodes.
 
    1) ~(X . Y) ⇌ #(~X . Y)
-   2) #(#M[f] . tail) ⇒ always escapes to implementation
-   3) #(#F[f] . tail) ⇒ invokes foreign code iff tail is reduced.
+   2) #(#F[f] . tail) ⇒ always escapes to implementation
    4) #((#μ X Y) . Z) ⇒ Y in the current lexical env extended by {X Z}
       where {X Z} represents the destructured binding of X to Z
 
@@ -340,7 +341,7 @@ This is largely an aid to my own memory so bear with me.
   immutability make some pain worthwhile.
 
   Firstly, computers are orders of magnitude faster than they were 50 years ago.
-  We don't need to change anything in place if we can recompile and entire
+  We don't need to change anything in place if we can recompile an entire
   namespace in 100ms.
 
   I also cheat by allowing a namespace to include "declarations" as part of its
@@ -352,31 +353,53 @@ This is largely an aid to my own memory so bear with me.
   in where the environment is stored and how it is managed.
 
   The interpreter does not pass the environment around. Rather the environment
-  in which a sexp is to be interpreted is attached to (but not quite part of)
-  the sexp itself.
+  in which a sexp is to be interpreted is attached to the sexp itself.
 
-  Thus during reduction when we create a new form to be acted upon later, we
-  also create and attach its environment so that when (if) it is eventually
-  evaluated that environment will determine its behaviour.
+  When a μ is created, we create a new node called a Declaration which declares
+  the parameters of the μ (thus wiping out previous bindings if we're shadowing
+  something in the surrounding environment).
+
+  When arguments are passed to a μ we add a new node called a Binding which
+  binds a value to a symbol.
+
+  We then add rules to the interpreter of the form so that when it encounters
+  something like I-B-D-S, it checks that binding actually binds the declared
+  variable and if it does replaces the expression by the bound value. I-B-S
+  triggers an undeclared variable error, etc.. The complete set of rules is
+  extensive and still in flux. To be frank it's too complicated and I think it
+  needs reconceptualisation, but not just yet.
+
+  Finally, when a form is interpreted using read or loadfile, the context of
+  evaluation must be incorporated into it. This is done adding a Context node
+  to the root of the form which binds the namespace in which a form is defined
+  to the form itself.
+
+  What we gain from this admittedly large dose of complexity, is a stateless
+  interpreter. The meaning of every form is contained in the form itself.
+  Reference is static, even if it needed be looked up until runtime.
+
+  During reduction when we create a new form to be acted upon later, we also
+  create and attach its environment so that when (if) it is eventually evaluated
+  that environment will determine its behaviour.
 
   That makes the environment immutable. So much so that we can pass arguments to
   a function without evaluating them knowing that when they are (eventually)
   evaluated, it will be done so in the correct context.
 
-  One consequence of this is that lexical capture when metaprogramming is much
-  rarer than in other lisps. Though it is still possible.[fn:2]
+  This has a number of ramifications, not the least of which is that lexical
+  capture is impossible since meaning is part of the form being manipulated.
+  This is in contrast to lisp where the meaning of a symbol is part of the state
+  of the interpreter (the environment) and so when a statement gets evaluated
+  can change what it means. Thus we don't need hygienic macros.
 
-  The actual mechanics of attaching the env to forms and modifying it as
-  appropriate is sadly rather complex — likely a sign of my own poor
-  understanding — and I'm not going to go into detail here until I'm more
-  convinced that it's correct.
+  But even though metaprogramming is safer and first class, it's still often
+  difficult to get right. So avoid it unless necessary.
 * Channels and Streams
   In this language channels and streams are two sides of the same phenomenon.
 
   Channels are black boxes to which messages are sent. They take the place of
-  addresses in actor languages or objects in OO languages. In a sense they are
-  write only, but they never actually change because they;re just reception
-  points.
+  addresses in actor languages or objects in OO languages. They act similarly to
+  write only channels in a CSP style language.
 
   A stream is a lazy, potentially unbounded, sequential data structure. A stream
   is a value, but it might not yet be known. Reading the first element off of a
@@ -402,8 +425,12 @@ This is largely an aid to my own memory so bear with me.
 
   So a convention: application of a μ to arguments creates a return channel,
   sets up the computation and returns the first value from the return stream to
-  the syntactic return position. Application of a ν to arguments creates a
-  return channel, sets up the computation and returns the return stream itself.
+  the syntactic return position. The return stream can be manipulated as a
+  stream within a ν construct. But a ν returns nothing, rather it connects
+  various components into a dataflow network. It's possible that a ν could pass
+  a return stream to a channel and thus expose it as a value in some part of a
+  program, but that part of the program wouldn't see different from any other
+  stream.
 
   These are my current thoughts on the matter but might change.
 
@@ -416,7 +443,7 @@ This is largely an aid to my own memory so bear with me.
   von neumann style language with which I'm familiar) is that there is no single
   "current continuation", but instead a set of them. And control can pass to any
   number of them from the current expression. It can even pass to several of
-  them several times each.
+  them concurrently and several times each at that.
 
   This is not too different from an actor system, but messages are always sent
   in batches from tail position. The continuation map is akin to Erlang's
@@ -439,7 +466,7 @@ This is largely an aid to my own memory so bear with me.
   are the source of all kinds of complexity. We can't live without them, but oh
   boy.
 
-  So, I've made a change to the traditional structure: there are no progns.
+  So I've made a change to the traditional structure: there are no progns.
   Function arguments are not evaluated in order. You can't control the sequence
   in which things happen at all. All you can do is establish data dependencies
   between computations and then send batches of messages.
@@ -454,11 +481,8 @@ This is largely an aid to my own memory so bear with me.
   difference.
 
   The continuation map doesn't exist as a first class thing from within the
-  language. Rather it is maintained by the runtime (interpreter presently) and
-  can be modified by calling primitive macros. I don't want to write code in cps
-  if I can avoid it.
-  - comment [2025-03-31 Mon 10:38]
-    the above isn't quite true any longer with νs
+  language. Rather it is maintained by the runtime and can be modified within
+  νs. I don't want to write code in cps if I can avoid it.
 
   When a batch of messages are emitted, they are all delivered (logically
   speaking) concurrently. If there's enough spare compute, they'll be delivered
@@ -506,13 +530,9 @@ This is largely an aid to my own memory so bear with me.
   The answer is a construct that I'm calling ν because it's the next letter
   after μ. These names are all tentative.
 
-  A ν takes a value (which will generally contain one or more streams) and
-  receives its continuation map bound to the second argument to ν.
-
-  The syntactic interpretation of the application of a value to a ν is that the
-  application is replaced by the *return stream* of the ν. The ν explicitly
-  manages its own return channel, which lets us manipulate the message passing
-  topology of the program directly.
+  A ν takes a continuation map and builds a computation graph. It does not
+  return anything syntactically, but it does have a :return channel in the ccs
+  passed to it and its subcomputations are free to send messages to it.
 
   When an application of a μ to an argument is invoked, it is considered
   "finished" when all messages emitted have been *received*. Just ensuring that
@@ -521,13 +541,14 @@ This is largely an aid to my own memory so bear with me.
   applying backpressure on a network.
 
   When an application of a ν to an argument is invoked, it is considered
-  finished when all subcomputations are finished.
+  finished when all subcomputations are finished. I haven't yet decided upon
+  whether it should be possible to wait for one ν to "finish" before doing
+  something. I'd rather not since that would add considerable complexity to the
+  language with minimal gain.
 
-  A ν cannot itself emit anything. Instead it defines a computation graph and
-  the μs within that graph emit values.
-
-  Thus the return stream of the ν must be passed in the continuation map to some
-  μ is the ν is to produce anything for its caller.
+  A much better way to deal with sequencing is via channels which close. Step
+  one is "complete" when the corresponding channel can receive no more input,
+  etc..
 
   In order for a ν to create a computation graph, it needs to be able to invoke
   multiple things. Remember we don't have a =do= or =progn= expression.
@@ -535,8 +556,9 @@ This is largely an aid to my own memory so bear with me.
   Thus we have three special operators which only make sense within within the
   body of a ν, these are =seq=, =conc=, and =connect=.
 
-  =connect=, as the name implies, connects an operator (ν or μ) to input and a
-  continuation map.
+  =connect=, as the name implies, connects a form to a continuation map. This is
+  the exact same construct by which an Emission which reaches the runtime is
+  acted upon.
 
   =seq= takes an arbitrary number of connected operators and ensures that each
   runs after the previous has finished.
@@ -547,22 +569,29 @@ This is largely an aid to my own memory so bear with me.
   =conc= and =seq= can be nested. A =seq= is finised when its last operator is
   finished and a =conc= is finished when all of its operators are finished.
 
+  Note: I'd rather not allow waiting on a conc since a lot of ill can come of it
+  and I'm not sure the good outweighs that. I need to write more code to see if
+  it's actually necessary. I'm not even convinced you ever need to nest seq &
+  conc.
+
   Examples (finally):
 
   #+BEGIN_SRC clojure
     (defn map [f]
-      (ν [xs] ccs
-         (when (first xs)
-           (seq
-            (connect f (first xs) ccs)
-            (connect (map f) (rest xs) ccs)))))
+      (fn [xs]
+        (ν ccs
+           (when (first xs)
+             (seq
+              (connect (f (first xs)) ccs)
+              (connect ((map f) (rest xs)) ccs))))))
 
     (defn comp [f g]
-      (ν [xs] ccs
-         (let [inner (chan)]
-           (conc
-            (connect f xs (assoc ccs :return inner))
-            (connect g inner ccs)))))
+      (fn [xs]
+        (ν ccs
+           (let [inner (chan)]
+             (conc
+              (connect (f xs) (assoc ccs :return inner))
+              (connect (g inner) ccs))))))
   #+END_SRC
 
   (map f) applies f to the first element of a stream and then applies (map f) to
@@ -580,7 +609,7 @@ This is largely an aid to my own memory so bear with me.
   going to have to buffer everything while the fold catches up.
 
   In the case of =comp=, we compose operators concurrently because the inner
-  channel connecting f to go provides a data dependency. g will park on reading
+  channel connecting f to g provides a data dependency. g will park on reading
   (first inner) until f has emitted a value, but if =xs= is a stream and =f=
   transduces it onto inner, then f and g can operate in parallel at different
   steps of the computation.
@@ -590,22 +619,22 @@ This is largely an aid to my own memory so bear with me.
   stolen by another executor, this should reduce overhead in practice. But that
   needs empirical confirmation.
 
-  Since a ν returns its return stream, ((comp (map f) (map g)) xs) is equivalent
-  to ((map g) ((map f) xs)), as it should be.
+  Since a ν receives a syntactic return stream, ((comp (map f) (map g)) xs) is
+  equivalent to ((map g) ((map f) xs)), as it should be.
 
-  This is a little ugly though because if f and g are μs, then (g (f x)) is
-  (first ((comp f g) x)). Really comp should be the same type as g for this to
-  work out. I haven't decided how to do that yet.
+  This is a little ugly though because f and g must both be νs for this version
+  of comp to make sense. comp of μs is a different operator. Some types are
+  inherent in the calculus as such.
 * Stateful computation
   Sometimes a computation needs to retain state across messages. Given that we
-  have no mechanism by which to assign or mutate, how do we accomplish it?
+  have no mechanism by which to assign or mutate, how do we accomplish that?
 
-  The easiest way would be to have a μ which from tail position sends a messages
+  The easiest way would be to have a μ which from tail position sends messages
   to its future self (plus whatever emissions it needs to make).
 
   This would be a perfect solution except for the fact that we have no control
-  over the order of delivery, so how do we know that your future self will
-  receive its new state before it receives its next input?
+  over the order of delivery from disparate senders, so how do we know that your
+  future self will receive its new state before it receives its next input?
 
   Sadly you can't.
 
@@ -614,33 +643,32 @@ This is largely an aid to my own memory so bear with me.
 
   #+BEGIN_SRC clojure
     (defn accumulate [rf init]
-      (ν [xs] ccs
-         ;; a read on a last-chan always returns the last thing written. They
-         ;; are sequentially consistent. Semantically it is just (last (chan)),
-         ;; but is builtin to make life easier.
-         (let [state (last-chan init)]
-           (seq
-            ;; Using a state channel to pass output back to yourself is a common
-            ;; pattern.
-            ;; Here we reduce into the state channel without returning anything.
-            (connect (map (fn [[state x]] (emit :state (rf state x))))
-                     (combine state xs)
-                     (assoc ccs :state state))
-            ;; After the stream `xs` is exhausted, we return the head of the
-            ;; accumulation's state stream.
-            (connect identity (first state) ccs)))))
+      (fn [xs]
+        (ν ccs
+           ;; a read on a last-chan always returns the last thing written. They
+           ;; are sequentially consistent. Semantically it is just (last (chan)),
+           ;; but is builtin to make life easier.
+           (let [state (last-chan init)]
+             (seq
+              ;; Using a state channel to pass output back to yourself is a
+              ;; common pattern.
+              ;; Here we reduce into the state channel without returning
+              ;; anything.
+              (connect ((map (fn [[state x]] (emit :state (rf state x))))
+                        (combine state xs))
+                       (assoc ccs :state state))
+              ;; After the stream `xs` is exhausted, we return the head of the
+              ;; state stream.
+              ;; This works because values, when connected, emit themselves on
+              ;; :return
+              (connect (first state) ccs))))))
 
     (defn into [coll]
-      (fn [xs]
-        ;; Use `first` to get back to "fn space" from stream space.
-        (first ((accumulate conj coll) in))))
+      (accumulate conj coll))
 
-    ((into []) ((comp (map inc) (filter even?)) [1 2 3 4 5]))
-    ; ⇒ [2 4 6]
+    ((into []) ((map inc) ((filter even?) [1 2 3 4 5])))
+                                            ; ⇒ [2 4 6]
   #+END_SRC
-
-  =accumulate= here returns a stream which will only ever realise one value. To
-  make a practical API, we define =into= which has the behavious you would expect.
 
   The api is still pretty ugly in that we need so many extra parens. Once we
   have function overloading, that can be fixed easily. Is currying the answer? I
@@ -721,6 +749,7 @@ This is largely an aid to my own memory so bear with me.
 
    This is very high level. I'll add the details of how it works in this
    language (environment?) as the prototypes evolve.
+** Namespaces
 ** Transduction
 ** Message Passing
 ** JIT and runtime optimisation
@@ -927,31 +956,8 @@ This is largely an aid to my own memory so bear with me.
     a Writer?".
 
 * Footnotes
-[fn:2] But should it be?
 
-Part of me thinks that lexical capture should be impossible since even if you
-coopt a symbol, you can't coopt its environment and so your use of the symbol
-should work out to something different than that of the victim symbol.
-
-That would mean that the one instance of capture I've come across is a bug in my
-interpreter. Something which is more likely than not.
-
-[fn:1] Is this actually true?
-
-It is regarding arguments, but what would it mean to pass return values by name?
-It would introduce all kinds of scoping problems since symbols that should be
-internal to a function (local args) are now exposed to the caller.
-
-That seems like a horrible idea.
-
-But the symbol comes attached to its own environment, so there's no
-ambiguity. Also, when a μ returns a sexp, that sexp can be embedded in a larger
-application, or taken apart and the pieces used to construct something new, but
-the context in which the pieces are to be interpreted cannot change and the
-context of the return sexp cannot be hijacked since the context of code created
-within a μ is the local context of that μ — even though the parts of the
-constructed sexp might have their own contexts brought in from any number of
-places.
-
-Something seems very right about this even though I'm still trying to get my
-head around it. It's weird enough to be frightening though.
+[fn:1]
+Technically they're passed as forms, not as names. Call by syntax? I don't have
+a good word for it. The behaviour is similar enough to call by name for my
+purposes I think.
