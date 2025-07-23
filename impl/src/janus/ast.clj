@@ -190,13 +190,14 @@
 
 
 
-;; (defrecord Macro [f]
-;;   Object
-;;   (toString [_]
-;;     (str "#M[" (fname f) "]")))
+(defrecord Extern [name fn]
+  ;; REVIEW: Require externs to have a name to simplify my life.
+  Object
+  (toString [_]
+    (str "#F[" name "]")))
 
-;; (defn macro [f]
-;;   (->Macro f))
+(defn extern [name fn]
+  (->Extern name fn))
 
 
 ;; REVIEW: νs don't ~seem~ to need names since recursion is so far always
@@ -395,21 +396,17 @@
      (pp/write-out (clojure.core/symbol n))
      (pp/write-out fn))))
 
-;; ;;; Macro
+;;; Externs
 
-;; (defmethod print-method Macro [{:keys [f]} ^Writer w]
-;;   (.write w "#M[")
-;;   (if-let [n (:name (meta f))]
-;;     (.write w (str n))
-;;     (print-method f w))
-;;   (.write w "]"))
+(defmethod print-method Extern [{:keys [name]} ^Writer w]
+  (.write w "#F[")
+  (.write w name)
+  (.write w "]"))
 
-;; (defmethod pp/simple-dispatch Macro [{:keys [f]}]
-;;   (pp/pprint-logical-block
-;;    :prefix "#M[" :suffix "]"
-;;    (if-let [name (:name (meta f))]
-;;      (pp/write-out name)
-;;      (pp/write-out f))))
+(defmethod pp/simple-dispatch Extern [{:keys [name]}]
+  (pp/pprint-logical-block
+   :prefix "#F[" :suffix "]"
+   (pp/write-out name)))
 
 ;;; Nu
 
@@ -549,12 +546,12 @@
     (.write w "L\n")
     (dorun (map #(insp % w (inc level)) form)))
 
-  ;; Macro
-  ;; (insp [form ^Writer w level]
-  ;;   (spacer w level)
-  ;;   (.write w "M[")
-  ;;   (.write w (str (:name (meta (:f form)))))
-  ;;   (.write w "]\n"))
+  Extern
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "F[")
+    (.write w (:name form))
+    (.write w "]\n"))
 
   Primitive
   (insp [form ^Writer w level]
@@ -610,7 +607,7 @@
    Pair        :P
    Symbol      :S
    Application :A
-   Primitive   :F
+   Extern      :F
    Mu          :μ
    Nu          :ν
    Emission    :E

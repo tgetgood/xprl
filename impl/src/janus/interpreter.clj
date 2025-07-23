@@ -21,17 +21,10 @@
                                        (when-let [name (:name μ)]
                                          {name μ})))))
 
-(defonce error (atom nil))
-
-(defn apply-primitive [app]
-  (let [h    (:head app)
-        args (walk (:tail app))]
-    (if (and (evaluated? args) ((:check h) args))
-      (try
-        ((:fn h) args)
-        (catch Exception e (reset! error {:app app :e e})
-               :error))
-      (ast/application h args))))
+(defn apply-external [{{f :fn} :head :as app}]
+  ;; REVIEW: We really do nothing with externals except send them messages and
+  ;; connect channels.
+  (f app))
 
 (defn apply-error [app]
   (throw (RuntimeException.
@@ -138,10 +131,10 @@
    ;; (ν ccs (apply (connect ... ccs) tail)) shaped hoop... but I don't like it.
    ;; [:A :E] apply-emit
 
-   [:A :F] apply-primitive ; Two kinds of operators are built in.
-   [:A :μ] apply-μ         ; I think that's sufficient. I might be wrong.
+   [:A :F] apply-external
+   [:A :μ] apply-μ
 
-   :A apply-error ; REVIEW: Should application be extensible?
+   :A apply-error ; REVIEW: Should application be extensible? Dubious.
 
    [:I :S] identity              ; unresolved symbols can't be evaluated
 
@@ -277,37 +270,3 @@
        true          (recur next))))
   ([env sexp]
    (walk* (env/pin sexp (env/project env sexp)))))
-
-;;;;; Builtins
-
-(defn μ-ready? [args]
-  (and
-   (ast/list? args)
-   (every? #(ast/symbol? (env/peel %)) (butlast args))))
-
-(defn μ [args]
-  (let [id    (gensym)
-        names (into [] (map env/peel) (butlast args))]
-    (apply ast/μ id (conj names (env/declare (last args) id names)))))
-
-(defn ν [args]
-  (let [params (env/peel (first args))
-        body   (env/declare (last args) :ν [params])]
-    ;; REVIEW: νs evaluate their bodies. I think that's the right thing.
-    (ast/ν params (ast/immediate body))))
-
-(defn emit [kvs]
-  (assert (even? (count kvs)))
-  (ast/emission
-   (ast/list (map (fn [[k v]] (ast/list [(ast/immediate k) v]))
-                  (partition 2 kvs)))))
-
-(defn check-select [args]
-  (let [p (nth args 0)]
-    (when (evaluated? p)
-      (assert (boolean? p) (str "Non boolean passed to select: " p))
-      true)))
-
-(defn select [[p t f]]
-  ;; `t` & `f` have already been walked, so we've nothing to do but pick one.
-  (if p t f))

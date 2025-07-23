@@ -2,90 +2,14 @@
   (:refer-clojure :exclude [test])
   (:require
    [janus.ast :as ast]
-   [janus.env :as env]
+   [janus.builtins :as builtins]
    [janus.debug :as debug]
+   [janus.env :as env]
    [janus.interpreter :as i]
    [janus.reader :as r]
    [janus.runtime :as rt]))
 
-;;;;; Builtins
-
-(defn fn-reduced? [args]
-  (every? i/evaluated? args))
-
-(defn primitive [p f]
-  (ast/primitive p (with-meta #(apply f %) (meta f))))
-
-(defn primitives [p m]
-  (reduce (fn [acc [k v]] (assoc acc (ast/symbol k) (primitive p v))) {} m))
-
-(defn macros [m]
-  (reduce (fn [acc [k [p f]]]
-            (assoc acc (ast/symbol k) (ast/primitive p f))) {} m))
-
-(def special
-  "Things that would traditionally be special forms."
-  (macros
-   {"μ"      [i/μ-ready? #'i/μ]
-    "ν"      [i/μ-ready? #'i/ν]
-    "emit"   [(constantly true) #'i/emit]
-    "select" [i/check-select #'i/select]
-
-    "seq*"  [(constantly true) #'ast/seq]
-    "conc*" [(constantly true) #'ast/conc]
-
-    ;; "first*" first*
-    ;; "rest*"  rest*
-    }))
-
-(defn nth* [c i]
-  (nth c (dec i)))
-
-(defn rest* [xs]
-  (into [] (rest xs)))
-
-(defn empty?* [x]
-  (boolean (empty? x)))
-
-(defn not* [x]
-  (assert (boolean? x))
-  (not x))
-
-(def fns
-  (primitives
-   fn-reduced?
-   ;; Using vars lets us pass metadata downstream for debugging.
-   {"+*"   #'+
-    "**"   #'*
-    "-*"   #'-
-    "/*"   #'/
-    ">*"   #'>
-    "<*"   #'<
-    "=*"   #'=
-    "mod*" #'mod
-    "not*" #'not*
-    "str*" #'str
-
-    "list?*"  #'ast/list?
-    "map?*"   #'ast/map?
-    "merge*"  #'merge
-    "empty?*" #'empty?*
-
-    "symbol?*" #'ast/symbol?
-
-    "first*" #'first
-    "rest*"  #'rest*
-
-    "count*" #'count
-    "nth*"   #'nth* ; Base 1 indexing
-
-    "connect*" #'rt/connect
-    }))
-
-(def base-env
-  (reduce (fn [e [k v]] (env/bind* e k v)) env/empty-ns (merge special fns)))
-
-(def the-env (atom base-env))
+(def the-env (atom builtins/base-env))
 
 ;;;;; UI
 
@@ -137,7 +61,7 @@
             (recur reader)))))))
 
 (defn reload! [fname]
-  (reset! the-env base-env)
+  (reset! the-env builtins/base-env)
   (loadfile the-env fname))
 
 (defmacro gs [n]

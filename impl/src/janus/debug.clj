@@ -16,3 +16,7 @@
 
 (defn tag [val rule predecessor]
   (with-provenance val {:rule rule :predecessor predecessor}))
+
+;; storage location for errors when invoking clj externals.
+;; akin to *e
+(defonce *pfn (atom nil))
