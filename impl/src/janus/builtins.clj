@@ -38,7 +38,10 @@
         args
       (try
         (apply f args)
-        (catch Exception e (reset! debug/*pfn {:app app :e e}) :error)))))
+        (catch Exception e
+          (reset! debug/*pfn {:app (assoc app :tail args) :e e})
+          (println "\nError\n\n" @debug/*pfn)
+          :error)))))
 
 (defn primitive [n f]
   (ast/extern n (call-primitive-fn f)))
