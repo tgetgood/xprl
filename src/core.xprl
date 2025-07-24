@@ -72,11 +72,11 @@
   (μ x
      ~~((μ ~(nth* ~(nth* ~x 1) 1) ~(nth* ~x 2)) . ~(nth* ~(nth* ~x 1) 2))))
 
-(defμ let* x
-  ~(select ~(empty?* ~(nth* ~x 1))
-           (nth* ~x 2)
-           (let1 [~(nth* ~(nth* ~x 1) 1) ~(nth* ~(nth* ~x 1) 2)]
-                 (let* ~(rest* ~(rest* ~(nth* ~x 1))) ~(nth* ~x 2)))))
+(defμ let* x#
+  ~(select ~(empty?* ~(nth* ~x# 1))
+           (nth* ~x# 2)
+           (let1 [~(nth* ~(nth* ~x# 1) 1) ~(nth* ~(nth* ~x# 1) 2)]
+                 (let* ~(rest* ~(rest* ~(nth* ~x# 1))) ~(nth* ~x# 2)))))
 
 (defμ let-map x
   ~(select ~(empty?* ~(nth* ~x 1))
