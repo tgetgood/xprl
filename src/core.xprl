@@ -68,20 +68,32 @@
                      ~(nth* ~body 2)
                      (condμ . ~(rest* ~(rest* ~body))))))
 
-(def let1
+(def if
   (μ x
-     ~~((μ ~(nth* ~(nth* ~x 1) 1) ~(nth* ~x 2)) . ~(nth* ~(nth* ~x 1) 2))))
+     ~~(select ~~(nth* ~x 1) ~(nth* ~x 2) ~(nth* ~x 3))))
 
-(defμ let* x#
-  ~(select ~(empty?* ~(nth* ~x# 1))
-           (nth* ~x# 2)
-           (let1 [~(nth* ~(nth* ~x# 1) 1) ~(nth* ~(nth* ~x# 1) 2)]
-                 (let* ~(rest* ~(rest* ~(nth* ~x# 1))) ~(nth* ~x# 2)))))
+(def let1
+  ;; μ friendly let suitable for syntax substitutions
+  (μ x
+     ~((μ ~(nth* ~x 1) ~(nth* ~x 3)) . ~(nth* ~x 2))))
+
+(def alet1
+  ;; Applicative let that does what you expect.
+  (μ x
+     ~~((μ ~(nth* ~x 1) ~(nth* ~x 3)) . ~~(nth* ~x 2))))
+
+(defμ let* x
+  (alet1 bindings (nth x 1)
+        (alet1 body (nth x 2)
+               (if (empty? bindings)
+                  body
+                  ~(let1 ~(nth bindings 1) ~(nth bindings 2)
+                        (let* ~(rest (rest bindings)) ~body))))))
 
 (defμ let-map x
   ~(select ~(empty?* ~(nth* ~x 1))
            (nth* ~x 2)
-           (let1 [~(nth* ~(first* ~(nth* ~x 1)) 1) ~(nth* ~(first* ~(nth* ~x 1)) 2)]
+           (let1 ~(nth* ~(first* ~(nth* ~x 1)) 1) ~(nth* ~(first* ~(nth* ~x 1)) 2)
                  (let-map ~(rest* ~(nth* ~x 1)) ~(nth* ~x 2)))))
 
 (def destructure-map
@@ -131,10 +143,6 @@
   )
 
 ;;(μ x ~(wrap . ~(μ  ~(nth x 1) ~~(nth x 2)))))
-
-(def if
-  (μ x
-     ~~(select ~~(nth* ~x 1) ~(nth* ~x 2) ~(nth* ~x 3))))
 
 ;; This one is named. Note it's the outer μ that bears the name.
 (def fn*
