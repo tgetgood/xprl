@@ -92,15 +92,15 @@
   (let* [params ~(nth* ~xy 1)
          args   ~(nth* ~xy 2)]
     ~(condμ
-      (symbol?* ~params) {params ~args}
-      (empty?* ~params)  {}
-      (list?* ~params)   (merge
-                     (destructure ~(first* ~params) ~(first* ~args))
-                     (destructure ~(rest* ~params) ~(rest* ~args)))
-      (map?* ~params)    (merge
-                     (destructure-map ~(first* ~params) ~(first* ~args))
-                     (destructure ~(rest* ~params) ~(rest* ~args)))
-      true          (emit :error (str "Cannot destructure: " params ", " args)))))
+       (symbol?* ~params) {params ~args}
+       (empty?* ~params)  {}
+       (list?* ~params)   (merge
+                           (destructure ~(first* ~params) ~(first* ~args))
+                           (destructure ~(rest* ~params) ~(rest* ~args)))
+       (map?* ~params)    (merge
+                           (destructure-map ~(first* ~params) ~(first* ~args))
+                           (destructure ~(rest* ~params) ~(rest* ~args)))
+       true               (emit :error (str "Cannot destructure: " params ", " args)))))
 
 (def fn2
   (μ x
