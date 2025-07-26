@@ -13,28 +13,13 @@
 ;; interpreter's env. They're not quite the same.
 
 (def empty-ns
-  {:names {} :declarations #{}})
-
-(defn names [env]
-  (or (:names env) {}))
-
-(defn decls [env]
-  (:declarations env))
-
-(defn declare* [env sym]
-  (if (nil? sym)
-    env
-    (-> env
-        (update :names dissoc sym)
-        (update :declarations conj sym))))
+  {})
 
 (defn bind* [env sym val]
-  (-> env
-      (update :names assoc sym val)
-      (update :declarations disj sym)))
+  (assoc env sym val))
 
 (defn lookup [env sym]
-  (get-in env [:names sym]))
+  (get-in env sym))
 
 (defn project
   "Fits `env` by removing all names not mentioned in `form`. Keeps
@@ -42,19 +27,19 @@
   [env form]
   (let [syms (ast/symbols form)]
     (transduce (remove #(contains? syms %))
-               (completing (fn [env sym] (update env :names dissoc sym)))
+               dissoc
                 env
-                (keys (names env)))))
+                (keys env))))
 
 ;;;;; Contexts
 
 (defprotocol ContextSwitch
   (merge-env [this env]))
 
-(defrecord Context [form ctx]
+(defrecord Context [form bindings]
   Object
   (toString [_]
-    (str "#C" (keys (names ctx)) "<" form ">"))
+    (str "#C" (keys bindings) "<" form ">"))
   janus.ast.Contextual
   janus.ast.Symbolic
   (symbols [_]
@@ -62,13 +47,13 @@
   ContextSwitch
   (merge-env [_ _]
     ;; Override the environment with a new namespace.
-    (names ctx)))
+    bindings))
 
 (ast/ps Context)
 
-(defmethod pp/simple-dispatch Context [{:keys [form ctx]}]
+(defmethod pp/simple-dispatch Context [{:keys [form bindings]}]
   (pp/write-out (symbol "#C"))
-  (pp/write-out (str (sort-by :names (keys (names ctx)))))
+  (pp/write-out (str (sort-by :names (keys bindings))))
   (pp/write-out  (symbol "<"))
   (pp/simple-dispatch form)
   (pp/write-out  (symbol ">")))
@@ -117,10 +102,10 @@
 
 (extend-protocol ast/Inspectable
   Context
-  (insp [{:keys [form ctx]} ^Writer w level]
+  (insp [{:keys [form bindings]} ^Writer w level]
     (ast/spacer w level)
     (.write w "C")
-    (.write w (str (sort-by :names (keys (names ctx)))))
+    (.write w (str (sort-by :names (keys bindings))))
     (.write w "\n")
     (ast/insp form w (inc level)))
 
@@ -141,7 +126,7 @@
     (ast/insp form w (inc level))))
 
 (defn pin [body env]
-  (if (ast/contextual? body)
+  (if (and (ast/contextual? body) (not (empty? env)))
     (->Context body env)
     body))
 
@@ -149,8 +134,7 @@
   (->Declaration body (into #{} syms)))
 
 (defn bind [{inner :form syms :syms :as body} bindings]
-  (println syms)
-  (assert (every? #(contains? syms %) (keys bindings)) "Undeclared variable!")
+  ;; (assert (every? #(contains? syms %) (keys bindings)) "Undeclared variable!")
   (->Binding inner bindings))
 
 (def type-table
