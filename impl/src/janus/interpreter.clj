@@ -18,9 +18,9 @@
 
 (defn apply-μ [app]
   (let [μ (:head app)]
-    (env/bind (:body μ) (merge {(:params μ) (:tail app)}
-                               (when-let [name (:name μ)]
-                                 {name μ})))))
+    (env/pin (:body μ) (merge {(:params μ) (:tail app)}
+                              (when-let [name (:name μ)]
+                                {name μ})))))
 
 (defn apply-external [{{f :fn} :head :as app}]
   ;; REVIEW: We really do nothing with externals except send them messages and
@@ -57,12 +57,13 @@
 
 ;;;;; Reduction
 
+(defn walk-body [form]
+  (binding [*env* (dissoc *env* (:params form) (:name form))]
+    (update form :body walk)))
+
 (defn walk-keys [els]
   (fn [x]
     (reduce (fn [x k] (update x k walk)) x els)))
-
-;; This isn't necessary, just an optimisation.
-(def walk-body (walk-keys [:body]))
 
 (defn walk-all [x]
   ((walk-keys (keys x)) x))

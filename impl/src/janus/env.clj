@@ -126,16 +126,17 @@
     (ast/insp form w (inc level))))
 
 (defn pin [body env]
-  (if (and (ast/contextual? body) (not (empty? env)))
-    (->Context body env)
-    body))
+  (let [env (project env body)]
+    (if (empty? env)
+      body
+      (->Context body env))))
 
 (defn declare [body syms]
   (->Declaration body (into #{} syms)))
 
 (defn bind [{inner :form syms :syms :as body} bindings]
   ;; (assert (every? #(contains? syms %) (keys bindings)) "Undeclared variable!")
-  (->Binding inner bindings))
+  (pin inner bindings))
 
 (def type-table
   {Context        :C

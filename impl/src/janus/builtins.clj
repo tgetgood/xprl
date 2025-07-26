@@ -100,16 +100,13 @@
 (defn μ [app]
   (when-settled app μ-ready?
       args
-    (let [names (vec (butlast args))]
-      (apply ast/μ (conj names (env/declare (last args) names))))))
+    (apply ast/μ args)))
 
 (defn ν [app]
   (when-settled app μ-ready?
-      args
-    (let [params (first args)
-          body   (env/declare (last args) :ν [params])]
-      ;; REVIEW: νs evaluate their bodies. I think that's the right thing.
-      (ast/ν params (ast/immediate body)))))
+      [params body]
+    ;; REVIEW: νs evaluate their bodies. I think that's the right thing.
+    (ast/ν params (ast/immediate body))))
 
 (defn emit [kvs]
   (assert (even? (count kvs)))
