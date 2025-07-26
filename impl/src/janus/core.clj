@@ -19,6 +19,12 @@
 (def td (str srcpath "base-transduction.xprl"))
 (def testxprl (str srcpath "test.xprl"))
 
+(defn env-channel-kludge [msg]
+  (if (env/ctx? msg)
+    (let [r (env-channel-kludge (:form msg))]
+      [(first r) (assoc msg :form (second r))])
+    msg))
+
 (defn go!
   ([env f]
    (i/walk* env (debug/with-provenance (ast/immediate f)
@@ -32,8 +38,8 @@
 
 (defn ev [s]
   (let [conts {(ast/xkeys :env)    (fn [l]
-                                     (let [[sym value] (:form l)]
-                                       (swap! the-env env/bind* sym (assoc l :form value))))
+                                     (let [[sym value] (env-channel-kludge l)]
+                                       (swap! the-env env/bind* sym value)))
                (ast/xkeys :return) println
                (ast/xkeys :error)  (fn [x]
                                      (println "Error: " x))}]
@@ -45,8 +51,8 @@
 
 (defn loadfile [envatom fname]
   (let [conts {(ast/xkeys :env)    (fn [l]
-                                     (let [[sym value] (:form l)]
-                                       (swap! envatom env/bind* sym (assoc l :form value))))
+                                     (let [[sym value] (env-channel-kludge l)]
+                                       (swap! envatom env/bind* sym value)))
                (ast/xkeys :return) #(throw
                                      (RuntimeException. "return to top level!"))
                (ast/xkeys :error)  (fn [x]
