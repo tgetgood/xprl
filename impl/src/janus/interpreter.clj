@@ -1,4 +1,5 @@
 (ns janus.interpreter
+  (:refer-clojure :exclude [resolve])
   (:require
    [janus.ast :as ast]
    [janus.debug :as debug :refer [trace!]]
@@ -17,9 +18,9 @@
 
 (defn apply-μ [app]
   (let [μ (:head app)]
-    (env/bind (:body μ) (:id μ) (merge {(:params μ) (:tail app)}
-                                       (when-let [name (:name μ)]
-                                         {name μ})))))
+    (env/bind (:body μ) (merge {(:params μ) (:tail app)}
+                               (when-let [name (:name μ)]
+                                 {name μ})))))
 
 (defn apply-external [{{f :fn} :head :as app}]
   ;; REVIEW: We really do nothing with externals except send them messages and
@@ -78,8 +79,6 @@
           :end-of-computation)
         (ast/seq (into [v] xs))))))
 
-;; This is an ugly necessity since we're using native vectors instead of our own
-;; record type.
 (defn walk-list [l]
   (ast/list (map walk l)))
 
@@ -88,8 +87,33 @@
 
 ;;;;; Env
 
-(defn resolve-inner-binding [{{{inner :form :as od} :form :as ob} :form :as i}]
-  (assoc ob :form (assoc od :form (walk (assoc i :form inner)))))
+;; REVIEW: Dynamic env massively simplifies the interpreter, but it breaks
+;; memoisation.
+;;
+;; I guess I could memoise on form and *env*... would that work?
+(def ^:dynamic *env* {})
+
+(defn resolve [{sym :form :as im}]
+  (if (contains? *env* sym)
+    (get *env* sym)
+    im))
+
+(defn walk-in-env [{:keys [form] :as ctx}]
+  (binding [*env* (env/merge-env ctx *env*)]
+    (update ctx :form walk)))
+
+(defn eval-in-env [{{:keys [form] :as ctx} :form :as im}]
+  (binding [*env* (env/merge-env ctx *env*)]
+    (assoc ctx :form (walk (assoc im :form form)))))
+
+(defn apply-in-env [{{:keys [form] :as ctx} :head :as app}]
+  (binding [*env* (env/merge-env ctx *env*)]
+    (assoc ctx :form (walk (assoc app :head form)))))
+
+(defn emit-in-env [{e :form :as ctx}]
+  (update e :kvs
+          #(into [] (map vec) (partition 2 (map (partial assoc ctx :form)
+                                                (apply concat %))))))
 
 ;;;;; Tree walker
 
@@ -106,7 +130,9 @@
    [:I :seq]  eval-seq
    [:I :conc] eval-seq
 
-   :I :form     ; (I V) => V. values are fixed points of eval.
+   [:I :S] resolve
+
+   [:I :V] :form     ; (I V) => V. values are fixed points of eval.
 
    :μ walk-body ; Walk has to recur into some structures, but most are data
    :ν walk-body
@@ -117,6 +143,14 @@
    :L    walk-list
    :seq  walk-sequential
    :conc walk-all
+
+   :C      walk-in-env
+   [:I :C] eval-in-env
+   [:A :C] apply-in-env
+   [:C :E] emit-in-env
+   [:C :V] :form ; we can wipe contexts off of values (which are context free)
+
+   ;; TODO: I think I'll need A- & I-C rules for each context type.
 
    [:A :I] apply-head ; (A head tail) => (A (walk head) tail)
    [:A :A] apply-head ;   iff `head` is unevaluated.
@@ -135,80 +169,7 @@
    [:A :μ] apply-μ
 
    :A apply-error ; REVIEW: Should application be extensible? Dubious.
-
-   [:I :S] identity              ; unresolved symbols can't be evaluated
-
-   ;;;;; Environmental manipulation
-   ;;
-   ;; The fact that most of the rules are here says to me that this is overly
-   ;; complicated, but I don't yet know how to simplify.
-
-   [:I :C] eval-inner
-   [:I :B] eval-inner
-   [:I :D] eval-inner
-
-   [:A :C] apply-head
-   [:A :B] apply-head
-   [:A :D] apply-head
-
-   [:C :C] inconceivable?
-
-   [:D :B] eval-inner
-   [:B :D] eval-inner
-   [:B :C] eval-inner
-   [:C :D] eval-inner
-
-   [:C :S] (fn [{sym :form ctx :ctx :as c}]
-             (if (contains? (env/names ctx) sym)
-               c
-               sym))
-
-   [:D :C] (fn [{{form :form :as c} :form :as d}]   ; -> [:C :D]
-             (assoc c :form (assoc d :form form)))  ; i.e. invert the nodes.
-
-
-   [:D :D] env/merge-decls
-   [:B :B] env/merge-binds
-
-   [:D :S] (fn [{sym :form syms :syms :as decl}]
-             (if (contains? syms sym)
-               (update decl :syms select-keys [sym])
-               sym))
-
-   [:C :D :S] env/c-or-d
-
-   [:B :C :S] (fn [{{sym :form ctx :ctx :as c} :form bindings :bindings :as b}]
-                (if (contains? bindings sym)
-                  (assoc b :form sym)
-                  c))
-
-   [:B :D :S] env/simplify-bindings
-   [:B :S]    :form ; Binding without declaration is a noop
-
-   [:I :C :S] env/resolve
-
-   [:I :D :B :D :S] (fn [{{b :form :as d} :form :as im}]
-                      (assoc d :form (walk (assoc im :form b))))
-
-   [:I :B :D :B :D] resolve-inner-binding
-   [:I :B :D :S]    env/bind-arg
-
-   ;; FIXME:
-   ;; [:I :B :D :B :D :S] (fn [_] (throw (RuntimeException. "not implemented")))
-
-   ;; FIXME: I need a regex style [:I (:B :D)+ :S] style rule. Probably [:I :D
-   ;; (:B :D)+ :S] as well.
-   ;;
-   ;; That's getting nice and fugly.
-   ;;
-   ;; That probably means I need a new design. This one has gotten me
-   ;; impressively far, but has some serious kinks. Can I ignore those and move
-   ;; on to new problems for a bit (like ν)? I'm starting to lose steam over
-   ;; this for now.
-
-   :C env/push-down
-   :D env/push-down
-   :B env/push-down})
+   })
 
 (def rule-tree
   (reduce (fn [acc [k v]]

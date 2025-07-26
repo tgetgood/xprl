@@ -7,6 +7,11 @@
   (:import
    (java.io Writer)))
 
+;;;;; Namespaces
+;;
+;; TODO: Move this code somewhere else, it's confusing when mixed with the
+;; interpreter's env. They're not quite the same.
+
 (def empty-ns
   {:names {} :declarations #{}})
 
@@ -41,38 +46,10 @@
                 env
                 (keys (names env)))))
 
-(defn shadow [{inner :form :as outer}]
-  (if (= (:syms inner) (:syms outer))
-    (assoc outer :form (:form inner))
-    outer))
-
-(defn resolve [{{ctx :ctx sym :form} :form :as im}]
-  (if-let [v (lookup ctx sym)]
-    v
-    (assoc im :form sym)))
-
-(defn c-or-d [{{sym :form syms :syms :as decl} :form :as ctx}]
-  (if (contains? syms sym)
-    (update decl :syms select-keys [sym])
-    (-> ctx (assoc :form sym) (update :ctx project sym))))
-
-(defn bind-arg [{{{sym :form :as decl} :form :as bind} :form :as im}]
-  (let [did  (get (:syms decl) sym)
-        bids (get (:bindings bind) sym)]
-    (if (contains? bids did)
-      (get bids did)
-      ;; If the binding doesn't apply to this declaration, toss it.
-      (assoc im :form decl))))
-
-(defn simplify-bindings [{{syms :syms :as d} :form :as b}]
-  (let [binds (select-keys (:bindings b) (keys syms))]
-    (if (empty? binds)
-      d
-      (assoc b :bindings binds))))
-
 ;;;;; Contexts
 
-(defprotocol ContextSwitch)
+(defprotocol ContextSwitch
+  (merge-env [this env]))
 
 (defrecord Context [form ctx]
   Object
@@ -82,7 +59,10 @@
   janus.ast.Symbolic
   (symbols [_]
     (ast/symbols form))
-  ContextSwitch)
+  ContextSwitch
+  (merge-env [_ _]
+    ;; Override the environment with a new namespace.
+    (names ctx)))
 
 (ast/ps Context)
 
@@ -96,18 +76,20 @@
 (defrecord Declaration [form syms]
   Object
   (toString [_]
-    (str "#D" (sort-by :names (keys syms)) "<" form ">"))
+    (str "#D" (sort-by :names syms) "<" form ">"))
   janus.ast.Contextual
   janus.ast.Symbolic
   (symbols [_]
     (ast/symbols form))
-  ContextSwitch)
+  ContextSwitch
+  (merge-env [_ env]
+    (reduce env dissoc syms)))
 
 (ast/ps Declaration)
 
 (defmethod pp/simple-dispatch Declaration [{:keys [form syms]}]
   (pp/write-out (symbol "#D"))
-  (pp/write-out (str (sort-by :names (keys syms))))
+  (pp/write-out (str (sort-by :names syms)))
   (pp/write-out  (symbol "<"))
   (pp/simple-dispatch form)
   (pp/write-out  (symbol ">")))
@@ -120,7 +102,9 @@
   janus.ast.Symbolic
   (symbols [_]
     (ast/symbols form))
-  ContextSwitch)
+  ContextSwitch
+  (merge-env [_ env]
+    (merge env bindings)))
 
 (ast/ps Binding)
 
@@ -144,7 +128,7 @@
   (insp [{:keys [form syms]} ^Writer w level]
     (ast/spacer w level)
     (.write w "D")
-    (.write w (str (sort-by :names (keys syms))))
+    (.write w (str (sort-by :names syms)))
     (.write w "\n")
     (ast/insp form w (inc level)))
 
@@ -161,55 +145,21 @@
     (->Context body env)
     body))
 
-(defn declare [body id syms]
-  (->Declaration body (into {} (map (fn [x] [x id])) syms)))
+(defn declare [body syms]
+  (->Declaration body (into #{} syms)))
 
-(defn bind [body id bindings]
-  (->Binding
-   body
-   (into {} (map (fn [[k v]] [k {id v}])) bindings)))
+(defn bind [{inner :form syms :syms :as body} bindings]
+  (println syms)
+  (assert (every? #(contains? syms %) (keys bindings)) "Undeclared variable!")
+  (->Binding inner bindings))
 
 (def type-table
   {Context        :C
-   Declaration    :D
-   Binding        :B})
+   Declaration    :C
+   Binding        :C})
 
-(defn merge-decls [{{form :form isyms :syms} :form osyms :syms}]
-  (->Declaration form (merge isyms osyms)))
-
-(defn merge-binds [{{form :form ibs :bindings} :form obs :bindings}]
-  (->Binding form (merge-with merge ibs obs)))
+(defn context? [x]
+  (instance? Context x))
 
 (defn ctx? [x]
   (satisfies? ContextSwitch x))
-
-(defn peel [x]
-  (if (ctx? x)
-    (recur (:form x))
-    x))
-
-(defn pushall [ctx form]
-  (reduce (fn [acc [k v]] (assoc acc k (assoc ctx :form v))) form form))
-
-(defn push-down [ctx]
-  (let [inner (:form ctx)]
-    (cond
-      (ast/pair? inner)        (pushall ctx inner)
-      (ast/application? inner) (pushall ctx inner)
-      (ast/immediate? inner)   (pushall ctx inner)
-      (ast/emission? inner)    (pushall ctx inner)
-
-      (ast/list? inner)  (mapv #(assoc ctx :form %) inner)
-      (ast/map? inner)   (into (empty inner)
-                               (map (fn [[k v]]
-                                      [(assoc ctx :form k) (assoc ctx :form v)]))
-                               inner)
-      (ast/set? inner)   (into (empty inner) (map #(assoc ctx :form %)) inner)
-      (ast/elist? inner) (update inner :elements (fn [els] (mapv #(assoc ctx :form %) els)))
-
-      (ast/μ? inner) (assoc inner :body (assoc ctx :form (:body inner)))
-      (ast/ν? inner) (assoc inner :body (assoc ctx :form (:body inner)))
-
-      (ctx? inner) ctx
-
-      true inner)))

@@ -95,19 +95,18 @@
 
 (def μ-ready?
   [#(i/evaluated? %)
-   (fn [args] (every? #(ast/symbol? (env/peel %)) (butlast args)))])
+   (fn [args] (every? ast/symbol? (butlast args)))])
 
 (defn μ [app]
   (when-settled app μ-ready?
       args
-    (let [id    (gensym)
-          names (into [] (map env/peel) (butlast args))]
-      (apply ast/μ id (conj names (env/declare (last args) id names))))))
+    (let [names (vec (butlast args))]
+      (apply ast/μ (conj names (env/declare (last args) names))))))
 
 (defn ν [app]
   (when-settled app μ-ready?
       args
-    (let [params (env/peel (first args))
+    (let [params (first args)
           body   (env/declare (last args) :ν [params])]
       ;; REVIEW: νs evaluate their bodies. I think that's the right thing.
       (ast/ν params (ast/immediate body)))))

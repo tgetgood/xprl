@@ -155,7 +155,7 @@
   (instance? Application x))
 
 
-(defrecord Mu [id name params body]
+(defrecord Mu [name params body]
   Contextual
   Symbolic
   ;; This is unintuitive, but we only look at the body because it ~might not~
@@ -166,8 +166,8 @@
     (str "(#μ " params " " body ")")))
 
 (defn μ
-  ([id params body] (μ id nil params body))
-  ([id name params body] (->Mu id name params body)))
+  ([params body] (μ nil params body))
+  ([name params body] (->Mu name params body)))
 
 (defn μ? [x]
   (instance? Mu x))

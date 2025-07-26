@@ -32,8 +32,8 @@
 
 (defn ev [s]
   (let [conts {(ast/xkeys :env)    (fn [l]
-                                     (let [[sym value] l]
-                                       (swap! the-env env/bind* sym value)))
+                                     (let [[sym value] (:form l)]
+                                       (swap! the-env env/bind* sym (assoc l :form value))))
                (ast/xkeys :return) println
                (ast/xkeys :error)  (fn [x]
                                      (println "Error: " x))}]
@@ -45,8 +45,8 @@
 
 (defn loadfile [envatom fname]
   (let [conts {(ast/xkeys :env)    (fn [l]
-                                     (let [[sym value] l]
-                                       (swap! envatom env/bind* sym value)))
+                                     (let [[sym value] (:form l)]
+                                       (swap! envatom env/bind* sym (assoc l :form value))))
                (ast/xkeys :return) #(throw
                                      (RuntimeException. "return to top level!"))
                (ast/xkeys :error)  (fn [x]
