@@ -5,6 +5,12 @@
    [janus.debug :as debug :refer [trace!]]
    [janus.env :as env]))
 
+;; REVIEW: Dynamic env massively simplifies the interpreter, but it breaks
+;; memoisation.
+;;
+;; I guess I could memoise on form and *env*... would that work?
+(def ^:dynamic *env* {})
+
 (declare walk)
 
 (defn evaluated? [x]
@@ -87,12 +93,6 @@
   (into (empty m) (map (fn [[k v]] [(walk k) (walk v)])) m))
 
 ;;;;; Env
-
-;; REVIEW: Dynamic env massively simplifies the interpreter, but it breaks
-;; memoisation.
-;;
-;; I guess I could memoise on form and *env*... would that work?
-(def ^:dynamic *env* {})
 
 (defn resolve [{sym :form :as im}]
   (if (contains? *env* sym)
