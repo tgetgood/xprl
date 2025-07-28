@@ -72,7 +72,7 @@
   (loadfile the-env fname))
 
 (defmacro gs [n]
-  `(-> @the-env (get (ast/symbol ~(clojure.core/name n)))))
+  `(env/lookup @the-env (ast/symbol ~(clojure.core/name n))))
 
 (defmacro inspect [n]
   `(ast/inspect (gs ~n)))

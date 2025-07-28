@@ -8,6 +8,13 @@
 
 ;;;;; Magic
 
+(defn evaluated? [x]
+  (cond
+    (ast/immediate? x)   false
+    (ast/application? x) false
+    (env/ctx? x)         false
+    true                 true))
+
 (defmacro when-settled [app ps bindings & body]
   ;; REVIEW: Oof...
   `(loop [tail# (:tail ~app)
@@ -25,7 +32,7 @@
 ;; FIXME: I don't like these when- names
 (defn when-arg [f]
   (fn [app]
-    (when-settled app [i/evaluated?] x (f x))))
+    (when-settled app [evaluated?] x (f x))))
 
 ;;;;; Simple Primitive fns
 
@@ -33,15 +40,18 @@
   "Given an external (clojure) function, returns an applicative wrapper to call
   it from xprl."
   [f]
-  (fn [app]
-    (when-settled app [env/context-free?]
-        args
-      (try
-        (apply f (:form args))
-        (catch Exception e
-          (reset! debug/*pfn {:app (assoc app :tail args) :e e})
-          (println "\nError\n\n" @debug/*pfn)
-          :error)))))
+  (fn [{:keys [head tail] :as app}]
+    (let [p #(and (ast/list? %) (every? evaluated? %))
+          args (if (p tail) tail (i/walk tail))
+          app (assoc app :tail args)]
+      (if (p args)
+        (try
+          (apply f args)
+          (catch Exception e
+            (reset! debug/*pfn {:app app :e e})
+            (println "\nError\n\n" @debug/*pfn)
+            :error))
+        app))))
 
 (defn primitive [n f]
   (ast/extern n (call-primitive-fn f)))
@@ -97,7 +107,7 @@
   (apply update coll (dec (count coll)) f args))
 
 (def μ-ready?
-  [env/context-free? #_i/evaluated?
+  [env/context-free? #_evaluated?
    (fn [args] (every? ast/symbol? (butlast args)))])
 
 (defn μ [{{args :form env :env} :tail :as app}]
@@ -125,7 +135,7 @@
     app))
 
 (defn select [app]
-  (when-settled app [i/evaluated? #(i/evaluated? (first %))]
+  (when-settled app [evaluated? #(evaluated? (first %))]
       [p t f]
     (assert (boolean? p) (str "Non boolean passed to select: " p))
     (if p t f)))

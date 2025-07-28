@@ -24,13 +24,6 @@
 
 (declare walk)
 
-(defn evaluated? [x]
-  (cond
-    (ast/immediate? x)   false
-    (ast/application? x) false
-    (env/ctx? x)         (recur (:form x))
-    true                 true))
-
 ;;;;; Application
 
 (defn apply-μ [app]
@@ -108,23 +101,16 @@
       v)))
 
 (defn walk-in-env [{:keys [form env] :as ctx}]
-  (binding [*env* (env/fill-slots env *env*)]
-    (freeze-env (walk form))))
+  (if (env/context-free? ctx)
+    form ; don't bother evaluating fixed points.
+    (binding [*env* (env/fill-slots env *env*)]
+      (freeze-env (walk form)))))
 
 (defn eval-in-env [{{:keys [form env] :as ctx} :form :as im}]
-  (binding [*env* (env/fill-slots env *env*)]
-    (freeze-env (walk (assoc im :form form)))))
-
-;; (defn emit-in-env [{e :form :as ctx}]
-;;   (update e :kvs
-;;           #(into [] (map vec) (partition 2 (map (partial assoc ctx :form)
-;;                                                 (apply concat %))))))
-
-;; (defn simplify-env [{sym :form bindings :bindings :as form}]
-;;   (let [v (env/resolve bindings sym)]
-;;     (if (= v ::env/unresolved)
-;;       sym
-;;       form)))
+  (if (env/context-free? ctx)
+    form ; REVIEW: If this is context free, can we assume it's a value?
+    (binding [*env* (env/fill-slots env *env*)]
+      (freeze-env (walk (assoc im :form form))))))
 
 ;;;;; Tree walker
 
@@ -158,19 +144,8 @@
    :C      walk-in-env
    [:I :C] eval-in-env
    [:A :C] apply-head
-   ;; FIXME: Make sure this doesn't tack an ever growing list of contexts onto
-   ;; the tail.
-   ;; [:C :E] emit-in-env
-   ;; [:C :C] env/merge-ctx
-   ;; [:C :S] simplify-env
-   [:C :V] :form ; we can wipe contexts off of values (which are context free)
 
-   ;; TODO: I think I'll need A- & I-C rules for each context type.
-
-   [:A :I] apply-head ; (A head tail) => (A (walk head) tail)
-   [:A :A] apply-head ;   iff `head` is unevaluated.
-
-   ;; An emission which includes a message to :return can trigger off the
+   ;; TODO: An emission which includes a message to :return can trigger off the
    ;; application. But the connection logic isn't sophisticated enough for this
    ;; yet.
    ;; Somehow, the emission has to percolate up to the top level so that the
@@ -180,6 +155,8 @@
    ;; (ν ccs (apply (connect ... ccs) tail)) shaped hoop... but I don't like it.
    ;; [:A :E] apply-emit
 
+   [:A :I] apply-head ; (A head tail) => (A (walk head) tail)
+   [:A :A] apply-head ;   iff `head` is unevaluated.
    [:A :F] apply-external
    [:A :μ] apply-μ
 
