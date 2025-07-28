@@ -34,10 +34,10 @@
   it from xprl."
   [f]
   (fn [app]
-    (when-settled app [i/evaluated? (partial every? i/evaluated?)]
+    (when-settled app [env/context-free?]
         args
       (try
-        (apply f args)
+        (apply f (:form args))
         (catch Exception e
           (reset! debug/*pfn {:app (assoc app :tail args) :e e})
           (println "\nError\n\n" @debug/*pfn)
@@ -93,26 +93,36 @@
 
 ;;;;; Specialish forms
 
+(defn update-last [coll f & args]
+  (apply update coll (dec (count coll)) f args))
+
 (def μ-ready?
-  [#(i/evaluated? %)
+  [env/context-free? #_i/evaluated?
    (fn [args] (every? ast/symbol? (butlast args)))])
 
-(defn μ [app]
-  (when-settled app μ-ready?
-      args
-    (apply ast/μ args)))
+(defn μ [{{args :form env :env} :tail :as app}]
+  (if (and (ast/list? args) (every? ast/symbol? (butlast args)))
+    (let [env (env/declare (env/fill-slots env i/*env*) (butlast args))]
+      (apply ast/μ (update-last args env/pin env)))
+    app))
 
 (defn ν [app]
   (when-settled app μ-ready?
       [params body]
     ;; REVIEW: νs evaluate their bodies. I think that's the right thing.
-    (ast/ν params (ast/immediate body))))
+    (i/with-decls [params]
+      (ast/ν params (i/freeze-env (ast/immediate body))))))
 
-(defn emit [kvs]
-  (assert (even? (count kvs)))
-  (ast/emission
-   (ast/list (map (fn [[k v]] (ast/list [(ast/immediate k) v]))
-                  (partition 2 kvs)))))
+(defn emit [{:keys [tail] :as app}]
+  (if (and (env/ctx? tail) (ast/list? (:form tail)))
+    (let [{kvs :form env :env} tail
+          env (env/fill-slots env i/*env*)]
+      (assert (even? (count kvs)))
+      (ast/emission
+       (ast/list (map (fn [[k v]] (ast/list [(env/pin (ast/immediate k) env)
+                                             (env/pin v env)]))
+                      (partition 2 kvs)))))
+    app))
 
 (defn select [app]
   (when-settled app [i/evaluated? #(i/evaluated? (first %))]
@@ -130,7 +140,7 @@
    {"μ"      μ
     "ν"      ν
     "select" select
-    "emit"   (when-arg emit)
+    "emit"   emit
 
     "seq*"  (when-arg ast/seq)
     "conc*" (when-arg ast/conc)
@@ -147,4 +157,4 @@
 ;; have no past, no origin. Why is bootstrapping so singular like that?
 
 (def base-env
-  (reduce (fn [e [k v]] (env/bind* e k v)) env/empty-ns (merge special fns)))
+  (reduce (fn [e [k v]] (env/ns-intern e k v)) env/empty-ns (merge special fns)))

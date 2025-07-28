@@ -25,6 +25,11 @@
       [(first r) (assoc msg :form (second r))])
     msg))
 
+(defn env-updater [env]
+  (fn [l]
+    (let [[sym value] (env-channel-kludge l)]
+      (swap! env env/ns-intern sym value))))
+
 (defn go!
   ([env f]
    (i/walk* env (debug/with-provenance (ast/immediate f)
@@ -37,9 +42,7 @@
   (go! @the-env (:form (r/read (r/string-reader s)))))
 
 (defn ev [s]
-  (let [conts {(ast/xkeys :env)    (fn [l]
-                                     (let [[sym value] (env-channel-kludge l)]
-                                       (swap! the-env env/bind* sym value)))
+  (let [conts {(ast/xkeys :env)   (env-updater the-env)
                (ast/xkeys :return) println
                (ast/xkeys :error)  (fn [x]
                                      (println "Error: " x))}]
@@ -50,9 +53,7 @@
   (ast/inspect (go! @the-env (:form (r/read (r/string-reader s))))))
 
 (defn loadfile [envatom fname]
-  (let [conts {(ast/xkeys :env)    (fn [l]
-                                     (let [[sym value] (env-channel-kludge l)]
-                                       (swap! envatom env/bind* sym value)))
+  (let [conts {(ast/xkeys :env)    (env-updater envatom)
                (ast/xkeys :return) #(throw
                                      (RuntimeException. "return to top level!"))
                (ast/xkeys :error)  (fn [x]
@@ -80,9 +81,7 @@
   (ast/inspect (:form (r/read (r/string-reader s) @the-env))))
 
 (defn test []
-  (let [conts {(ast/xkeys :env) (fn [l]
-                                  (let [[sym value] l]
-                                    (swap! the-env env/bind* sym value)))}]
+  (let [conts {(ast/xkeys :env) (env-updater the-env)}]
     (loop [reader (r/file-reader testxprl)]
       (let [reader (r/read reader)
             form1  (:form reader)

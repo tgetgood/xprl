@@ -1,5 +1,5 @@
 (ns janus.interpreter
-  (:refer-clojure :exclude [resolve])
+  (:refer-clojure :exclude [resolve with-bindings])
   (:require
    [janus.ast :as ast]
    [janus.debug :as debug :refer [trace!]]
@@ -9,7 +9,18 @@
 ;; memoisation.
 ;;
 ;; I guess I could memoise on form and *env*... would that work?
-(def ^:dynamic *env* {})
+(def ^:dynamic *env* env/empty-ns)
+
+(defn freeze-env [form]
+  (env/pin form *env*))
+
+(defmacro with-bindings [bindings & body]
+  `(binding [*env* (env/bind *env* ~bindings)]
+    ~@body))
+
+(defmacro with-decls [syms & body]
+  `(binding [*env* (env/declare *env* ~syms)]
+     ~@body))
 
 (declare walk)
 
@@ -17,16 +28,17 @@
   (cond
     (ast/immediate? x)   false
     (ast/application? x) false
-    (env/ctx? x)         false
+    (env/ctx? x)         (recur (:form x))
     true                 true))
 
 ;;;;; Application
 
 (defn apply-μ [app]
   (let [μ (:head app)]
-    (env/pin (:body μ) (merge {(:params μ) (:tail app)}
-                              (when-let [name (:name μ)]
-                                {name μ})))))
+    (with-bindings (merge {(:params μ) (:tail app)}
+                          (when-let [name (:name μ)]
+                            {name μ}))
+      (walk (:body μ)))))
 
 (defn apply-external [{{f :fn} :head :as app}]
   ;; REVIEW: We really do nothing with externals except send them messages and
@@ -54,7 +66,7 @@
 
 (defn eval-pair [im]
   (let [p (:form im)]
-    (ast/application (ast/immediate (:head p)) (:tail p))))
+    (ast/application (ast/immediate (:head p)) (freeze-env (:tail p)))))
 
 (defn eval-inner
   "Walk inner form first, then come back to `x`."
@@ -63,16 +75,11 @@
 
 ;;;;; Reduction
 
-(defn walk-body [form]
-  (binding [*env* (dissoc *env* (:params form) (:name form))]
-    (update form :body walk)))
-
-(defn walk-keys [els]
-  (fn [x]
-    (reduce (fn [x k] (update x k walk)) x els)))
+(defn walk-body [form] ; You ~could~ walk-all for μ & ν but why bother?
+  (update form :body walk))
 
 (defn walk-all [x]
-  ((walk-keys (keys x)) x))
+  (reduce (fn [x k] (update x k walk)) x (keys x)))
 
 (defn walk-sequential
   "Walks a seq in order, making sure each element has halted before walking the
@@ -95,26 +102,29 @@
 ;;;;; Env
 
 (defn resolve [{sym :form :as im}]
-  (if (contains? *env* sym)
-    (get *env* sym)
-    im))
+  (let [v (env/resolve *env* sym)]
+    (if (= v ::env/unresolved)
+      im
+      v)))
 
-(defn walk-in-env [{:keys [form] :as ctx}]
-  (binding [*env* (env/merge-env ctx *env*)]
-    (update ctx :form walk)))
+(defn walk-in-env [{:keys [form env] :as ctx}]
+  (binding [*env* (env/fill-slots env *env*)]
+    (freeze-env (walk form))))
 
-(defn eval-in-env [{{:keys [form] :as ctx} :form :as im}]
-  (binding [*env* (env/merge-env ctx *env*)]
-    (assoc ctx :form (walk (assoc im :form form)))))
+(defn eval-in-env [{{:keys [form env] :as ctx} :form :as im}]
+  (binding [*env* (env/fill-slots env *env*)]
+    (freeze-env (walk (assoc im :form form)))))
 
-(defn apply-in-env [{{:keys [form] :as ctx} :head :as app}]
-  (binding [*env* (env/merge-env ctx *env*)]
-    (assoc ctx :form (walk (assoc app :head form)))))
+;; (defn emit-in-env [{e :form :as ctx}]
+;;   (update e :kvs
+;;           #(into [] (map vec) (partition 2 (map (partial assoc ctx :form)
+;;                                                 (apply concat %))))))
 
-(defn emit-in-env [{e :form :as ctx}]
-  (update e :kvs
-          #(into [] (map vec) (partition 2 (map (partial assoc ctx :form)
-                                                (apply concat %))))))
+;; (defn simplify-env [{sym :form bindings :bindings :as form}]
+;;   (let [v (env/resolve bindings sym)]
+;;     (if (= v ::env/unresolved)
+;;       sym
+;;       form)))
 
 ;;;;; Tree walker
 
@@ -147,8 +157,12 @@
 
    :C      walk-in-env
    [:I :C] eval-in-env
-   [:A :C] apply-in-env
-   [:C :E] emit-in-env
+   [:A :C] apply-head
+   ;; FIXME: Make sure this doesn't tack an ever growing list of contexts onto
+   ;; the tail.
+   ;; [:C :E] emit-in-env
+   ;; [:C :C] env/merge-ctx
+   ;; [:C :S] simplify-env
    [:C :V] :form ; we can wipe contexts off of values (which are context free)
 
    ;; TODO: I think I'll need A- & I-C rules for each context type.
