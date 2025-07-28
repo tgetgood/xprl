@@ -72,6 +72,12 @@
     (.write w "\n")
     (ast/insp form w (inc level))))
 
+(defn ctx? [x]
+  (instance? Context x))
+
+(defn context-free? [form]
+  (and (ctx? form) (= (:env form) empty-ns)))
+
 (defn pin [body env]
   (->Context body (project env body)))
 
@@ -90,12 +96,6 @@
 
 (def type-table
   {Context :C})
-
-(defn ctx? [x]
-  (instance? Context x))
-
-(defn context-free? [form]
-  (and (ctx? form) (= (:env form) empty-ns)))
 
 (defn resolve [env sym]
   ;; REVIEW: This check is ~probably~ unnecessary, but I'm leaving it for now.

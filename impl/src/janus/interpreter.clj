@@ -106,12 +106,6 @@
     (binding [*env* (env/fill-slots env *env*)]
       (freeze-env (walk form)))))
 
-(defn eval-in-context [{{:keys [form env] :as ctx} :form :as im}]
-  (if (env/context-free? ctx)
-    form ; REVIEW: If this is context free, can we assume it's a value?
-    (binding [*env* (env/fill-slots env *env*)]
-      (freeze-env (walk (assoc im :form form))))))
-
 ;; REVIEW: Is this lazy or brilliant? Both?
 (defn spread-context [{xs :form env :env}]
   (ast/list (map #(env/pin % env) xs)))
@@ -146,7 +140,7 @@
    :conc walk-all
 
    :C      walk-in-context
-   [:I :C] eval-in-context
+   [:I :C] eval-inner
    [:A :C] apply-head
    [:C :L] spread-context
 
