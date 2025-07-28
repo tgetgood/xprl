@@ -85,7 +85,7 @@
 (defn fill-slots [env dyn]
   (transduce (filter #(bound? dyn %))
              (completing (fn [env k] (ns-intern env k (lookup dyn k))))
-             env
+             (or env empty-ns)
              (:declarations env)))
 
 (def type-table

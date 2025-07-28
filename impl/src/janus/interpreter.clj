@@ -100,17 +100,21 @@
       im
       v)))
 
-(defn walk-in-env [{:keys [form env] :as ctx}]
+(defn walk-in-context [{:keys [form env] :as ctx}]
   (if (env/context-free? ctx)
     form ; don't bother evaluating fixed points.
     (binding [*env* (env/fill-slots env *env*)]
       (freeze-env (walk form)))))
 
-(defn eval-in-env [{{:keys [form env] :as ctx} :form :as im}]
+(defn eval-in-context [{{:keys [form env] :as ctx} :form :as im}]
   (if (env/context-free? ctx)
     form ; REVIEW: If this is context free, can we assume it's a value?
     (binding [*env* (env/fill-slots env *env*)]
       (freeze-env (walk (assoc im :form form))))))
+
+;; REVIEW: Is this lazy or brilliant? Both?
+(defn spread-context [{xs :form env :env}]
+  (ast/list (map #(env/pin % env) xs)))
 
 ;;;;; Tree walker
 
@@ -141,9 +145,10 @@
    :seq  walk-sequential
    :conc walk-all
 
-   :C      walk-in-env
-   [:I :C] eval-in-env
+   :C      walk-in-context
+   [:I :C] eval-in-context
    [:A :C] apply-head
+   [:C :L] spread-context
 
    ;; TODO: An emission which includes a message to :return can trigger off the
    ;; application. But the connection logic isn't sophisticated enough for this

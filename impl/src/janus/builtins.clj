@@ -106,15 +106,15 @@
 (defn update-last [coll f & args]
   (apply update coll (dec (count coll)) f args))
 
-(def μ-ready?
-  [env/context-free? #_evaluated?
-   (fn [args] (every? ast/symbol? (butlast args)))])
+(defn μ-ready? [args]
+  (and (ast/list? args) (every? ast/symbol? (butlast args))))
 
-(defn μ [{{args :form env :env} :tail :as app}]
-  (if (and (ast/list? args) (every? ast/symbol? (butlast args)))
-    (let [env (env/declare (env/fill-slots env i/*env*) (butlast args))]
-      (apply ast/μ (update-last args env/pin env)))
-    app))
+(defn μ [{tail :tail :as app}]
+  (let [args (if (μ-ready? tail) tail (i/walk tail))]
+    (if (μ-ready? args)
+      (let [env (env/declare i/*env* (butlast args))]
+        (apply ast/μ (update-last args env/pin env)))
+      (assoc app :tail args))))
 
 (defn ν [app]
   (when-settled app μ-ready?
