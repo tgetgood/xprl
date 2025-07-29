@@ -1,5 +1,5 @@
 (ns janus.interpreter
-  (:refer-clojure :exclude [resolve with-bindings])
+  (:refer-clojure :exclude [resolve])
   (:require
    [janus.ast :as ast]
    [janus.debug :as debug :refer [trace!]]
@@ -14,23 +14,15 @@
 (defn freeze-env [form]
   (env/pin form *env*))
 
-(defmacro with-bindings [bindings & body]
-  `(binding [*env* (env/bind *env* ~bindings)]
-    ~@body))
-
-(defmacro with-decls [syms & body]
-  `(binding [*env* (env/declare *env* ~syms)]
-     ~@body))
-
 (declare walk)
 
 ;;;;; Application
 
 (defn apply-μ [app]
   (let [μ (:head app)]
-    (with-bindings (merge {(:params μ) (:tail app)}
-                          (when-let [name (:name μ)]
-                            {name μ}))
+    (binding [*env* (env/bind *env* (merge {(:params μ) (:tail app)}
+                                           (when-let [name (:name μ)]
+                                             {name μ})))]
       (walk (:body μ)))))
 
 (defn apply-external [{{f :fn} :head :as app}]

@@ -117,22 +117,22 @@
       (assoc app :tail args))))
 
 (defn ν [app]
-  (when-settled app μ-ready?
+  #_(when-settled app μ-ready?
       [params body]
     ;; REVIEW: νs evaluate their bodies. I think that's the right thing.
     (i/with-decls [params]
       (ast/ν params (i/freeze-env (ast/immediate body))))))
 
 (defn emit [{:keys [tail] :as app}]
-  (if (and (env/ctx? tail) (ast/list? (:form tail)))
-    (let [{kvs :form env :env} tail
-          env (env/fill-slots env i/*env*)]
-      (assert (even? (count kvs)))
-      (ast/emission
-       (ast/list (map (fn [[k v]] (ast/list [(env/pin (ast/immediate k) env)
-                                             (env/pin v env)]))
-                      (partition 2 kvs)))))
-    app))
+  (let [kvs (if (ast/list? tail) tail (i/walk tail))]
+    (if (ast/list? kvs)
+      (do
+        (assert (even? (count kvs)))
+        (ast/emission
+         (ast/list (map (fn [[k v]] (ast/list [(ast/immediate k)
+                                               v]))
+                        (partition 2 kvs)))))
+      (assoc app :tail kvs))))
 
 (defn select [app]
   (when-settled app [evaluated? #(evaluated? (first %))]
