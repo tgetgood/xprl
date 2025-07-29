@@ -11,19 +11,15 @@
 ;; I guess I could memoise on form and *env*... would that work?
 (def ^:dynamic *env* env/empty-ns)
 
-(defn freeze-env [form]
-  (env/pin form *env*))
-
 (declare walk)
 
 ;;;;; Application
 
-(defn apply-μ [app]
-  (let [μ (:head app)]
-    (binding [*env* (env/bind *env* (merge {(:params μ) (:tail app)}
-                                           (when-let [name (:name μ)]
-                                             {name μ})))]
-      (walk (:body μ)))))
+(defn apply-μ [{{{body :form env :env} :body :as μ} :head :as app}]
+  (env/pin body (env/merge-envs *env*
+                                (env/bind env (merge {(:params μ) (:tail app)}
+                                                     (when-let [name (:name μ)]
+                                                       {name μ}))))))
 
 (defn apply-external [{{f :fn} :head :as app}]
   ;; REVIEW: We really do nothing with externals except send them messages and
@@ -51,7 +47,9 @@
 
 (defn eval-pair [im]
   (let [p (:form im)]
-    (ast/application (ast/immediate (:head p)) (freeze-env (:tail p)))))
+    (ast/application
+     (ast/immediate (:head p))
+                     (env/pin (:tail p) (assoc *env* :declarations #{})))))
 
 (defn eval-inner
   "Walk inner form first, then come back to `x`."
@@ -93,10 +91,14 @@
       v)))
 
 (defn walk-in-context [{:keys [form env] :as ctx}]
+  (debug/trace! "context switch:" env)
   (if (env/context-free? ctx)
     form ; don't bother evaluating fixed points.
-    (binding [*env* (env/fill-slots env *env*)]
-      (freeze-env (walk form)))))
+    (binding [*env* (env/merge-envs *env* env)]
+      (env/pin (walk form) *env*))))
+
+(defn eval-in-context [{{form :form :as ctx} :form :as im}]
+  (assoc ctx :form (assoc im :form form)))
 
 ;; REVIEW: Is this lazy or brilliant? Both?
 (defn spread-context [{xs :form env :env}]
@@ -132,7 +134,7 @@
    :conc walk-all
 
    :C      walk-in-context
-   [:I :C] eval-inner
+   [:I :C] eval-in-context ; => [:C :I]
    [:A :C] apply-head
    [:C :L] spread-context
 
@@ -192,12 +194,9 @@
        (recur rule trees (step sexp))
        (unwind rule trees)))))
 
-(defn trace-env [sexp]
-  (ast/symbols sexp))
-
 (defn walk [sexp]
   (let [[rule f] (rule-match sexp)]
-    (trace! "rule match:" rule sexp "\n  syms:" (trace-env sexp))
+    (trace! "rule match:" rule sexp)
     (let [v (f sexp)]
       (trace! "result:" rule "\n" sexp "\n->\n" v)
       (debug/tag v rule sexp))))
@@ -213,4 +212,4 @@
        (nil? next)   (assert false "inconceivable!")
        true          (recur next))))
   ([env sexp]
-   (walk* (env/pin sexp (env/project env sexp)))))
+   (walk* (env/pin sexp env))))

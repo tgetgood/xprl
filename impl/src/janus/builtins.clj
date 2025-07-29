@@ -15,24 +15,15 @@
     (env/ctx? x)         false
     true                 true))
 
-(defmacro when-settled [app ps bindings & body]
-  ;; REVIEW: Oof...
-  `(loop [tail# (:tail ~app)
-          ps#   ~ps]
-     (if (empty? ps#)
-       (let [~bindings tail#]
-         ~@body)
-       (if ((first ps#) tail#)
-         (recur tail# (rest ps#))
-         (let [tail# (i/walk tail#)]
-           (if ((first ps#) tail#)
-             (recur tail# (rest ps#))
-             (assoc ~app :tail tail#)))))))
-
-;; FIXME: I don't like these when- names
-(defn when-arg [f]
+(defn ready-go
+  {:style/indent [1]}
+  [ready? go]
   (fn [app]
-    (when-settled app [evaluated?] x (f x))))
+    (let [tail (:tail app)
+          tail (if (ready? tail) tail (i/walk tail))]
+      (if (ready? tail)
+        (go tail)
+        (assoc app :tail tail)))))
 
 ;;;;; Simple Primitive fns
 
@@ -40,18 +31,14 @@
   "Given an external (clojure) function, returns an applicative wrapper to call
   it from xprl."
   [f]
-  (fn [{:keys [head tail] :as app}]
-    (let [p #(and (ast/list? %) (every? evaluated? %))
-          args (if (p tail) tail (i/walk tail))
-          app (assoc app :tail args)]
-      (if (p args)
-        (try
-          (apply f args)
-          (catch Exception e
-            (reset! debug/*pfn {:app app :e e})
-            (println "\nError\n\n" @debug/*pfn)
-            :error))
-        app))))
+  (ready-go #(and (ast/list? %) (every? evaluated? %))
+    (fn [args]
+      (try
+        (apply f args)
+        (catch Exception e
+          (reset! debug/*pfn {:f f :args args :e e})
+          (println "\nError\n\n" @debug/*pfn)
+          :error)))))
 
 (defn primitive [n f]
   (ast/extern n (call-primitive-fn f)))
@@ -109,12 +96,11 @@
 (defn μ-ready? [args]
   (and (ast/list? args) (every? ast/symbol? (butlast args))))
 
-(defn μ [{tail :tail :as app}]
-  (let [args (if (μ-ready? tail) tail (i/walk tail))]
-    (if (μ-ready? args)
-      (let [env (env/declare i/*env* (butlast args))]
-        (apply ast/μ (update-last args env/pin env)))
-      (assoc app :tail args))))
+(def μ
+  (ready-go μ-ready?
+    (fn [args]
+     (let [env (env/declare i/*env* (butlast args))]
+        (apply ast/μ (update-last args env/pin env))))))
 
 (defn ν [app]
   #_(when-settled app μ-ready?
@@ -134,11 +120,11 @@
                         (partition 2 kvs)))))
       (assoc app :tail kvs))))
 
-(defn select [app]
-  (when-settled app [evaluated? #(evaluated? (first %))]
-      [p t f]
-    (assert (boolean? p) (str "Non boolean passed to select: " p))
-    (if p t f)))
+(def select
+  (ready-go #(and (evaluated? %) (evaluated? (first %)))
+    (fn [[p t f]]
+      (assert (boolean? p) (str "Non boolean passed to select: " p))
+      (if p t f))))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]
@@ -152,8 +138,8 @@
     "select" select
     "emit"   emit
 
-    "seq*"  (when-arg ast/seq)
-    "conc*" (when-arg ast/conc)
+    ;; "seq*"  (when-arg ast/seq)
+    ;; "conc*" (when-arg ast/conc)
 
     ;; "first*" first*
     ;; "rest*"  rest*

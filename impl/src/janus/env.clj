@@ -31,7 +31,6 @@
   [env form]
   (let [syms (ast/symbols form)]
     (-> env
-        (update :declarations set/intersection syms)
         (update :names select-keys syms))))
 
 (defn lookup [env sym]
@@ -52,7 +51,9 @@
   janus.ast.Contextual
   janus.ast.Symbolic
   (symbols [_]
-    (ast/symbols form)))
+    (ast/symbols form)
+    #_(set/difference (ast/symbols form) (set (keys (:names env))))
+    #_(:declarations env)))
 
 (ast/ps Context)
 
@@ -93,6 +94,11 @@
              (completing (fn [env k] (ns-intern env k (lookup dyn k))))
              (or env empty-ns)
              (:declarations env)))
+
+(defn merge-envs [outer inner]
+  (reduce ns-declare
+          (assoc inner :names (merge (:names outer) (:names inner)))
+          (:declarations inner)))
 
 (def type-table
   {Context :C})
