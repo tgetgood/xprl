@@ -73,6 +73,11 @@
     (.write w "\n")
     (ast/insp form w (inc level))))
 
+(defrecord Barrier [form])
+
+(defn clear [form]
+  (->Barrier form))
+
 (defn ctx? [x]
   (instance? Context x))
 
@@ -86,14 +91,9 @@
   (reduce (fn [env [k v]] (ns-intern env k v)) env bindings))
 
 (defn declare [env syms]
+  (assert (set? (:declarations env)))
   ;; REVIEW: This nil? check is ~probably~ unnecessary
   (transduce (remove nil?) (completing ns-declare) env syms))
-
-(defn fill-slots [env dyn]
-  (transduce (filter #(bound? dyn %))
-             (completing (fn [env k] (ns-intern env k (lookup dyn k))))
-             (or env empty-ns)
-             (:declarations env)))
 
 (defn merge-envs [outer inner]
   (reduce ns-declare

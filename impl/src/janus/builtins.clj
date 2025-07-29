@@ -99,8 +99,11 @@
 (def μ
   (ready-go μ-ready?
     (fn [args]
-     (let [env (env/declare i/*env* (butlast args))]
-        (apply ast/μ (update-last args env/pin env))))))
+      (let [names                 (vec (butlast args))
+            l                     (last args)
+            {body :form env :env} (if (env/ctx? l) l {:form l :env env/empty-ns})
+            env                   (env/declare (env/merge-envs i/*env* env) names)]
+        (apply ast/μ (conj names (env/pin body env)))))))
 
 (defn ν [app]
   #_(when-settled app μ-ready?

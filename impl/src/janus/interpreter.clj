@@ -88,19 +88,25 @@
   (let [v (env/resolve *env* sym)]
     (if (= v ::env/unresolved)
       im
-      v)))
+      (env/clear v))))
 
 (defn walk-in-context [{:keys [form env] :as ctx}]
   (debug/trace! "context switch:" env)
   (if (env/context-free? ctx)
     form ; don't bother evaluating fixed points.
     (binding [*env* (env/merge-envs *env* env)]
-      (env/pin (walk form) *env*))))
+      (let [v (walk form)]
+        (if (env/ctx? v)
+          v
+          (env/pin v *env*))))))
 
 (defn eval-in-context [{{form :form :as ctx} :form :as im}]
   (assoc ctx :form (assoc im :form form)))
 
 ;; REVIEW: Is this lazy or brilliant? Both?
+;;
+;; Pushing context into lists lets list manipulation remain ignorant of context,
+;; which is nice, but is there anything to worry about?
 (defn spread-context [{xs :form env :env}]
   (ast/list (map #(env/pin % env) xs)))
 
@@ -137,6 +143,8 @@
    [:I :C] eval-in-context ; => [:C :I]
    [:A :C] apply-head
    [:C :L] spread-context
+
+   [:C :C] (fn [x] (throw (RuntimeException. "nested contexts are an error.")))
 
    ;; TODO: An emission which includes a message to :return can trigger off the
    ;; application. But the connection logic isn't sophisticated enough for this
