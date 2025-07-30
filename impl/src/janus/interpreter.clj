@@ -15,15 +15,14 @@
 
 ;;;;; Application
 
-(defn apply-μ [{{{body :form env :env} :body :as μ} :head :as app}]
-  (env/pin body (env/merge-envs *env*
-                                (env/bind env (merge {(:params μ) (:tail app)}
-                                                     (when-let [name (:name μ)]
-                                                       {name μ}))))))
+(defn apply-μ [{{:keys [body params name] :as μ} :head tail :tail :as app}]
+  (let [args (env/pin tail *env*)]
+    (env/pin body (merge *env* (merge {params args} (when name {name μ}))))))
 
 (defn apply-external [{{f :fn} :head :as app}]
-  ;; REVIEW: We really do nothing with externals except send them messages and
-  ;; connect channels.
+  ;; TODO: We should do a little more work here. External interpreters can't do
+  ;; anything with interal references, so the tail should be reduced before
+  ;; sending.
   (f app))
 
 (defn apply-error [app]
@@ -48,8 +47,7 @@
 (defn eval-pair [im]
   (let [p (:form im)]
     (ast/application
-     (ast/immediate (:head p))
-                     (env/pin (:tail p) (assoc *env* :declarations #{})))))
+     (ast/immediate (:head p)) (:tail p))))
 
 (defn eval-inner
   "Walk inner form first, then come back to `x`."
@@ -58,8 +56,9 @@
 
 ;;;;; Reduction
 
-(defn walk-body [form] ; You ~could~ walk-all for μ & ν but why bother?
-  (update form :body walk))
+(defn walk-body [{:keys [name params] :as form}]
+  (binding [*env* (transduce (remove nil?) dissoc *env* [name params])]
+    (update form :body walk)))
 
 (defn walk-all [x]
   (reduce (fn [x k] (update x k walk)) x (keys x)))
@@ -85,20 +84,13 @@
 ;;;;; Env
 
 (defn resolve [{sym :form :as im}]
-  (let [v (env/resolve *env* sym)]
-    (if (= v ::env/unresolved)
-      im
-      (env/clear v))))
+  (if (env/bound? *env* sym)
+    (env/lookup *env* sym)
+    im))
 
 (defn walk-in-context [{:keys [form env] :as ctx}]
   (debug/trace! "context switch:" env)
-  (if (env/context-free? ctx)
-    form ; don't bother evaluating fixed points.
-    (binding [*env* (env/merge-envs *env* env)]
-      (let [v (walk form)]
-        (if (env/ctx? v)
-          v
-          (env/pin v *env*))))))
+  (env/prune (binding [*env* env] (update ctx :form walk))))
 
 (defn eval-in-context [{{form :form :as ctx} :form :as im}]
   (assoc ctx :form (assoc im :form form)))
@@ -140,9 +132,9 @@
    :conc walk-all
 
    :C      walk-in-context
-   [:I :C] eval-in-context ; => [:C :I]
+   [:I :C] eval-in-context ; [:I :C] => [:C :I]
    [:A :C] apply-head
-   [:C :L] spread-context
+   ;; [:C :L] spread-context ; TODO: do I need this?
 
    [:C :C] (fn [x] (throw (RuntimeException. "nested contexts are an error.")))
 

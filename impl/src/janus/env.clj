@@ -7,104 +7,68 @@
   (:import
    (java.io Writer)))
 
-;;;;; Namespaces
-;;
-;; TODO: Move this code somewhere else, it's confusing when mixed with the
-;; interpreter's env. They're not quite the same. But they're *mostly* the same.
+;;;;; Namespaces (contexts)
 
 (def empty-ns
-  {:names {} :declarations #{}})
+  {})
 
 (defn ns-intern [ns sym val]
-  (-> ns
-      (update :names assoc sym val)
-      (update :declarations disj sym)))
+  (assoc ns sym val))
 
 (defn ns-declare [ns sym]
-  (-> ns
-      (update :names dissoc sym)
-      (update :declarations conj sym)))
+  (dissoc ns sym))
 
 (defn project
-  "Fits `env` by removing all names not mentioned in `form`. Keeps
-  declarations."
-  [env form]
-  (let [syms (ast/symbols form)]
-    (-> env
-        (update :names select-keys syms))))
+  "Fits `env` by removing all names not mentioned in `form`. "
+  ([env form]
+   (select-keys env (ast/symbols form))))
 
 (defn lookup [env sym]
-  (get-in env [:names sym]))
+  (get env sym))
 
 (defn bound? [env sym]
-  (contains? (:names env) sym))
-
-(defn declared? [env sym]
-  (contains? (:declarations env) sym))
+  (contains? env sym))
 
 ;;;;; Contexts
 
-(defrecord Context [form env]
+(defrecord ContextSwitch [form env]
   Object
   (toString [_]
-    (str "#C" #_(keys bindings) "<" form ">"))
+    (str "#C" (keys env) "<" form ">"))
   janus.ast.Contextual
   janus.ast.Symbolic
   (symbols [_]
-    (ast/symbols form)
-    #_(set/difference (ast/symbols form) (set (keys (:names env))))
-    #_(:declarations env)))
+    (ast/symbols form)))
 
-(ast/ps Context)
+(ast/ps ContextSwitch)
 
-(defmethod pp/simple-dispatch Context [{:keys [form]}]
+(defmethod pp/simple-dispatch ContextSwitch [{:keys [form env]}]
   (pp/write-out (symbol "#C"))
-  #_(pp/write-out (str (sort-by :names (keys bindings))))
+  (pp/write-out (str (sort-by :names (keys env))))
   (pp/write-out  (symbol "<"))
   (pp/simple-dispatch form)
   (pp/write-out  (symbol ">")))
 
 (extend-protocol ast/Inspectable
-  Context
-  (insp [{:keys [form]} ^Writer w level]
+  ContextSwitch
+  (insp [{:keys [form env]} ^Writer w level]
     (ast/spacer w level)
     (.write w "C")
-    #_(.write w (str (sort-by :names (keys bindings))))
+    (.write w (str (sort-by :names (keys env))))
     (.write w "\n")
     (ast/insp form w (inc level))))
 
-(defrecord Barrier [form])
-
-(defn clear [form]
-  (->Barrier form))
-
 (defn ctx? [x]
-  (instance? Context x))
+  (instance? ContextSwitch x))
+
+(defn prune [{:keys [form] :as ctx}]
+  (update ctx :env project form))
 
 (defn context-free? [form]
   (and (ctx? form) (= (:env form) empty-ns)))
 
 (defn pin [body env]
-  (->Context body (project env body)))
-
-(defn bind [env bindings]
-  (reduce (fn [env [k v]] (ns-intern env k v)) env bindings))
-
-(defn declare [env syms]
-  (assert (set? (:declarations env)))
-  ;; REVIEW: This nil? check is ~probably~ unnecessary
-  (transduce (remove nil?) (completing ns-declare) env syms))
-
-(defn merge-envs [outer inner]
-  (reduce ns-declare
-          (assoc inner :names (merge (:names outer) (:names inner)))
-          (:declarations inner)))
+  (->ContextSwitch body (project env body)))
 
 (def type-table
-  {Context :C})
-
-(defn resolve [env sym]
-  ;; REVIEW: This check is ~probably~ unnecessary, but I'm leaving it for now.
-  (if (and (bound? env sym) (not (declared? env sym)))
-    (lookup env sym)
-    ::unresolved))
+  {ContextSwitch :C})

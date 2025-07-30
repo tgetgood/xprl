@@ -18,9 +18,8 @@
 (defn ready-go
   {:style/indent [1]}
   [ready? go]
-  (fn [app]
-    (let [tail (:tail app)
-          tail (if (ready? tail) tail (i/walk tail))]
+  (fn [{:keys [tail] :as app}]
+    (let [tail (if (ready? tail) tail (i/walk tail))]
       (if (ready? tail)
         (go tail)
         (assoc app :tail tail)))))
@@ -99,18 +98,13 @@
 (def μ
   (ready-go μ-ready?
     (fn [args]
-      (let [names                 (vec (butlast args))
-            l                     (last args)
-            {body :form env :env} (if (env/ctx? l) l {:form l :env env/empty-ns})
-            env                   (env/declare (env/merge-envs i/*env* env) names)]
-        (apply ast/μ (conj names (env/pin body env)))))))
+      (apply ast/μ args))))
 
-(defn ν [app]
-  #_(when-settled app μ-ready?
-      [params body]
-    ;; REVIEW: νs evaluate their bodies. I think that's the right thing.
-    (i/with-decls [params]
-      (ast/ν params (i/freeze-env (ast/immediate body))))))
+(def ν
+  (ready-go μ-ready?
+    (fn [[params body]]
+      ;; REVIEW: νs evaluate their bodies. I think that's the right thing.
+      (ast/ν params (ast/immediate body)))))
 
 (defn emit [{:keys [tail] :as app}]
   (let [kvs (if (ast/list? tail) tail (i/walk tail))]
