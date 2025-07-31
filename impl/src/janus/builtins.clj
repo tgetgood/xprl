@@ -115,11 +115,22 @@
                         (partition 2 kvs)))))
       (assoc app :tail kvs))))
 
-(def select
-  (ready-go #(and (evaluated? %) (evaluated? (first %)))
-    (fn [[p t f]]
-      (assert (boolean? p) (str "Non boolean passed to select: " p))
-      (if p t f))))
+;; REVIEW: Select is manual at the moment because I'm giving it standard `if`
+;; semantics, so it no longer acts as data selection but is an explicit branch.
+;;
+;; I'm not convinced this is necessary, but I'm convinced not doing it is
+;; complicated and I don't see what I gain that way.
+(defn select [{args :tail :as app}]
+  (let [args (if (ast/list? args) args (i/walk args))]
+    (if (ast/list? args)
+      (let [p (first args)
+            p (if (evaluated? p) p (i/walk p))]
+        (if (evaluated? p)
+          (let [[_ t f] args]
+            (assert (boolean? p) (str "Non boolean passed to select: " p))
+            (if p t f))
+          (assoc app :tail (assoc args 0 p))))
+      (assoc app :tail args))))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]

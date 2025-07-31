@@ -24,9 +24,6 @@
           (str (:head app) " is not applicable, but was called with " (:tail app)
                "\n" (debug/provenance app)))))
 
-(defn apply-head [app]
-  (update app :head walk))
-
 ;;;;; Eval
 
 (defn eval-list [im]
@@ -41,11 +38,6 @@
 (defn eval-pair [{{:keys [tail head]} :form}]
   (ast/application (ast/immediate head) tail))
 
-(defn eval-inner
-  "Walk inner form first, then come back to `x`."
-  [x]
-  (update x :form walk))
-
 ;;;;; Reduction
 
 (defn walk-body [{:keys [name params] :as form}]
@@ -57,6 +49,7 @@
 (defn walk-sequential
   "Walks a seq in order, making sure each element has halted before walking the
   next."
+  ;; FIXME: This stands out like a bad onion
   [{xs :elements}]
   (loop [[x & xs] xs]
     (let [v (walk x)]
@@ -85,8 +78,8 @@
   {[:I :P] eval-pair   ; (I (P x y)) => (A (I x) y)
    [:I :L] eval-list   ; (I (L x y ...)) => (L (I x) (I y) ...)
    [:I :M] eval-map    ; (I {x y ...}) => {(I x) (I y) ...}
-   [:I :I] eval-inner
-   [:I :A] eval-inner
+   [:I :I] walk-all
+   [:I :A] walk-all
 
    [:I :seq]  eval-seq
    [:I :conc] eval-seq
@@ -95,10 +88,14 @@
 
    [:I :V] :form     ; (I V) => V. values are fixed points of eval.
 
-   :μ walk-body ; Walk has to recur into some structures, but most are data
+   ;; Walk has to recur into some structures. How bad would it be if we just
+   ;; made it walk into everything that isn't a value this way? How do we know
+   ;; what's a value?
+   :μ walk-body
    :ν walk-body
    :E walk-all
-   ;; :P walk-all
+   :P walk-all
+   :R walk-all
 
    :M    walk-map
    :L    walk-list
@@ -115,8 +112,8 @@
    ;; (ν ccs (apply (connect ... ccs) tail)) shaped hoop... but I don't like it.
    ;; [:A :E] apply-emit
 
-   [:A :I] apply-head ; (A head tail) => (A (walk head) tail)
-   [:A :A] apply-head ;   iff `head` is unevaluated.
+   [:A :I] walk-all
+   [:A :A] walk-all
    [:A :F] apply-external
    [:A :μ] apply-μ
 

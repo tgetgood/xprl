@@ -1,12 +1,6 @@
 (ns janus.env
-  (:refer-clojure :exclude [declare resolve bound?])
   (:require
-   [clojure.pprint :as pp]
-   [clojure.set :as set]
-   [clojure.walk :as walk]
-   [janus.ast :as ast])
-  (:import
-   (java.io Writer)))
+   [janus.ast :as ast]))
 
 ;;;;; Namespaces (contexts)
 
@@ -27,10 +21,9 @@
 (defn lookup [env sym]
   (get env sym))
 
-(defn bound? [env sym]
-  (contains? env sym))
+(declare pin unpin)
 
-(defn pin
+(defn pin*
   "Walks `form` and resolves symbols found in `bindings`."
   [form env]
   ;; (println (sort-by :names (keys env)))
@@ -50,7 +43,9 @@
       (coll? form)      (reduce (fn [f x] (conj f (pin x env))) form form)
       true              form)))
 
-(defn unpin
+(def pin (memoize pin*))
+
+(defn unpin*
   "Walks `form` and unresolves any occurances in `syms`"
   [form syms]
   (if (empty? syms)
@@ -58,7 +53,10 @@
     (cond
       (ast/resolved? form)   (if (contains? syms form)
                                (ast/unresolve form)
-                               form)
+                               (update form :form unpin syms))
+                                        ; REVIEW: for symmetry this ought to be
+                                        ; (update form :form unpin syms)
+                                        ; no?
 
       (ast/μ? form)     (update form :body unpin
                                 (disj syms (:params form) (:name form)))
@@ -67,3 +65,5 @@
       (map-entry? form) [(unpin (key form) syms) (unpin (val form) syms)]
       (coll? form)      (reduce (fn [f x] (conj f (unpin x syms))) form form)
       true              form)))
+
+(def unpin (memoize unpin*))
