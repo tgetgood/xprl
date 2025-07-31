@@ -3,6 +3,7 @@
   (:require
    [clojure.pprint :as pp]
    [clojure.set :as set]
+   [clojure.walk :as walk]
    [janus.ast :as ast])
   (:import
    (java.io Writer)))
@@ -29,46 +30,40 @@
 (defn bound? [env sym]
   (contains? env sym))
 
-;;;;; Contexts
+(defn pin
+  "Walks `form` and resolves symbols found in `bindings`."
+  [form env]
+  ;; (println (sort-by :names (keys env)))
+  (if (empty? env)
+    form
+    (cond
+      (ast/resolved? form)   (update form :form pin env) ; don't recur in sym
+      (ast/unresolved? form) (if (contains? env form)
+                               (ast/resolve form (get env form))
+                               form)
 
-(defrecord ContextSwitch [form env]
-  Object
-  (toString [_]
-    (str "#C" (keys env) "<" form ">"))
-  janus.ast.Contextual
-  janus.ast.Symbolic
-  (symbols [_]
-    (ast/symbols form)))
+      (ast/μ? form)     (update form :body pin
+                                (dissoc env (:params form) (:name form)))
+      ;; ν
+      (vector? form)    (mapv #(pin % env) form)
+      (map-entry? form) [(pin (key form) env) (pin (val form) env)]
+      (coll? form)      (reduce (fn [f x] (conj f (pin x env))) form form)
+      true              form)))
 
-(ast/ps ContextSwitch)
+(defn unpin
+  "Walks `form` and unresolves any occurances in `syms`"
+  [form syms]
+  (if (empty? syms)
+    form
+    (cond
+      (ast/resolved? form)   (if (contains? syms form)
+                               (ast/unresolve form)
+                               form)
 
-(defmethod pp/simple-dispatch ContextSwitch [{:keys [form env]}]
-  (pp/write-out (symbol "#C"))
-  (pp/write-out (str (sort-by :names (keys env))))
-  (pp/write-out  (symbol "<"))
-  (pp/simple-dispatch form)
-  (pp/write-out  (symbol ">")))
-
-(extend-protocol ast/Inspectable
-  ContextSwitch
-  (insp [{:keys [form env]} ^Writer w level]
-    (ast/spacer w level)
-    (.write w "C")
-    (.write w (str (sort-by :names (keys env))))
-    (.write w "\n")
-    (ast/insp form w (inc level))))
-
-(defn ctx? [x]
-  (instance? ContextSwitch x))
-
-(defn prune [{:keys [form] :as ctx}]
-  (update ctx :env project form))
-
-(defn context-free? [form]
-  (and (ctx? form) (= (:env form) empty-ns)))
-
-(defn pin [body env]
-  (->ContextSwitch body (project env body)))
-
-(def type-table
-  {ContextSwitch :C})
+      (ast/μ? form)     (update form :body unpin
+                                (disj syms (:params form) (:name form)))
+      ;; ν
+      (vector? form)    (mapv #(unpin % syms) form)
+      (map-entry? form) [(unpin (key form) syms) (unpin (val form) syms)]
+      (coll? form)      (reduce (fn [f x] (conj f (unpin x syms))) form form)
+      true              form)))

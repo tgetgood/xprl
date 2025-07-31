@@ -1,12 +1,23 @@
 (ns janus.ast
   (:refer-clojure
    :exclude
-   [symbol symbol? keyword keyword? destructure type list list? seq seq? map? set?])
+   [symbol
+    symbol?
+    keyword
+    keyword?
+    destructure
+    type
+    list
+    list?
+    seq
+    seq?
+    map?
+    set?
+    resolve])
   (:require
    [clojure.pprint :as pp]
    [clojure.set :as set]
    [clojure.string :as str])
-
   (:import
    (java.io Writer)))
 
@@ -86,8 +97,33 @@
 (def symbol
     (memoize (fn [s] (->Symbol (split-symbolic s)))))
 
-(defn symbol? [s]
+(defn unresolved? [s]
   (instance? Symbol s))
+
+
+(defrecord Resolved [sym form]
+  Contextual
+  Symbolic
+  (symbols [_] #{sym})
+  Object
+  (toString [_]
+    (str sym "=" form)))
+
+(defn resolve [sym val]
+  (->Resolved sym val))
+
+(defn resolved? [x]
+  (instance? Resolved x))
+
+(defn unresolve [x]
+  (if (resolved? x)
+    (:sym x)
+    x))
+
+(defn symbol? [s]
+  (or
+   (instance? Symbol s)
+   (instance? Resolved s)))
 
 
 (defn elements [l]
@@ -606,13 +642,19 @@
   {Immediate   :I
    Pair        :P
    Symbol      :S
+   Resolved    :S
    Application :A
    Extern      :F
    Mu          :μ
    Nu          :ν
    Emission    :E
    Seq         :seq
-   Conc        :conc})
+   Conc        :conc
+
+   clojure.lang.PersistentVector   :L
+   clojure.lang.PersistentArrayMap :M
+   clojure.lang.PersistentHashMap  :M
+   clojure.lang.PersistentHashSet  :set})
 
 (defn type [x]
   ;; There's nothing to gain in wrapping value types.

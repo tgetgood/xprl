@@ -5,20 +5,13 @@
    [janus.debug :as debug :refer [trace!]]
    [janus.env :as env]))
 
-;; REVIEW: Dynamic env massively simplifies the interpreter, but it breaks
-;; memoisation.
-;;
-;; I guess I could memoise on form and *env*... would that work?
-(def ^:dynamic *env* env/empty-ns)
-
 (declare walk)
 
 ;;;;; Application
 
 (defn apply-μ [{{:keys [body params name] :as μ} :head tail :tail :as app}]
-  (let [args (env/pin tail *env*)]
-    (binding [*env* (merge *env* (merge {params args} (when name {name μ})))]
-      (walk body))))
+  (debug/trace! "binding" (merge {params tail} (when name {name μ})))
+  (env/pin body (merge {params tail} (when name {name μ}))))
 
 (defn apply-external [{{f :fn} :head :as app}]
   ;; TODO: We should do a little more work here. External interpreters can't do
@@ -58,8 +51,7 @@
 ;;;;; Reduction
 
 (defn walk-body [{:keys [name params] :as form}]
-  (binding [*env* (transduce (remove nil?) dissoc *env* [name params])]
-    (update form :body walk)))
+  (update form :body walk))
 
 (defn walk-all [x]
   (reduce (fn [x k] (update x k walk)) x (keys x)))
@@ -85,27 +77,9 @@
 ;;;;; Env
 
 (defn resolve [{sym :form :as im}]
-  (if (env/bound? *env* sym)
-    (env/lookup *env* sym)
+  (if (ast/resolved? sym)
+    (:form sym)
     im))
-
-(defn walk-in-context [{:keys [form env] :as ctx}]
-  (debug/trace! "context switch:" env)
-  (binding [*env* env] (walk form)))
-
-(defn eval-in-context [{{form :form :as ctx} :form :as im}]
-  (assoc ctx :form (assoc im :form form)))
-
-(defn apply-in-context [{head :head :as app}]
-  (let [{h :form env :env} (walk head)
-        res (walk (assoc app :head h))]
-    (if (ast/application? res)
-      ;; We need to restore the inner context node if application was postponed.
-      (update res :head #(env/pin % env))
-      res)))
-
-(defn spread-context [{xs :form env :env}]
-  (ast/list (map #(env/pin % env) xs)))
 
 ;;;;; Tree walker
 
@@ -132,18 +106,6 @@
    :L    walk-list
    :seq  walk-sequential
    :conc walk-all
-
-   :C      walk-in-context
-   [:I :C] eval-inner ;-in-context  ; (I (C x)) =? (C (I x))
-   [:A :C] apply-head ;-in-context ; (A (C h) t) => (C (A h (C t))) ; tail takes *env*
-   ;; [:C :L] spread-context   ; REVIEW: This seems sloppy
-
-   ;; [:I :C :C] #(update % :form :form) ; drop outer.
-
-   ;; [:C :S] :form
-   ;; [:C :V] :form
-   ;; [:C :C] :form ; the inner context always wins
-   ;; [:C :C] (fn [x] (throw (RuntimeException. "nested contexts are an error.")))
 
    ;; TODO: An emission which includes a message to :return can trigger off the
    ;; application. But the connection logic isn't sophisticated enough for this
@@ -172,18 +134,7 @@
   (cond
     (ast/immediate? x)   (:form x)
     (ast/application? x) (:head x)
-    (env/ctx? x)         (:form x)
     true                 nil))
-
-(def default-types
-  {clojure.lang.PersistentVector   :L
-   clojure.lang.PersistentArrayMap :M
-   clojure.lang.PersistentHashMap  :M
-   clojure.lang.PersistentHashSet  :set})
-
-(defn node-type [x]
-  (let [t (type x)]
-    (get (merge ast/type-table env/type-table default-types) t :V)))
 
 (defn unwind [rule trees]
   (cond
@@ -195,7 +146,7 @@
 (defn rule-match
   ([s] (rule-match [] [rule-tree] s))
   ([rule trees sexp]
-   (let [rule  (conj rule (node-type sexp))
+   (let [rule  (conj rule (ast/type sexp))
          trees (conj trees (get (last trees) (last rule)))]
      (if (last trees)
        (recur rule trees (step sexp))
@@ -207,7 +158,6 @@
     (let [v (f sexp)]
       (trace! "result:" rule "\n" sexp "\n->\n" v)
       (debug/tag v rule sexp))))
-
 
 (defn walk*
   ([sexp]
@@ -221,4 +171,4 @@
    (walk* (env/pin sexp env))))
 
 ;; (def walk (memoize walk1))
-(def walk walk*)
+(def walk walk1)

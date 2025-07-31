@@ -19,15 +19,9 @@
 (def td (str srcpath "base-transduction.xprl"))
 (def testxprl (str srcpath "test.xprl"))
 
-(defn env-channel-kludge [msg]
-  (if (env/ctx? msg)
-    (let [r (env-channel-kludge (:form msg))]
-      [(first r) (assoc msg :form (second r))])
-    msg))
-
 (defn env-updater [env]
   (fn [l]
-    (let [[sym value] (env-channel-kludge l)]
+    (let [[sym value] l]
       (swap! env env/ns-intern sym value))))
 
 (defn go!

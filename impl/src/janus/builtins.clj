@@ -12,7 +12,6 @@
   (cond
     (ast/immediate? x)   false
     (ast/application? x) false
-    (env/ctx? x)         false
     true                 true))
 
 (defn ready-go
@@ -89,22 +88,20 @@
 
 ;;;;; Specialish forms
 
-(defn update-last [coll f & args]
-  (apply update coll (dec (count coll)) f args))
-
 (defn μ-ready? [args]
   (and (ast/list? args) (every? ast/symbol? (butlast args))))
 
 (def μ
   (ready-go μ-ready?
     (fn [args]
-      (apply ast/μ args))))
+      (let [names (mapv ast/unresolve (butlast args))]
+        (apply ast/μ (conj names (env/unpin (last args) (into #{} names))))))))
 
 (def ν
   (ready-go μ-ready?
     (fn [[params body]]
       ;; REVIEW: νs evaluate their bodies. I think that's the right thing.
-      (ast/ν params (ast/immediate body)))))
+      (ast/ν params (ast/immediate (env/unpin body #{params}))))))
 
 (defn emit [{:keys [tail] :as app}]
   (let [kvs (if (ast/list? tail) tail (i/walk tail))]
