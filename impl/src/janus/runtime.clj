@@ -53,7 +53,7 @@
   (trace! "\ninvoke ν\n" (:body ν) "\n")
   ;; REVIEW: Invocation of a ν *cannot* extend the context...
   (binding [i/*env* {(:params ν) (env/pin ccs i/*env*)}]
-    (update ν :body i/walk)))
+    (update ν :body i/walk*)))
 
 (defn send-return! [v ccs]
   (send! ccs (ast/xkeys :return) v))
@@ -90,5 +90,9 @@
   (get connection-rules (ast/type x) send-return!))
 
 (defn connect [form ccs]
-  ((connection form) form ccs)
-  :end-of-computation)
+  (if (env/ctx? form)
+    (binding [i/*env* (:env form)]
+      (connect (:form form) ccs))
+    (do
+      ((connection form) form ccs)
+      :end-of-computation)))

@@ -17,7 +17,8 @@
 
 (defn apply-μ [{{:keys [body params name] :as μ} :head tail :tail :as app}]
   (let [args (env/pin tail *env*)]
-    (env/pin body (merge *env* (merge {params args} (when name {name μ}))))))
+    (binding [*env* (merge *env* (merge {params args} (when name {name μ})))]
+      (walk body))))
 
 (defn apply-external [{{f :fn} :head :as app}]
   ;; TODO: We should do a little more work here. External interpreters can't do
@@ -90,22 +91,23 @@
 
 (defn walk-in-context [{:keys [form env] :as ctx}]
   (debug/trace! "context switch:" env)
-  (env/prune (binding [*env* env] (update ctx :form walk))))
+  (binding [*env* env] (walk form)))
 
 (defn eval-in-context [{{form :form :as ctx} :form :as im}]
   (assoc ctx :form (assoc im :form form)))
 
-;; REVIEW: Is this lazy or brilliant? Both?
-;;
-;; Pushing context into lists lets list manipulation remain ignorant of context,
-;; which is nice, but is there anything to worry about?
+(defn apply-in-context [{head :head :as app}]
+  (let [{h :form env :env} (walk head)
+        res (walk (assoc app :head h))]
+    (if (ast/application? res)
+      ;; We need to restore the inner context node if application was postponed.
+      (update res :head #(env/pin % env))
+      res)))
+
 (defn spread-context [{xs :form env :env}]
   (ast/list (map #(env/pin % env) xs)))
 
 ;;;;; Tree walker
-
-(defn inconceivable? [& args]
-  (throw (RuntimeException. "I thought this was unreachable!")))
 
 (def rules
   {[:I :P] eval-pair   ; (I (P x y)) => (A (I x) y)
@@ -132,11 +134,16 @@
    :conc walk-all
 
    :C      walk-in-context
-   [:I :C] eval-in-context ; [:I :C] => [:C :I]
-   [:A :C] apply-head
-   ;; [:C :L] spread-context ; TODO: do I need this?
+   [:I :C] eval-inner ;-in-context  ; (I (C x)) =? (C (I x))
+   [:A :C] apply-head ;-in-context ; (A (C h) t) => (C (A h (C t))) ; tail takes *env*
+   ;; [:C :L] spread-context   ; REVIEW: This seems sloppy
 
-   [:C :C] (fn [x] (throw (RuntimeException. "nested contexts are an error.")))
+   ;; [:I :C :C] #(update % :form :form) ; drop outer.
+
+   ;; [:C :S] :form
+   ;; [:C :V] :form
+   ;; [:C :C] :form ; the inner context always wins
+   ;; [:C :C] (fn [x] (throw (RuntimeException. "nested contexts are an error.")))
 
    ;; TODO: An emission which includes a message to :return can trigger off the
    ;; application. But the connection logic isn't sophisticated enough for this
@@ -194,22 +201,24 @@
        (recur rule trees (step sexp))
        (unwind rule trees)))))
 
-(defn walk [sexp]
+(defn walk1 [sexp]
   (let [[rule f] (rule-match sexp)]
     (trace! "rule match:" rule sexp)
     (let [v (f sexp)]
       (trace! "result:" rule "\n" sexp "\n->\n" v)
       (debug/tag v rule sexp))))
 
-;; (def walk (memoize walk1))
 
 (defn walk*
   ([sexp]
    (trace! "\n  pass:\n")
-   (let [next (walk sexp)]
+   (let [next (walk1 sexp)]
      (cond
        (= sexp next) sexp
        (nil? next)   (assert false "inconceivable!")
        true          (recur next))))
   ([env sexp]
    (walk* (env/pin sexp env))))
+
+;; (def walk (memoize walk1))
+(def walk walk*)
