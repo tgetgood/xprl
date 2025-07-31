@@ -5,7 +5,6 @@
     symbol?
     keyword
     keyword?
-    destructure
     type
     list
     list?
@@ -227,7 +226,6 @@
 
 
 (defrecord Extern [name fn]
-  ;; REVIEW: Require externs to have a name to simplify my life.
   Object
   (toString [_]
     (str "#F[" name "]")))
@@ -236,9 +234,6 @@
   (->Extern name fn))
 
 
-;; REVIEW: νs don't ~seem~ to need names since recursion is so far always
-;; handled at the level of a wrapping fn, thus creating a (potentially infinite)
-;; tower of networks. Watch out for overflows while walking the code.
 (defrecord Nu [params body]
   Contextual
   Symbolic
@@ -383,7 +378,6 @@
   ;; (pp/pprint-meta p)
   (pp/pprint-logical-block
    :prefix "(" :suffix ")"
-   ;; TODO: Dispatch on head of pair to format
    (pp/write-out head)
    (if (list? tail)
      (format-pair head (elements tail))
@@ -404,7 +398,6 @@
 (ps Application)
 
 (defmethod pp/simple-dispatch Application [{:keys [head tail]}]
-  ;; REVIEW: Is this advisable?
   (.write ^Writer *out* "#")
   (pp/simple-dispatch (pair head tail)))
 
@@ -486,39 +479,6 @@
 (defmethod pp/simple-dispatch Emission [{:keys [kvs]}]
   (pp/write-out (symbol "#E"))
   (pp/simple-dispatch kvs))
-
-;;;;; Destructuring
-;;
-;; Destructuring is no longer implemented around the language. But I'm keeping
-;; this around as reference for the implementation of destructuing ~in~ xprl at
-;; some point.
-
-(defprotocol Destructurable
-  (binding? [this] "Is this form an admissible lhs to bind?")
-  (bindings [this] "Returns a seq of symbols to be bound.")
-  ;; TODO: Use clojure's `destructure`. I just don't fully understand it and
-  ;; don't need its full power as yet. That might change.
-  (destructure [this args]))
-
-(extend-protocol Destructurable
-  Symbol
-  (binding? [_] true)
-  (bindings [x] [x])
-  (destructure [x y] {x y})
-
-  ;; TODO: dot operator [x y . tail]
-  clojure.lang.PersistentVector
-  (binding? [x] (every? binding? x))
-  (bindings [x] (into [] (comp (map bindings) cat ) x))
-  (destructure [x y]
-    (if (or (not (sequential? y)) (not= (count x) (count y)))
-      nil
-      (reduce merge (map destructure x y))))
-
-  Object
-  (binding? [_] false)
-  (bindings [_] [])
-  (destructure [xs ys] nil))
 
 ;;;;; Inspection
 

@@ -2,9 +2,10 @@
 
 (def ^:dynamic *verbose* false)
 
-;; REVIEW: Why is this a macro?
-(defmacro trace! [& args]
-  `(when *verbose* (println ~@args "\n")))
+(defn trace! [& args]
+  (when *verbose*
+    (apply println args)
+    (println)))
 
 (defn provenance [x]
   (::provenance (meta x)))
@@ -17,6 +18,5 @@
 (defn tag [val rule predecessor]
   (with-provenance val {:rule rule :predecessor predecessor}))
 
-;; storage location for errors when invoking clj externals.
-;; akin to *e
+;; storage location for errors when invoking clj externals. akin to *e
 (defonce *pfn (atom nil))

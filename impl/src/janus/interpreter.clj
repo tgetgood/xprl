@@ -7,17 +7,19 @@
 
 (declare walk)
 
+(defn evaluated? [x]
+  (not (or (ast/immediate? x) (ast/application? x))))
+
 ;;;;; Application
 
 (defn apply-μ [{{:keys [body params name] :as μ} :head tail :tail :as app}]
   (debug/trace! "binding" (merge {params tail} (when name {name μ})))
   (env/pin body (merge {params tail} (when name {name μ}))))
 
-(defn apply-external [{{f :fn} :head :as app}]
-  ;; TODO: We should do a little more work here. External interpreters can't do
-  ;; anything with interal references, so the tail should be reduced before
-  ;; sending.
-  (f app))
+(defn apply-external [{{f :fn} :head tail :tail :as app}]
+  (if (evaluated? tail)
+    (f app)
+    (update app :tail walk)))
 
 (defn apply-error [app]
   (throw (RuntimeException.
@@ -40,7 +42,9 @@
 
 ;;;;; Reduction
 
-(defn walk-in [x]
+(defn walk-in
+  "Recursively walk all fields of x and build the structure back up."
+  [x]
   (reduce (fn [x k] (update x k walk)) x (keys x)))
 
 (defn walk-sequential
@@ -114,8 +118,7 @@
    [:A :F] apply-external
    [:A :μ] apply-μ
 
-   :A apply-error ; REVIEW: Should application be extensible? Dubious.
-   })
+   :A apply-error})
 
 (def rule-tree
   (reduce (fn [acc [k v]]

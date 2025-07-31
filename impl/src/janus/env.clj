@@ -54,9 +54,6 @@
       (ast/resolved? form)   (if (contains? syms form)
                                (ast/unresolve form)
                                (update form :form unpin syms))
-                                        ; REVIEW: for symmetry this ought to be
-                                        ; (update form :form unpin syms)
-                                        ; no?
 
       (ast/μ? form)     (update form :body unpin
                                 (disj syms (:params form) (:name form)))

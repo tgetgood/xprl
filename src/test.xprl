@@ -24,11 +24,8 @@
 
 (if (= 1 0) 1 2)                     2
 
-;; This is hopw one would implement quote in xprl. I'm dubious that it's a good
-;; thing to put in the language, but there are some niche uses...
-;; TODO: Add a special :ktest/skip value which disables the check.
-;; REVIEW: Isn't that just running the lhs for side effects? That wasn't
-;; supposed to be possible. Yet here we are.
+;; Quoting is no longer straight forward so these will fail.
+;; TODO: Some sort of preamble or :test/skip key. or a proper test runner.
 (def f (fn x 1))                     ((μ x ~x) . f)
 (def g (fn x ((nth x 1) (nth x 1)))) ((μ x ~x) . g)
 

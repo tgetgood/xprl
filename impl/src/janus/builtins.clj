@@ -8,12 +8,6 @@
 
 ;;;;; Magic
 
-(defn evaluated? [x]
-  (cond
-    (ast/immediate? x)   false
-    (ast/application? x) false
-    true                 true))
-
 (defn ready-go
   {:style/indent [1]}
   [ready? go]
@@ -29,7 +23,7 @@
   "Given an external (clojure) function, returns an applicative wrapper to call
   it from xprl."
   [f]
-  (ready-go #(and (ast/list? %) (every? evaluated? %))
+  (ready-go #(every? i/evaluated? %)
     (fn [args]
       (try
         (apply f args)
@@ -90,7 +84,7 @@
 ;;;;; Specialish forms
 
 (defn μ-ready? [args]
-  (and (ast/list? args) (every? ast/symbol? (butlast args))))
+  (every? ast/symbol? (butlast args)))
 
 (def μ
   (ready-go μ-ready?
@@ -104,16 +98,11 @@
       ;; REVIEW: νs evaluate their bodies. I think that's the right thing.
       (ast/ν params (ast/immediate (env/unpin body #{params}))))))
 
-(defn emit [{:keys [tail] :as app}]
-  (let [kvs (if (ast/list? tail) tail (i/walk tail))]
-    (if (ast/list? kvs)
-      (do
-        (assert (even? (count kvs)))
-        (ast/emission
-         (ast/list (map (fn [[k v]] (ast/list [(ast/immediate k)
-                                               v]))
-                        (partition 2 kvs)))))
-      (assoc app :tail kvs))))
+(defn emit [{kvs :tail :as app}]
+  (assert (even? (count kvs)))
+  (ast/emission
+   (ast/list (map (fn [[k v]] (ast/list [(ast/immediate k) v]))
+                  (partition 2 kvs)))))
 
 ;; REVIEW: Select is manual at the moment because I'm giving it standard `if`
 ;; semantics, so it no longer acts as data selection but is an explicit branch.
@@ -121,16 +110,13 @@
 ;; I'm not convinced this is necessary, but I'm convinced not doing it is
 ;; complicated and I don't see what I gain that way.
 (defn select [{args :tail :as app}]
-  (let [args (if (ast/list? args) args (i/walk args))]
-    (if (ast/list? args)
-      (let [p (first args)
-            p (if (evaluated? p) p (i/walk p))]
-        (if (evaluated? p)
-          (let [[_ t f] args]
-            (assert (boolean? p) (str "Non boolean passed to select: " p))
-            (if p t f))
-          (assoc app :tail (assoc args 0 p))))
-      (assoc app :tail args))))
+  (let [p (first args)
+        p (if (i/evaluated? p) p (i/walk p))]
+    (if (i/evaluated? p)
+      (let [[_ t f] args]
+        (assert (boolean? p) (str "Non boolean passed to select: " p))
+        (if p t f))
+      (assoc app :tail (assoc args 0 p)))))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]

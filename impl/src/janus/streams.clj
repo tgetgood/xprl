@@ -1,6 +1,5 @@
 (ns janus.streams)
 
-
 (defn channel []
   (atom {:pending-writes (clojure.lang.PersistentQueue/EMPTY)
          :pending-reads  (sorted-map)
@@ -24,8 +23,8 @@
   (swap! (:ch st) :update :subscriptions :dissoc (:name st)))
 
 (defn deliver! [{:keys [msg cb]} offset reads subscriptions]
-  ;; REVIEW: I'm using loops to emphasize the imperative nature of this
-  ;; mechanism. It's pretty ugly, but maybe it should be...
+  ;; I'm using loops to emphasize the imperative nature of this mechanism. It's
+  ;; pretty ugly, but maybe it should be...
   (event! :deliver! {:msg msg})
   (loop [subs subscriptions]
     (when (seq subs)

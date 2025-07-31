@@ -1,11 +1,13 @@
 (ns janus.reader
   "This reader uses the weirdest monadish data pattern, but it seems to work."
   (:refer-clojure :exclude [read])
-  (:require [clojure.string :as str]
-            [clojure.set :as s]
-            [janus.ast :as ast]
-            [janus.debug :as debug])
-  (:import [java.io PushbackReader StringReader File FileReader EOFException]))
+  (:require
+   [clojure.set :as s]
+   [clojure.string :as str]
+   [janus.ast :as ast]
+   [janus.debug :as debug])
+  (:import
+   (java.io File FileReader PushbackReader StringReader)))
 
 (defn string-reader [^String s]
   {:reader (PushbackReader. (StringReader. s))
@@ -122,12 +124,7 @@
           v)))))
 
 (defn parse-symbol [{:keys [token gensyms] :as r}]
-  ;; reader gensyms are global to the form being read but unique between forms.
-  ;; REVIEW: I'm not clear that we *need* gensyms for hygiene. In fact my
-  ;; thinking is that if they're needed, that's an indication something is wrong
-  ;; with the context handling logic.
-  ;;
-  ;; But I'm not sure yet, so we still have them.
+  ;; FIXME: gensyms are unnecessary and never used. drop them.
   (if (str/ends-with? token "#")
     (let [s (apply str (butlast token))]
       (if-let [sym (get @gensyms s)]
