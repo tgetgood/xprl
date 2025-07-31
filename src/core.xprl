@@ -83,12 +83,12 @@
      ~~((μ ~(nth* ~x 1) ~(nth* ~x 3)) . ~~(nth* ~x 2))))
 
 (defμ let* x
-  (alet1 bindings (nth x 1)
-        (alet1 body (nth x 2)
-               (if (empty? bindings)
-                  body
-                  ~(let1 ~(nth bindings 1) ~(nth bindings 2)
-                        (let* ~(rest (rest bindings)) ~body))))))
+  (let1 bindings ~(nth* ~x 1)
+        ~(let1 body ~(nth* ~x 2)
+              ~~(select ~(empty?* ~bindings)
+                        body
+                        (let1 ~(nth* ~bindings 1) ~(nth* ~bindings 2)
+                               ~(let* ~(rest* ~(rest* ~bindings)) ~body))))))
 
 (defμ let-map x
   ~(select ~(empty?* ~(nth* ~x 1))

@@ -107,7 +107,7 @@
   (symbols [_] #{sym})
   Object
   (toString [_]
-    (str sym "=" form)))
+    (str sym "=" #_form)))
 
 (defn resolve [sym val]
   (->Resolved sym val))
@@ -317,6 +317,8 @@
 
 (defmethod pp/simple-dispatch Symbol [o]
   (pp/write-out (clojure.core/symbol (str o))))
+
+(ps Resolved)
 
 ;;; Keyword
 
@@ -553,6 +555,14 @@
     (.write w "S[")
     (.write w (str form))
     (.write w "]\n"))
+
+  Resolved
+  (insp [{:keys [sym form]} w level]
+    (spacer w level)
+    (.write w "R[")
+    (.write w (str sym))
+    (.write w "]\n")
+    (insp form w (inc level)))
 
   Application
   (insp [form ^Writer w level]

@@ -35,7 +35,8 @@
         (apply f args)
         (catch Exception e
           (reset! debug/*pfn {:f f :args args :e e})
-          (println "\nError\n\n" @debug/*pfn)
+          (ast/inspect (ast/application f args))
+          (println e)
           :error)))))
 
 (defn primitive [n f]

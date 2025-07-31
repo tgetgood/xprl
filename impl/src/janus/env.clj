@@ -14,7 +14,7 @@
   {})
 
 (defn ns-intern [ns sym val]
-  (assoc ns sym val))
+  (assoc ns (ast/unresolve sym) val))
 
 (defn ns-declare [ns sym]
   (dissoc ns sym))

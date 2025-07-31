@@ -38,10 +38,8 @@
 (defn eval-seq [{{:keys [elements] :as seq} :form :as im}]
   (update seq :elements (partial mapv #(assoc im :form %))))
 
-(defn eval-pair [im]
-  (let [p (:form im)]
-    (ast/application
-     (ast/immediate (:head p)) (:tail p))))
+(defn eval-pair [{{:keys [tail head]} :form}]
+  (ast/application (ast/immediate head) tail))
 
 (defn eval-inner
   "Walk inner form first, then come back to `x`."
@@ -100,7 +98,7 @@
    :μ walk-body ; Walk has to recur into some structures, but most are data
    :ν walk-body
    :E walk-all
-   :P walk-all
+   ;; :P walk-all
 
    :M    walk-map
    :L    walk-list
