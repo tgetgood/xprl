@@ -109,14 +109,14 @@
    (ast/list (map (fn [[k v]] (ast/list [(ast/immediate k) v]))
                   (partition 2 kvs)))))
 
-(defn select [{args :tail :as app}]
-  (let [[p t f] args
-        p       (if (i/evaluated? p) p (i/walk p))]
+(defn select [{[p t f] :tail :as app}]
+  ;; First walk *just p*. That's important.
+  (let [p (if (i/evaluated? p) p (i/walk p))]
+    ;; If p resolves, don't walk the dead branch: it might not be safe to do so.
+    ;; e.g. (select ~(empty? xs) [] ~(first xs))
     (if (i/evaluated? p)
       (do
         (assert (boolean? p) (str "Non boolean passed to select: " p))
-        ;; If p is a bool, don't walk the dead branch: it might not be safe to
-        ;; do so, e.g. (select ~(empty? xs) [] ~(first xs))
         (if p t f))
       ;; If p is not a bool, it ~should~ be safe to walk both `t` & `f`...
       (assoc app :tail [p (i/walk t) (i/walk f)]))))
