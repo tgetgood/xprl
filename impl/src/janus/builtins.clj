@@ -86,11 +86,16 @@
 (defn μ-ready? [args]
   (every? ast/symbol? (butlast args)))
 
-(def μ
-  (ready-go μ-ready?
-    (fn [args]
-      (let [names (mapv ast/unresolve (butlast args))]
-        (apply ast/μ (conj names (env/unpin (last args) (into #{} names))))))))
+(defn μ [{args :tail :as app}]
+  (let [names (ast/list (butlast args))
+        body  (last args)
+        names (if (every? ast/symbol? names) (mapv ast/unresolve names) (i/walk names))]
+    (if (every? ast/symbol? names)
+      ;; If the names resolve, it isn't safe to walk the body
+      (apply ast/μ (conj names (env/unpin body (into #{} names))))
+      ;; If the names don't resolve, it ~should~ be safe to walk the body
+      ;; REVIEW: But what if one of them resolves and the other doesn't?
+      (assoc app :tail (conj names (i/walk body))))))
 
 (def ν
   (ready-go μ-ready?

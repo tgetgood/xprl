@@ -42,10 +42,11 @@
 
 ;;;;; Reduction
 
-(defn walk-in
-  "Recursively walk all fields of x and build the structure back up."
-  [x]
-  (reduce (fn [x k] (update x k walk)) x (keys x)))
+(defn walk-keys [& ks]
+  (fn [x] (reduce (fn [x k] (update x k walk)) x ks)))
+
+(defn walk-all [x]
+  ((walk-keys (keys x)) x))
 
 (defn walk-sequential
   "Walks a seq in order, making sure each element has halted before walking the
@@ -79,8 +80,8 @@
   {[:I :P] eval-pair   ; (I (P x y)) => (A (I x) y)
    [:I :L] eval-list   ; (I (L x y ...)) => (L (I x) (I y) ...)
    [:I :M] eval-map    ; (I {x y ...}) => {(I x) (I y) ...}
-   [:I :I] walk-in
-   [:I :A] walk-in
+   [:I :I] walk-all
+   [:I :A] walk-all
 
    [:I :seq]  eval-seq
    [:I :conc] eval-seq
@@ -92,16 +93,16 @@
    ;; Walk has to recur into some structures. How bad would it be if we just
    ;; made it walk into everything that isn't a value this way? How do we know
    ;; what's a value?
-   :μ walk-in
-   :ν walk-in
-   :E walk-in
-   :P walk-in
-   :R walk-in
+   :μ (walk-keys :body)
+   :ν (walk-keys :body)
+   :E walk-all
+   :P walk-all
+   :R (walk-keys :form)
 
    :M    walk-map
    :L    walk-list
    :seq  walk-sequential
-   :conc walk-in
+   :conc walk-all
 
    ;; TODO: An emission which includes a message to :return can trigger off the
    ;; application. But the connection logic isn't sophisticated enough for this
@@ -113,12 +114,12 @@
    ;; (ν ccs (apply (connect ... ccs) tail)) shaped hoop... but I don't like it.
    ;; [:A :E] apply-emit
 
-   [:A :I] walk-in
-   [:A :A] walk-in
+   [:A :I] (walk-keys :head)
+   [:A :A] (walk-keys :head)
    [:A :F] apply-external
    [:A :μ] apply-μ
 
-   :A apply-error})
+   :A apply-error} )
 
 (def rule-tree
   (reduce (fn [acc [k v]]

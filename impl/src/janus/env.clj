@@ -35,10 +35,11 @@
 (defn unpin*
   "Walks `form` and unresolves any occurances in `syms`"
   [form syms]
+  (println "unpinning: " syms)
   (if (empty? syms)
     form
     (cond
-      (ast/resolved? form) (if (contains? syms form)
+      (ast/resolved? form) (if (contains? syms (ast/unresolve form))
                              (ast/unresolve form)
                              (update form :form unpin syms))
 
