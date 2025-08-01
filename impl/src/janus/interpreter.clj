@@ -26,6 +26,13 @@
           (str (:head app) " is not applicable, but was called with " (:tail app)
                "\n" (debug/provenance app)))))
 
+(defn apply-head [{:keys [head tail] :as app}]
+  (let [v (walk head)]
+    (if (= (ast/type head) (ast/type v))
+      ;; If the head is stalled, it's safe to walk the tail.
+      (assoc app :head v :tail (walk tail))
+      (assoc app :head v))))
+
 ;;;;; Eval
 
 (defn eval-list [im]
@@ -46,7 +53,7 @@
   (fn [x] (reduce (fn [x k] (update x k walk)) x ks)))
 
 (defn walk-all [x]
-  ((walk-keys (keys x)) x))
+  (reduce (fn [x k] (update x k walk)) x (keys x)))
 
 (defn walk-sequential
   "Walks a seq in order, making sure each element has halted before walking the
@@ -114,8 +121,8 @@
    ;; (ν ccs (apply (connect ... ccs) tail)) shaped hoop... but I don't like it.
    ;; [:A :E] apply-emit
 
-   [:A :I] (walk-keys :head)
-   [:A :A] (walk-keys :head)
+   [:A :I] apply-head
+   [:A :A] apply-head
    [:A :F] apply-external
    [:A :μ] apply-μ
 
