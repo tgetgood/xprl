@@ -2,21 +2,11 @@
   (:require
    [janus.ast :as ast]))
 
-;;;;; Namespaces (contexts)
-
 (def empty-ns
   {})
 
 (defn ns-intern [ns sym val]
   (assoc ns (ast/unresolve sym) val))
-
-(defn ns-declare [ns sym]
-  (dissoc ns sym))
-
-(defn project
-  "Fits `env` by removing all names not mentioned in `form`. "
-  ([env form]
-   (select-keys env (ast/symbols form))))
 
 (defn lookup [env sym]
   (get env sym))
@@ -26,7 +16,6 @@
 (defn pin*
   "Walks `form` and resolves symbols found in `bindings`."
   [form env]
-  ;; (println (sort-by :names (keys env)))
   (if (empty? env)
     form
     (cond
@@ -42,8 +31,6 @@
       (map-entry? form) [(pin (key form) env) (pin (val form) env)]
       (coll? form)      (reduce (fn [f x] (conj f (pin x env))) form form)
       true              form)))
-
-(def pin (memoize pin*))
 
 (defn unpin*
   "Walks `form` and unresolves any occurances in `syms`"
@@ -63,4 +50,6 @@
       (coll? form)      (reduce (fn [f x] (conj f (unpin x syms))) form form)
       true              form)))
 
+;; Without memoisation these are unusably slow.
+(def pin (memoize pin*))
 (def unpin (memoize unpin*))
