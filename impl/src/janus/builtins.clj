@@ -104,19 +104,17 @@
    (ast/list (map (fn [[k v]] (ast/list [(ast/immediate k) v]))
                   (partition 2 kvs)))))
 
-;; REVIEW: Select is manual at the moment because I'm giving it standard `if`
-;; semantics, so it no longer acts as data selection but is an explicit branch.
-;;
-;; I'm not convinced this is necessary, but I'm convinced not doing it is
-;; complicated and I don't see what I gain that way.
 (defn select [{args :tail :as app}]
-  (let [p (first args)
-        p (if (i/evaluated? p) p (i/walk p))]
+  (let [[p t f] args
+        p       (if (i/evaluated? p) p (i/walk p))]
     (if (i/evaluated? p)
-      (let [[_ t f] args]
+      (do
         (assert (boolean? p) (str "Non boolean passed to select: " p))
+        ;; If p is a bool, don't walk the dead branch: it might not be safe to
+        ;; do so, e.g. (select ~(empty? xs) [] ~(first xs))
         (if p t f))
-      (assoc app :tail (assoc args 0 p)))))
+      ;; If p is not a bool, it ~should~ be safe to walk both `t` & `f`...
+      (assoc app :tail [p (i/walk t) (i/walk f)]))))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]
