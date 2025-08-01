@@ -38,9 +38,9 @@
   (if (empty? syms)
     form
     (cond
-      (ast/resolved? form)   (if (contains? syms form)
-                               (ast/unresolve form)
-                               (update form :form unpin syms))
+      (ast/resolved? form) (if (contains? syms form)
+                             (ast/unresolve form)
+                             (update form :form unpin syms))
 
       (ast/μ? form)     (update form :body unpin
                                 (disj syms (:params form) (:name form)))
