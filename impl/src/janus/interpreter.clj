@@ -26,11 +26,11 @@
           (str (:head app) " is not applicable, but was called with " (:tail app)
                "\n" (debug/provenance app)))))
 
-(defn apply-head [{:keys [head tail] :as app}]
+(defn apply-head [{:keys [head] :as app}]
   (let [v (walk head)]
-    (if (= (ast/type head) (ast/type v))
+    (if (= v head)
       ;; If the head is stalled, it's safe to walk the tail.
-      (assoc app :head v :tail (walk tail))
+      (update app :tail walk)
       (assoc app :head v))))
 
 ;;;;; Eval
@@ -159,6 +159,8 @@
   (let [[rule f] (rule-match sexp)]
     (trace! "rule match:" rule sexp)
     (let [v (f sexp)]
+      (when (= v :error)
+        (assert false ":error panic"))
       (trace! "result:" rule "\n" sexp "\n->\n" v)
       (debug/tag v rule sexp))))
 
@@ -167,9 +169,9 @@
    (trace! "\n  pass:\n")
    (let [next (walk1 sexp)]
      (cond
-       (= sexp next) sexp
-       (nil? next)   (assert false "inconceivable!")
-       true          (recur next))))
+       (= sexp next)   sexp
+       (nil? next)     (assert false "inconceivable!")
+       true            (recur next))))
   ([env sexp]
    (walk* (env/pin sexp env))))
 
