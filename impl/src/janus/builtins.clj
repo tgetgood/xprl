@@ -91,8 +91,9 @@
         body  (last args)]
     (if (every? ast/symbol? names)
       ;; If the names resolve, it isn't safe to walk the body
-      (let [names (mapv ast/unresolve names)]
-        (apply ast/μ (conj names (env/unpin body (into #{} names)))))
+      (let [rnames (into #{} (comp (filter ast/resolved?) (map ast/resolve)) names)
+            body (i/walk (env/unpin body rnames))]
+        (apply ast/μ (conj (mapv ast/unresolve names) body)))
       ;; If the names don't resolve, it ~should~ be safe to walk the body
       ;; REVIEW: But what if one of them resolves and the other doesn't?
       (update app :tail i/walk))))

@@ -50,6 +50,6 @@
       (coll? form)      (reduce (fn [f x] (conj f (unpin x syms))) form form)
       true              form)))
 
-;; Without memoisation these are unusably slow.
+;; Without memoising these, interpretation runs away exponentially.
 (def pin (memoize pin*))
 (def unpin (memoize unpin*))

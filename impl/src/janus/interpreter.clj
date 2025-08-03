@@ -26,12 +26,10 @@
           (str (:head app) " is not applicable, but was called with " (:tail app)
                "\n" (debug/provenance app)))))
 
-(defn apply-head [{:keys [head] :as app}]
-  (let [v (walk head)]
-    (if (= v head)
-      ;; If the head is stalled, it's safe to walk the tail.
-      (update app :tail walk)
-      (assoc app :head v))))
+(defn apply-head [{:keys [head tail] :as app}]
+  (let [h (walk head)
+        t (if (evaluated? head) tail (walk tail))]
+    (assoc app :head h :tail t)))
 
 ;;;;; Eval
 
@@ -100,8 +98,8 @@
    ;; Walk has to recur into some structures. How bad would it be if we just
    ;; made it walk into everything that isn't a value this way? How do we know
    ;; what's a value?
-   :μ (walk-keys :body)
-   :ν (walk-keys :body)
+   ;; :μ (walk-keys :body)
+   ;; :ν (walk-keys :body)
    :E walk-all
    :P walk-all
    :R (walk-keys :form)
@@ -176,4 +174,4 @@
    (walk* (env/pin sexp env))))
 
 ;; (def walk (memoize walk1))
-(def walk walk1)
+(def walk walk*)
