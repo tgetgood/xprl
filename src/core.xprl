@@ -54,19 +54,12 @@
         (μ ~(nth* ~x 1) ~(nth* ~x 2) ~~(nth* ~x 3)))))
 
 (defμ cond body
-  (if (< (count body) 2)
-    (emit)
-    (if (nth body 1)
-      (nth body 2)
-      (cond . ~(rest (rest body))))))
-
-(defμ condμ body
   ;; gets an extra `~` from `defμ`
-  ~(select ~(<* ~(count* ~body) 2)
-            (emit)
-            ~(select ~~(nth* ~body 1)
-                     ~(nth* ~body 2)
-                     (condμ . ~(rest* ~(rest* ~body))))))
+  (select ~(<* ~(count* ~body) 2)
+          ~(emit)
+          ~(select ~~(nth* ~body 1)
+                   ~~(nth* ~body 2)
+                   ~(cond . ~(rest* ~(rest* ~body))))))
 
 (def if
   (μ x
@@ -103,9 +96,10 @@
 (defμ destructure xy
   (let* [params ~(nth* ~xy 1)
          args   ~(nth* ~xy 2)]
-    ~(condμ
-       (symbol?* ~params) {params ~args}
+    ~(cond
+       (symbol?* ~params) {params args}
        (empty?* ~params)  {}
+       (empty?* ~args)    (emit :error "pattern mismatch")
        (list?* ~params)   (merge
                            (destructure ~(first* ~params) ~(first* ~args))
                            (destructure ~(rest* ~params) ~(rest* ~args)))
