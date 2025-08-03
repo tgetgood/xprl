@@ -162,14 +162,19 @@
       (trace! "result:" rule "\n" sexp "\n->\n" v)
       (debug/tag v rule sexp))))
 
+(def ^:dynamic *seen* #{})
+(defonce t (atom nil))
+
 (defn walk*
   ([sexp]
    (trace! "\n  pass:\n")
    (let [next (walk1 sexp)]
      (cond
-       (= sexp next)   sexp
-       (nil? next)     (assert false "inconceivable!")
-       true            (recur next))))
+       (= sexp next)         sexp
+       (contains? *seen* next) (do (reset! t [next *seen*])
+                                   (throw (RuntimeException. "looping!!!" )))
+       (nil? next)           (assert false "inconceivable!")
+       true                  (binding [*seen* (conj *seen* next)] (walk next)))))
   ([env sexp]
    (walk* (env/pin sexp env))))
 
