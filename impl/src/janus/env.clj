@@ -13,6 +13,11 @@
 
 (declare pin unpin)
 
+(defn e [x]
+  (try
+    (empty x)
+    (catch Throwable _ x)))
+
 (defn pin*
   "Walks `form` and resolves symbols found in `bindings`."
   [form env]
@@ -27,9 +32,8 @@
       (ast/μ? form)     (update form :body pin
                                 (dissoc env (:params form) (:name form)))
       ;; ν
-      (vector? form)    (mapv #(pin % env) form)
       (map-entry? form) [(pin (key form) env) (pin (val form) env)]
-      (coll? form)      (reduce (fn [f x] (conj f (pin x env))) form form)
+      (coll? form)      (reduce (fn [f x] (conj f (pin x env))) (e form) form)
       true              form)))
 
 (defn unpin*
@@ -45,9 +49,8 @@
       (ast/μ? form)     (update form :body unpin
                                 (disj syms (:params form) (:name form)))
       ;; ν
-      (vector? form)    (mapv #(unpin % syms) form)
       (map-entry? form) [(unpin (key form) syms) (unpin (val form) syms)]
-      (coll? form)      (reduce (fn [f x] (conj f (unpin x syms))) form form)
+      (coll? form)      (reduce (fn [f x] (conj f (unpin x syms))) (e form) form)
       true              form)))
 
 ;; Without memoising these, interpretation runs away exponentially.

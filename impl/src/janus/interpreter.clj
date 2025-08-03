@@ -37,7 +37,7 @@
   (ast/list (map ast/immediate (:form im))))
 
 (defn eval-map [{m :form :as i}]
-  (into (empty m) (map (fn [[k v]] [(assoc i :form k) (assoc i :form v)])) m))
+  (reduce (fn [m [k v]] (assoc m (assoc i :form k) (assoc i :form v))) (empty m) m))
 
 (defn eval-seq [{{:keys [elements] :as seq} :form :as im}]
   (update seq :elements (partial mapv #(assoc im :form %))))
@@ -70,7 +70,7 @@
   (ast/list (map walk l)))
 
 (defn walk-map [m]
-  (into (empty m) (map (fn [[k v]] [(walk k) (walk v)])) m))
+  (reduce (fn [m [k v]] (assoc m (walk k) (walk v))) (empty m) m))
 
 ;;;;; Env
 
