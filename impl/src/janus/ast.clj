@@ -22,11 +22,6 @@
 
 ;;;;; Context
 
-(defprotocol Contextual)
-
-(extend-protocol Contextual
-  clojure.lang.PersistentVector)
-
 (defprotocol Symbolic
   (symbols [this]))
 
@@ -57,9 +52,6 @@
   Object
   (symbols [_] #{}))
 
-(defn contextual? [x]
-  (satisfies? Contextual x))
-
 ;;;;; AST
 
 (defn split-symbolic [s]
@@ -86,7 +78,6 @@
   (memoize (fn [s] (->Keyword (split-symbolic s)))))
 
 (defrecord Symbol [names]
-  Contextual
   Symbolic
   (symbols [this] #{this})
   Object
@@ -101,7 +92,6 @@
 
 
 (defrecord Resolved [sym form]
-  Contextual
   Symbolic
   (symbols [_] #{sym})
   Object
@@ -143,7 +133,6 @@
 
 
 (defrecord Pair [head tail]
-  Contextual
   Symbolic
   (symbols [_] (set/union (symbols head) (symbols tail)))
   Object
@@ -161,7 +150,6 @@
   (instance? Pair x))
 
 (defrecord Immediate [form]
-  Contextual
   Symbolic
   (symbols [_] (symbols form))
   Object
@@ -176,7 +164,6 @@
 
 
 (defrecord Application [head tail]
-  Contextual
   Symbolic
   (symbols [_] (set/union (symbols head) (symbols tail)))
   Object
@@ -191,7 +178,6 @@
 
 
 (defrecord Mu [name params body]
-  Contextual
   Symbolic
   ;; This is unintuitive, but we only look at the body because it ~might not~
   ;; refer to the name and formal param of the μ.
@@ -235,7 +221,6 @@
 
 
 (defrecord Nu [params body]
-  Contextual
   Symbolic
   (symbols [_] (symbols body))
   Object
@@ -250,7 +235,6 @@
 
 
 (defrecord Seq [elements]
-  Contextual
   Symbolic
   (symbols [_] (symbols elements))
   Object
@@ -265,7 +249,6 @@
 
 
 (defrecord Conc [elements]
-  Contextual
   Symbolic
   (symbols [_] (symbols elements))
   Object
@@ -283,7 +266,6 @@
 
 
 (defrecord Emission [kvs]
-  Contextual
   Symbolic
   (symbols [_] (symbols kvs))
   Object
