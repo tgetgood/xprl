@@ -84,10 +84,13 @@
                                ~(let* ~(rest* ~(rest* ~bindings)) ~body))))))
 
 (defμ let-map x
-  ~(select ~(empty?* ~(nth* ~x 1))
-           (nth* ~x 2)
-           (let1 ~(nth* ~(first* ~(nth* ~x 1)) 1) ~(nth* ~(first* ~(nth* ~x 1)) 2)
-                 (let-map ~(rest* ~(nth* ~x 1)) ~(nth* ~x 2)))))
+  (let1 bindings ~(nth* ~x 1)
+        ~(let1 body ~(nth* ~x 2)
+               ~(select ~(empty?* ~bindings)
+                        ~body
+                        ~(let1 kv ~(first* ~bindings)
+                               ~(let1 ~(nth* ~kv 1) ~(nth* ~kv 2)
+                                      ~(let-map ~(rest* ~bindings) ~body)))))))
 
 (def destructure-map
   (μ mp
