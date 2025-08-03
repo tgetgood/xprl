@@ -315,6 +315,9 @@
 
 (ps Resolved)
 
+(defmethod pp/simple-dispatch Resolved [o]
+  (pp/write-out (clojure.core/symbol (str o))))
+
 ;;; Keyword
 
 (ps Keyword)
