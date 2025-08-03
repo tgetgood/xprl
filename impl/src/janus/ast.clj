@@ -201,15 +201,6 @@
       (string? s)              s
       true                     (str f))))
 
-(defrecord Primitive [check fn]
-  Object
-  (toString [_]
-    (str "#F[" (fname fn) "]")))
-
-(defn primitive [p f]
-  (->Primitive p f))
-
-
 
 (defrecord Extern [name fn]
   Object
@@ -396,22 +387,6 @@
    (pp/write-out (symbol "#μ"))
    (format-pair (symbol "#μ") [params body])))
 
-;;; Primitive
-
-(defmethod print-method Primitive [{:keys [fn]} ^Writer w]
-  (.write w "#F[")
-  (if-let [n (:name (meta fn))]
-    (.write w (str n))
-    (print-method fn w))
-  (.write w "]"))
-
-(defmethod pp/simple-dispatch Primitive [{:keys [fn]}]
-  (pp/pprint-logical-block
-   :prefix "#F[" :suffix "]"
-   (if-let [n (:name (meta fn))]
-     (pp/write-out (clojure.core/symbol n))
-     (pp/write-out fn))))
-
 ;;; Externs
 
 (defmethod print-method Extern [{:keys [name]} ^Writer w]
@@ -542,13 +517,6 @@
     (spacer w level)
     (.write w "F[")
     (.write w (:name form))
-    (.write w "]\n"))
-
-  Primitive
-  (insp [form ^Writer w level]
-    (spacer w level)
-    (.write w "F[")
-    (.write w (fname (:fn form)))
     (.write w "]\n"))
 
   Mu
