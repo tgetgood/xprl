@@ -54,7 +54,6 @@
         (μ ~(nth* ~x 1) ~(nth* ~x 2) ~~(nth* ~x 3)))))
 
 (defμ cond body
-  ;; gets an extra `~` from `defμ`
   (select ~(<* ~(count* ~body) 2)
           ~(emit)
           ~(select ~~(nth* ~body 1)

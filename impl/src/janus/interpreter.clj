@@ -13,8 +13,9 @@
 ;;;;; Application
 
 (defn apply-μ [{{:keys [body params name] :as μ} :head tail :tail :as app}]
-  (debug/trace! "binding" (merge {params tail} (when name {name μ})))
-  (env/pin body (merge {params tail} (when name {name μ}))))
+  (let [ext (merge {params tail} (when name {name μ}))]
+    (debug/trace! "binding:" ext)
+    (env/pin body ext)))
 
 (defn apply-external [{{f :fn} :head tail :tail :as app}]
   (if (evaluated? tail)
