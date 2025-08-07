@@ -10,12 +10,15 @@
 (defn evaluated? [x]
   (not (or (ast/immediate? x) (ast/application? x))))
 
+(def ^:dynamic *μ-ctx* #{})
+
 ;;;;; Application
 
 (defn apply-μ [{{:keys [body params name] :as μ} :head tail :tail :as app}]
-  (let [ext (merge {params tail} (when name {name μ}))]
-    (debug/trace! "binding:" ext)
-    (env/pin body ext)))
+  (binding [*μ-ctx* (conj *μ-ctx* μ)]
+    (let [ext (merge {params tail} (when name {name μ}))]
+      (debug/trace! "binding:" ext)
+      (walk (env/pin body ext)))))
 
 (defn apply-external [{{f :fn} :head tail :tail :as app}]
   (if (evaluated? tail)
@@ -77,7 +80,9 @@
 
 (defn resolve [{sym :form :as im}]
   (if (ast/resolved? sym)
-    (:form sym)
+    (if (contains? *μ-ctx* (:form sym))
+      (throw (RuntimeException. "short circuit"))
+      (:form sym))
     im))
 
 ;;;;; Tree walker
@@ -99,7 +104,7 @@
    ;; Walk has to recur into some structures. How bad would it be if we just
    ;; made it walk into everything that isn't a value this way? How do we know
    ;; what's a value?
-   ;; :μ (walk-keys :body)
+   :μ (walk-keys :body)
    ;; :ν (walk-keys :body)
    :E walk-all
    :P walk-all
@@ -167,10 +172,12 @@
   ([sexp]
    (trace! "\n  pass:\n")
    (let [next (walk1 sexp)]
-     (cond
-       (= sexp next)   sexp
-       (nil? next)     (assert false "inconceivable!")
-       true            (recur next))))
+     (try
+       (cond
+         (= sexp next)                 sexp
+         (nil? next)                   (assert false "inconceivable!")
+         true                          (walk* next))
+       (catch RuntimeException e sexp))))
   ([env sexp]
    (walk* (env/pin sexp env))))
 
