@@ -65,14 +65,8 @@
      ~~(select ~~(nth* ~x 1) ~(nth* ~x 2) ~(nth* ~x 3))))
 
 (def let1
-  ;; μ friendly let suitable for syntax substitutions
   (μ x
      ~((μ ~(nth* ~x 1) ~(nth* ~x 3)) . ~(nth* ~x 2))))
-
-(def alet1
-  ;; Applicative let that does what you expect.
-  (μ x
-     ~~((μ ~(nth* ~x 1) ~(nth* ~x 3)) . ~~(nth* ~x 2))))
 
 (defμ let* x
   (let1 bindings ~(nth* ~x 1)
@@ -121,6 +115,13 @@
      ~(μ ~(nth* ~x 1) args
          ~(let-map ~(destructure ~(nth* ~x 2) ~~args)
             ~~(nth* ~x 3)))))
+
+(def fn
+  (μ params
+     ~(cond
+        ;; TODO: Docstrings, metadata, etc.
+        (= 2 (count params)) (fn2 . ~params)
+        (= 3 (count params)) (fn3 . ~params))))
 
 ;; (def defmulti
 ;;   (μ x
