@@ -550,7 +550,7 @@
     (spacer w level)
     (.write w "E\n")
     (loop [kvs (elements (:kvs form))]
-      (when (clojure.core/seq kvs)
+      (when (<= 2 (count kvs))
         (insp (first kvs) w (inc level))
         (insp (second kvs) w (inc level))
         (recur (drop 2 kvs))))))

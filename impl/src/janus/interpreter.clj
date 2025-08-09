@@ -15,10 +15,15 @@
 ;;;;; Application
 
 (defn apply-μ [{{:keys [body params name] :as μ} :head tail :tail :as app}]
-  (binding [*μ-ctx* (conj *μ-ctx* μ)]
+  (if (ast/immediate? tail)
+    ;; Eval immediates immediately, i.e., before sending.
+    ;; We don't always have to, but there are cases where references can become
+    ;; ambiguous if we don't.
+    (update app :tail walk)
     (let [ext (merge {params tail} (when name {name μ}))]
       (debug/trace! "binding:" ext)
-      (walk (env/pin body ext)))))
+      (binding [*μ-ctx* (conj *μ-ctx* μ)]
+        (walk (env/pin body ext))))))
 
 (defn apply-external [{{f :fn} :head tail :tail :as app}]
   (if (evaluated? tail)

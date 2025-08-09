@@ -142,14 +142,10 @@
 ;;(μ x ~(wrap . ~(μ  ~(nth x 1) ~~(nth x 2)))))
 
 ;; This one is named. Note it's the outer μ that bears the name.
-(def fn*
-  (μ x
-     ~(μ ~(nth* ~x 1) args
-         ~((μ ~(nth* ~x 2) ~~(nth* ~x 3)) . ~~args))))
 
 (def defn
   (μ x
-     ~(def ~(nth* ~x 1) (fn* . ~x))))
+     ~(def ~(nth* ~x 1) (fn3 . ~x))))
 
 (defμ when x
   (if ~(nth* ~x 1) ~(nth* ~x 2) (emit)))
