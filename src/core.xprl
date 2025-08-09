@@ -117,11 +117,11 @@
             ~~(nth* ~x 3)))))
 
 (def fn
-  (μ args
+  (μ params
      ~(cond
         ;; TODO: Docstrings, metadata, etc.
-        (= 2 (count args)) (fn2 . ~args)
-        (= 3 (count args)) (fn3 . ~args))))
+        (= 2 (count params)) (fn2 . ~params)
+        (= 3 (count params)) (fn3 . ~params))))
 
 ;; (def defmulti
 ;;   (μ x
@@ -145,12 +145,13 @@
 
 (def defn
   (μ x
-     ~(def ~(nth* ~x 1) (fn3 . ~x))))
+     ~(def ~(nth* ~x 1) (fn . ~x))))
 
 (defμ when x
   (if ~(nth* ~x 1) ~(nth* ~x 2) (emit)))
 
-(defn inc x (+ 1 (nth x 1)))
+(defn inc [x]
+  (+ 1 x))
 
 (def !1
   (μ !1 n
@@ -173,12 +174,12 @@
     1
     (* n (!4 . ~(- n 1)))))
 
-(defn !5 n
+(defn !5 [n]
   (if (= n 0)
     1
-    (* n (!5 . (- n 1)))))
+    (* n (!5 (- n 1)))))
 
-(defn !6 n
+(defn !6 [n]
   (if (< n 2)
     1
-    (* n (!6 . (- n 1)))))
+    (* n (!6 (- n 1)))))
