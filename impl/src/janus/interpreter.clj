@@ -182,7 +182,10 @@
          (= sexp next)                 sexp
          (nil? next)                   (assert false "inconceivable!")
          true                          (walk* next))
-       (catch RuntimeException e sexp))))
+       (catch RuntimeException e
+         (do
+           (debug/trace! "\n ---Short Circuit!---\n" sexp)
+           sexp)))))
   ([env sexp]
    (walk* (env/pin sexp env))))
 
