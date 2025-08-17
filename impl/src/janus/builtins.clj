@@ -90,10 +90,7 @@
   (let [names (ast/list (butlast args))
         body  (last args)]
     (if (every? ast/symbol? names)
-      ;; If the names resolve, it isn't safe to walk the body
-      (let [rnames (into #{} (comp (filter ast/resolved?) (map ast/resolve)) names)
-            body (env/unpin body rnames)]
-        (apply ast/μ (conj (mapv ast/unresolve names) body)))
+      (apply ast/μ (env/capture args))
       ;; If the names don't resolve, it ~should~ be safe to walk the body
       ;; REVIEW: But what if one of them resolves and the other doesn't?
       (update app :tail i/walk))))
@@ -102,7 +99,7 @@
   (ready-go μ-ready?
     (fn [[params body]]
       ;; REVIEW: νs evaluate their bodies. I think that's the right thing.
-      (ast/ν params (ast/immediate (env/unpin body #{params}))))))
+      #_(ast/ν params (ast/immediate (env/unpin body #{params}))))))
 
 (defn emit [{kvs :tail :as app}]
   (assert (even? (count kvs)))

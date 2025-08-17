@@ -23,7 +23,7 @@
     (let [ext (merge {params tail} (when name {name μ}))]
       (debug/trace! "binding:" ext)
       (binding [*μ-ctx* (conj *μ-ctx* μ)]
-        (walk (env/pin body ext))))))
+        (walk (env/bind μ tail))))))
 
 (defn apply-external [{{f :fn} :head tail :tail :as app}]
   (if (evaluated? tail)
@@ -84,10 +84,10 @@
 ;;;;; Env
 
 (defn resolve [{sym :form :as im}]
-  (if (ast/resolved? sym)
-    (if (contains? *μ-ctx* (:form sym))
+  (if (and (ast/resolved? sym) (:val sym))
+    (if (contains? *μ-ctx* (:val sym))
       (throw (RuntimeException. "short circuit"))
-      (:form sym))
+      (:val sym))
     im))
 
 ;;;;; Tree walker
@@ -187,7 +187,7 @@
            (debug/trace! "\n ---Short Circuit!---\n" sexp)
            sexp)))))
   ([env sexp]
-   (walk* (env/pin sexp env))))
+   (walk* (env/ns-set! env sexp))))
 
 ;; (def walk (memoize walk1))
 (def walk walk*)

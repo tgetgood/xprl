@@ -1,5 +1,6 @@
 (ns janus.env
   (:require
+   [clojure.walk :as walk]
    [janus.ast :as ast]))
 
 (def empty-ns
@@ -11,48 +12,20 @@
 (defn lookup [env sym]
   (get env sym))
 
-(declare pin unpin)
+(defn ast-replace [subs form]
+  (walk/postwalk (fn [x] (if (contains? subs x) (get subs x) x)) form))
 
-(defn e [x]
-  (try
-    (empty x)
-    (catch Throwable _ x)))
+(defn ns-set! [ns body]
+  (let [binds (into {} (map (fn [[k v]] [k (ast/->Resolved k :ns v)])) ns)]
+    (ast-replace binds body)))
 
-(defn pin*
-  "Walks `form` and resolves symbols found in `bindings`."
-  [form env]
-  (if (empty? env)
-    form
-    (cond
-      (ast/resolved? form)   (update form :form pin env) ; don't recur in sym
-      (ast/unresolved? form) (if (contains? env form)
-                               (ast/resolve form (get env form))
-                               form)
+(defn capture [args]
+  (let [[name params body] (if (= 3 (count args)) args (into [nil] args))
+        p                  (ast/capture params)
+        n                  (when name (ast/capture name))]
+    [n p (ast-replace (merge {params p} (when name {name n})) body)]))
 
-      (ast/μ? form)     (update form :body pin
-                                (dissoc env (:params form) (:name form)))
-      ;; ν
-      (map-entry? form) [(pin (key form) env) (pin (val form) env)]
-      (coll? form)      (reduce (fn [f x] (conj f (pin x env))) (e form) form)
-      true              form)))
-
-(defn unpin*
-  "Walks `form` and unresolves any occurances in `syms`"
-  [form syms]
-  (if (empty? syms)
-    form
-    (cond
-      (ast/resolved? form) (if (contains? syms (ast/unresolve form))
-                             (ast/unresolve form)
-                             (update form :form unpin syms))
-
-      (ast/μ? form)     (update form :body unpin
-                                (disj syms (:params form) (:name form)))
-      ;; ν
-      (map-entry? form) [(unpin (key form) syms) (unpin (val form) syms)]
-      (coll? form)      (reduce (fn [f x] (conj f (unpin x syms))) (e form) form)
-      true              form)))
-
-;; Without memoising these, interpretation runs away exponentially.
-(def pin (memoize pin*))
-(def unpin (memoize unpin*))
+(defn bind [{:keys [name params body] :as μ} args]
+  (let [subs (merge {params (ast/resolve params args)}
+                    (when name {name (ast/resolve name μ)}))]
+    (ast-replace subs body)))

@@ -91,15 +91,12 @@
   (instance? Symbol s))
 
 
-(defrecord Resolved [sym form]
+(defrecord Resolved [sym uuid val]
   Symbolic
   (symbols [_] #{sym})
   Object
   (toString [_]
     (str sym "=" #_form)))
-
-(defn resolve [sym val]
-  (->Resolved sym val))
 
 (defn resolved? [x]
   (instance? Resolved x))
@@ -108,6 +105,14 @@
   (if (resolved? x)
     (:sym x)
     x))
+
+(defn capture [sym]
+  (if (resolved? sym)
+    (recur (unresolve sym))
+    (->Resolved sym (gensym (str sym)) nil)))
+
+(defn resolve [{:keys [sym uuid]} val]
+  (->Resolved sym uuid val))
 
 (defn symbol? [s]
   (or

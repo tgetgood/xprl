@@ -51,7 +51,7 @@
 
 (defn pass-ccs [ν ccs]
   (trace! "\ninvoke ν\n" (:body ν) "\n")
-  (i/walk* (env/pin (:body ν) {(:params ν) ccs})))
+  #_(i/walk* (env/pin (:body ν) {(:params ν) ccs})))
 
 (defn send-return! [v ccs]
   (send! ccs (ast/xkeys :return) v))
