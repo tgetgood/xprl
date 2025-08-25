@@ -593,3 +593,17 @@
    :error   (keyword "error")
    :unbound (keyword "unbound")
    :env     (keyword "env")})
+
+(defn evaluated? [x]
+  (and (not (immediate? x)) (not (application? x))))
+
+(defn empty
+  "Empty that works for map entries as well."
+  [x]
+  (if (map-entry? x)
+    [] ; Treat map entries as vectors and everything works
+    (try
+      (clojure.core/empty x)
+      ;; If IPersistentCollection isn't implemented then that means it's one of
+      ;; my records and we're going to overwrite every property anyway.
+      (catch UnsupportedOperationException _ x))))
