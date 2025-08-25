@@ -25,12 +25,8 @@
       (swap! env env/ns-intern sym value))))
 
 (defn go!
-  ([env f]
-   (i/walk* env (debug/with-provenance (ast/immediate f)
-                 {:origin ::repl :predecessor f})))
-  ([env f ccs]
-   (rt/schedule (ast/list [(fn [_] (rt/connect (go! env f) ccs))]))
-   (rt/run!)))
+  ([env f] (i/interpret env (ast/immediate f)))
+  ([env f conts] (rt/connect (go! env f) conts)))
 
 (defn evv [s]
   (go! @the-env (:form (r/read (r/string-reader s)))))

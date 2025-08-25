@@ -23,7 +23,7 @@
   "Given an external (clojure) function, returns an applicative wrapper to call
   it from xprl."
   [f]
-  (ready-go #(every? i/evaluated? %)
+  (ready-go #(every? ast/evaluated? %)
     (fn [args]
       (try
         (apply f args)
@@ -109,10 +109,10 @@
 
 (defn select [{[p t f] :tail :as app}]
   ;; First walk *just p*. That's important.
-  (let [p (if (i/evaluated? p) p (i/walk p))]
+  (let [p (if (ast/evaluated? p) p (i/walk p))]
     ;; If p resolves, don't walk the dead branch: it might not be safe to do so.
     ;; e.g. (select ~(empty? xs) [] ~(first xs))
-    (if (i/evaluated? p)
+    (if (ast/evaluated? p)
       (do
         (assert (boolean? p) (str "Non boolean passed to select: " p))
         (if p t f))

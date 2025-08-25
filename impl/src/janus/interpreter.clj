@@ -2,18 +2,17 @@
   (:refer-clojure :exclude [resolve eval apply])
   (:require
    [janus.ast :as ast]
-   [janus.debug :as debug :refer [trace!]]
+   [janus.debug :as debug]
    [janus.env :as env]))
 
 (declare walk)
 
-(def ^:dynamic *μ-ctx* #{})
+(def ^:dynamic *μ-ctx* false)
 
 ;;;;; Application
 
 (defn apply-μ [{{:keys [body params name] :as μ} :head tail :tail :as app}]
-  (binding [*μ-ctx* (conj *μ-ctx* μ)]
-    (walk (env/bind μ tail))))
+  (walk (env/bind μ tail)))
 
 (defn apply-external [{{f :fn} :head tail :tail :as app}]
   (if (ast/evaluated? tail)
@@ -54,11 +53,7 @@
   (ast/application (ast/immediate head) tail))
 
 (defn resolve [{sym :form :as im}]
-  (if (and (ast/resolved? sym) (:val sym))
-    (if (contains? *μ-ctx* (:val sym))
-      (throw (RuntimeException. "short circuit"))
-      (:val sym))
-    im))
+  (if (and (ast/resolved? sym) (:val sym)) (:val sym) im))
 
 (def eval-rules
   {:P eval-pair     ; (I (P x y)) => (A (I x) y)
@@ -75,15 +70,20 @@
 ;;;;; Reduction
 
 (defn walk-μ [μ]
-  )
+  (binding [*μ-ctx* true]
+    (update μ :body walk)))
+
+(defn checked-recursion [ref]
+  (if *μ-ctx* ref (:val ref)))
 
 (def walk-rules
   {:I #'eval
    :A #'apply
+   :R checked-recursion
    :P walk-coll
    :L walk-coll
    :M walk-coll
-   :μ walk-μ})
+   :μ walk-coll})
 
 (defn walk* [sexp]
   (let [t    (ast/type sexp)
@@ -98,3 +98,6 @@
 
 ;; (def walk (memoize walk*))
 (def walk walk*)
+
+(defn interpret [ns form]
+  (walk (env/ns-set! ns form)))
