@@ -5,6 +5,7 @@
     symbol?
     keyword
     keyword?
+    empty
     type
     list
     list?
@@ -579,6 +580,7 @@
    Seq         :seq
    Conc        :conc
 
+   clojure.lang.MapEntry           :L
    clojure.lang.PersistentVector   :L
    clojure.lang.PersistentArrayMap :M
    clojure.lang.PersistentHashMap  :M
