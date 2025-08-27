@@ -495,12 +495,12 @@
     (.write w "]\n"))
 
   Resolved
-  (insp [{:keys [sym form]} w level]
+  (insp [{:keys [sym val]} w level]
     (spacer w level)
     (.write w "R[")
     (.write w (str sym))
     (.write w "]\n")
-    (insp form w (inc level)))
+    #_(insp form w (inc level)))
 
   Application
   (insp [form ^Writer w level]
