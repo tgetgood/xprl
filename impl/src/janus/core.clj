@@ -86,6 +86,7 @@
             (go! @the-env form1 (rt/with-return conts println))
             (print "expected: " )
             (go! @the-env form2 (rt/with-return conts println))
+            (println )
             (recur reader)))))))
 
 (def p debug/provenance)
@@ -96,3 +97,8 @@
 
 (defmacro db [x]
   `(binding [debug/*verbose* true] ~x))
+
+(defmacro ddb [x]
+   `(binding [debug/*verbose* true
+              debug/*sample-interval* 1000]
+      ~x) )

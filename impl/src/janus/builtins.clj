@@ -90,16 +90,11 @@
   (let [names (ast/list (butlast args))
         body  (last args)]
     (if (every? ast/symbol? names)
-      (apply ast/μ (env/capture args))
+      (i/walk (apply ast/μ (env/capture args)))
       ;; If the names don't resolve, it ~should~ be safe to walk the body
       ;; REVIEW: But what if one of them resolves and the other doesn't?
-      (update app :tail i/walk))))
-
-(def ν
-  (ready-go μ-ready?
-    (fn [[params body]]
-      ;; REVIEW: νs evaluate their bodies. I think that's the right thing.
-      #_(ast/ν params (ast/immediate (env/unpin body #{params}))))))
+      (i/continue app (i/prevent-emission
+                         (update app :tail i/walk))))))
 
 (defn emit [{kvs :tail :as app}]
   (assert (even? (count kvs)))
@@ -115,9 +110,9 @@
     (if (ast/evaluated? p)
       (do
         (assert (boolean? p) (str "Non boolean passed to select: " p))
-        (if p t f))
+        (i/walk (if p t f)))
       ;; If p is not a bool, it ~should~ be safe to walk both `t` & `f`...
-      (assoc app :tail [p (i/walk t) (i/walk f)]))))
+      (i/continue app (assoc app :tail [p (i/walk t) (i/walk f)])))))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]
@@ -127,7 +122,6 @@
   "Things that would traditionally be special forms."
   (macros
    {"μ"      μ
-    "ν"      ν
     "select" select
     "emit"   emit
 

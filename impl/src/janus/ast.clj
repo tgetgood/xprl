@@ -91,7 +91,6 @@
 (defn unresolved? [s]
   (instance? Symbol s))
 
-
 (defrecord Resolved [sym uuid val]
   Symbolic
   (symbols [_] #{sym})
@@ -119,18 +118,6 @@
   (or
    (instance? Symbol s)
    (instance? Resolved s)))
-
-
-;; Ugh.
-(defrecord RecursiveReference [val]
-  Symbolic
-  (symbols [_] (symbols val)))
-
-(defn resolve-recur [{:keys [sym uuid]} val]
-  (->Resolved sym uuid (->RecursiveReference val)))
-
-(defn recursive? [x]
-  (instance? RecursiveReference x))
 
 
 (defn elements [l]
@@ -591,8 +578,6 @@
    Emission    :E
    Seq         :seq
    Conc        :conc
-
-   RecursiveReference :R
 
    clojure.lang.MapEntry           :L
    clojure.lang.PersistentVector   :L

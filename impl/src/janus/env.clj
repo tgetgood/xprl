@@ -27,5 +27,5 @@
 
 (defn bind [{:keys [name params body] :as μ} args]
   (let [subs (merge {params (ast/resolve params args)}
-                    (when name {name (ast/resolve-recur name μ)}))]
+                    (when name {name (ast/resolve name μ)}))]
     (ast-replace subs body)))
