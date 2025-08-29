@@ -216,20 +216,6 @@
   (->Extern name fn))
 
 
-(defrecord Nu [params body]
-  Symbolic
-  (symbols [_] (symbols body))
-  Object
-  (toString [_]
-    (str "(#ν " params " "  body ")")))
-
-(defn ν [params body]
-  (->Nu params body))
-
-(defn ν? [x]
-  (instance? Nu x))
-
-
 (defrecord Seq [elements]
   Symbolic
   (symbols [_] (symbols elements))
@@ -404,17 +390,6 @@
    :prefix "#F[" :suffix "]"
    (pp/write-out name)))
 
-;;; Nu
-
-(ps Nu)
-
-(defmethod pp/simple-dispatch Nu [{:keys [params body]}]
-  (pp/pprint-logical-block
-   :prefix ")" :suffix ")"
-   (pp/write-out (symbol "#ν"))
-   (format-pair (symbol "#μ") [params body])))
-
-
 ;;; seq & conc
 
 (defmethod print-method Seq [{:keys [elements]} ^Writer w]
@@ -486,8 +461,7 @@
     (spacer w level)
     (.write w "R[")
     (.write w (str sym))
-    (.write w "]\n")
-    #_(insp form w (inc level)))
+    (.write w "]\n"))
 
   Application
   (insp [form ^Writer w level]
@@ -531,13 +505,6 @@
     (insp (:params form) w (inc level))
     (insp (:body form) w (inc level)))
 
-  Nu
-  (insp [form ^Writer w level]
-    (spacer w level)
-    (.write w "ν\n")
-    (insp (:params form) w (inc level))
-    (insp (:body form) w (inc level)))
-
   Seq
   (insp [{:keys [elements]} ^Writer w level]
     (spacer w level)
@@ -574,7 +541,6 @@
    Application :A
    Extern      :F
    Mu          :μ
-   Nu          :ν
    Emission    :E
    Seq         :seq
    Conc        :conc
