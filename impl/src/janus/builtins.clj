@@ -3,8 +3,7 @@
    [janus.ast :as ast]
    [janus.debug :as debug]
    [janus.env :as env]
-   [janus.interpreter :as i]
-   [janus.runtime :as rt]))
+   [janus.interpreter :as i]))
 
 ;;;;; Magic
 
@@ -78,7 +77,6 @@
     "count*" count
     "nth*"   nth* ; Base 1 indexing
 
-    "connect*" rt/connect
     }))
 
 ;;;;; Specialish forms

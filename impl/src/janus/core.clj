@@ -6,8 +6,7 @@
    [janus.debug :as debug]
    [janus.env :as env]
    [janus.interpreter :as i]
-   [janus.reader :as r]
-   [janus.runtime :as rt]))
+   [janus.reader :as r]))
 
 (def the-env (atom builtins/base-env))
 
@@ -24,9 +23,16 @@
     (let [[sym value] l]
       (swap! env env/ns-intern sym value))))
 
+
+(defn with-return [ccs cb]
+  (assoc ccs (ast/xkeys :return) cb))
+
+(defn connect [form ccs]
+  (throw (RuntimeException. "not implemented!")))
+
 (defn go!
   ([env f] (i/interpret env (ast/immediate f)))
-  ([env f conts] (rt/connect (go! env f) conts)))
+  ([env f conts] (connect (go! env f) conts)))
 
 (defn evv [s]
   (go! @the-env (:form (r/read (r/string-reader s)))))
@@ -54,7 +60,7 @@
         (if (= :eof form)
           'EOF
           (do
-            (go! @envatom form (rt/with-return conts println))
+            (go! @envatom form (with-return conts println))
             (recur reader)))))))
 
 (defn reload! [fname]
@@ -83,9 +89,9 @@
             (println "Evaluating: " form1)
             (println "---")
             (print "result: ")
-            (go! @the-env form1 (rt/with-return conts println))
+            (go! @the-env form1 (with-return conts println))
             (print "expected: " )
-            (go! @the-env form2 (rt/with-return conts println))
+            (go! @the-env form2 (with-return conts println))
             (println )
             (recur reader)))))))
 
