@@ -42,7 +42,7 @@
 
 (defn apply-head [{:keys [head tail] :as app}]
   (let [h (walk head)
-        t (if (ast/evaluated? head) tail (walk tail))]
+        t (if (ast/evaluated? h) tail (walk tail))]
     (continue app (assoc app :head h :tail t))))
 
 (def apply-rules
