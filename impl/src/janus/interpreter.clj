@@ -23,7 +23,7 @@
     (let [ext (merge {params tail} (when name {name μ}))]
       (debug/trace! "binding:" ext)
       (binding [*μ-ctx* (conj *μ-ctx* μ)]
-        (walk (env/bind μ tail))))))
+        (walk (env/bind μ (walk tail)))))))
 
 (defn apply-external [{{f :fn} :head tail :tail :as app}]
   (if (evaluated? tail)
@@ -37,7 +37,7 @@
 
 (defn apply-head [{:keys [head tail] :as app}]
   (let [h (walk head)
-        t (if (evaluated? head) tail (walk tail))]
+        t (if (evaluated? h) tail (walk tail))]
     (assoc app :head h :tail t)))
 
 ;;;;; Eval
