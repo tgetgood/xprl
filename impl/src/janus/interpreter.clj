@@ -8,14 +8,14 @@
 (declare walk)
 
 (defn continue [x y]
-  (if (= x y) x (walk y)))
+  (cond
+    (= x y)            x
+    (ast/evaluated? y) y
+    true               (walk y)))
 
 (def ^:dynamic *μ-ctx* #{})
 (def ^:dynamic *emit?* true)
 (def ^:dynamic *cycle-break* ::uninitialised)
-
-(defmacro with-ctx [μ & body]
-  `(binding [*μ-ctx* (conj *μ-ctx* ~μ)] ~@body))
 
 (defmacro prevent-emission [& body]
   `(binding [*emit?* false]
@@ -24,10 +24,8 @@
 ;;;;; Application
 
 (defn apply-μ [{{:keys [body params name] :as μ} :head tail :tail :as app}]
-  (if (contains? *μ-ctx* μ)
-    app
-    (with-ctx μ
-      (walk (env/bind μ tail)))))
+  (binding [*μ-ctx* (conj *μ-ctx* μ)]
+    (walk (env/bind μ tail))))
 
 (defn apply-external [{{f :fn n :name} :head tail :tail :as app}]
   (if (ast/evaluated? tail)
@@ -70,9 +68,9 @@
 (defn eval-pair [{{:keys [tail head]} :form}]
   (walk (ast/application (ast/immediate head) tail)))
 
-(defn resolve [{sym :form :as im}]
-  (if (and (ast/resolved? sym) (not (nil? (:val sym))))
-    (:val sym)
+(defn resolve [{{v :val :as sym} :form :as im}]
+  (if (and (ast/resolved? sym) (not (nil? v)) (not (contains? *μ-ctx* v)))
+    v
     im))
 
 (def eval-rules
