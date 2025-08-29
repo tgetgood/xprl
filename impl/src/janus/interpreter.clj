@@ -10,7 +10,6 @@
 (defn continue [x y]
   (if (= x y) x (walk y)))
 
-
 (def ^:dynamic *μ-ctx* #{})
 (def ^:dynamic *emit?* true)
 (def ^:dynamic *cycle-break* ::uninitialised)
@@ -73,7 +72,7 @@
 
 (defn resolve [{sym :form :as im}]
   (if (and (ast/resolved? sym) (not (nil? (:val sym))))
-    (walk (:val sym))
+    (:val sym)
     im))
 
 (def eval-rules
