@@ -7,30 +7,29 @@
 
 (declare walk)
 
-(defn continue [x y]
-  (cond
-    (= x y)            x
-    (ast/evaluated? y) y
-    true               (walk y)))
-
-(def ^:dynamic *μ-ctx* #{})
-(def ^:dynamic *emit?* true)
-(def ^:dynamic *cycle-break* ::uninitialised)
-
-(defmacro prevent-emission [& body]
-  `(binding [*emit?* false]
-     ~@body))
+(defn simple
+  "Wraps a function that just acts on a form to act on the form embedded in a
+  state map."
+  [f]
+  (fn [state]
+    (update state :form f)))
 
 ;;;;; Application
 
-(defn apply-μ [{{:keys [body params name] :as μ} :head tail :tail :as app}]
-  (binding [*μ-ctx* (conj *μ-ctx* μ)]
-    (walk (env/bind μ tail))))
+(defn apply-μ [{{μ :head tail :tail :as app} :form :as state}]
+  ;; Interpreter as middleware. Kind of a cool idea?
+  (-> state
+      (update :μ-ctx (fnil conj #{}) μ)
+      (assoc :form (env/bind μ tail))
+      walk
+      ;; Only undo things we did.
+      (assoc :μ-ctx (:μ-ctx state))))
+
 
 (defn apply-external [{{f :fn n :name} :head tail :tail :as app}]
   (if (ast/evaluated? tail)
     (f app)
-    (continue app (update app :tail walk))))
+    (update app :tail walk)))
 
 (defn apply-error [app]
   (throw (RuntimeException.
@@ -38,14 +37,15 @@
                "\n" (debug/provenance app)))))
 
 (defn apply-head [{:keys [head tail] :as app}]
-  (let [h (walk head)
-        t (if (ast/evaluated? h) tail (walk tail))]
-    (continue app (assoc app :head h :tail t))))
+  (let [h (walk head)]
+    (if (ast/evaluated? h)
+      (walk (assoc app :head h))
+      (assoc app :head h :tail (walk tail)))))
 
 (def apply-rules
-  {:I apply-head
-   :A apply-head
-   :F apply-external
+  {:I (simple apply-head)
+   :A (simple apply-head)
+   :F (simple apply-external)
    :μ apply-μ})
 
 (defn apply [sexp]
@@ -54,10 +54,7 @@
 ;;;;; Eval
 
 (defn walk-coll [xs]
-  (continue xs (into (ast/empty xs) (map walk) xs)))
-
-(defn eval-coll [xs]
-  (continue xs (walk-coll xs)))
+  (into (ast/empty xs) (map walk) xs))
 
 (defn eval-list [im]
   (walk (ast/list (map ast/immediate (:form im)))))
@@ -88,7 +85,7 @@
 ;;;;; Reduction
 
 (defn walk-μ [μ]
-  (continue μ (prevent-emission (update μ :body walk))))
+  (prevent-emission (update μ :body walk)))
 
 (def walk-rules
   {:I eval

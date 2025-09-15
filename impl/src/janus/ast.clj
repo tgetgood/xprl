@@ -169,6 +169,15 @@
 (defn extern [name fn]
   (->Extern name fn))
 
+
+(defrecord Context [channels form]
+  Object
+  (toString [_]
+    (str "#Ctx" form)))
+
+(defn ctx [channels form]
+  (->Context channes form))
+
 (defrecord Seq [elements]
   Object
   (toString [_]
@@ -489,8 +498,10 @@
    Extern      :F
    Mu          :μ
    Emission    :E
-   Seq         :seq
-   Conc        :conc
+   Context     :C
+
+   Seq  :seq
+   Conc :conc
 
    clojure.lang.MapEntry           :L
    clojure.lang.PersistentVector   :L
