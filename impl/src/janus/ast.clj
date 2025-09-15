@@ -21,38 +21,6 @@
   (:import
    (java.io Writer)))
 
-;;;;; Context
-
-(defprotocol Symbolic
-  (symbols [this]))
-
-(extend-protocol Symbolic
-  nil
-  (symbols [_] #{})
-
-  clojure.lang.PersistentVector
-  (symbols [xs]
-    (into #{} (mapcat symbols) xs))
-
-  clojure.lang.PersistentArrayMap
-  (symbols [m]
-    (into #{} (mapcat symbols) m))
-
-  clojure.lang.PersistentHashMap
-  (symbols [m]
-    (into #{} (mapcat symbols) m))
-
-  clojure.lang.PersistentHashSet
-  (symbols [s]
-    (into #{} (mapcat symbols) s))
-
-  clojure.lang.MapEntry
-  (symbols [[k v]]
-    (set/union (symbols k) (symbols v)))
-
-  Object
-  (symbols [_] #{}))
-
 ;;;;; AST
 
 (defn split-symbolic [s]
@@ -79,8 +47,6 @@
   (memoize (fn [s] (->Keyword (split-symbolic s)))))
 
 (defrecord Symbol [names]
-  Symbolic
-  (symbols [this] #{this})
   Object
   (toString [_]
     (transduce (interpose ".") str "" names)))
@@ -92,8 +58,6 @@
   (instance? Symbol s))
 
 (defrecord Resolved [sym uuid val]
-  Symbolic
-  (symbols [_] #{sym})
   Object
   (toString [_]
     (str sym "=" #_form)))
@@ -138,8 +102,6 @@
 
 
 (defrecord Pair [head tail]
-  Symbolic
-  (symbols [_] (set/union (symbols head) (symbols tail)))
   Object
   (toString [_]
     (str "(" (str head) " "
@@ -155,8 +117,6 @@
   (instance? Pair x))
 
 (defrecord Immediate [form]
-  Symbolic
-  (symbols [_] (symbols form))
   Object
   (toString [_]
     (str "~" form)))
@@ -169,8 +129,6 @@
 
 
 (defrecord Application [head tail]
-  Symbolic
-  (symbols [_] (set/union (symbols head) (symbols tail)))
   Object
   (toString [_]
     (str "#" (str (pair head tail)))))
@@ -183,10 +141,6 @@
 
 
 (defrecord Mu [name params body]
-  Symbolic
-  ;; This is unintuitive, but we only look at the body because it ~might not~
-  ;; refer to the name and formal param of the μ.
-  (symbols [_] (symbols body))
   Object
   (toString [_]
     (str "(#μ " params " " body ")")))
@@ -215,10 +169,7 @@
 (defn extern [name fn]
   (->Extern name fn))
 
-
 (defrecord Seq [elements]
-  Symbolic
-  (symbols [_] (symbols elements))
   Object
   (toString [_]
     (str "#seq" elements)))
@@ -231,8 +182,6 @@
 
 
 (defrecord Conc [elements]
-  Symbolic
-  (symbols [_] (symbols elements))
   Object
   (toString [_]
     (str "#conc" elements)))
@@ -248,8 +197,6 @@
 
 
 (defrecord Emission [kvs]
-  Symbolic
-  (symbols [_] (symbols kvs))
   Object
   (toString [_]
     (str "#E" kvs)))
