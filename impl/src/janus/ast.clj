@@ -176,7 +176,7 @@
     (str "#Ctx" form)))
 
 (defn ctx [channels form]
-  (->Context channes form))
+  (->Context channels form))
 
 (defrecord Seq [elements]
   Object
