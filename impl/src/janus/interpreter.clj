@@ -16,6 +16,13 @@
 
 ;;;;; Application
 
+(defn with-ctx [next]
+  (fn [state]
+    (-> state
+        (update :μ-ctx (fnil conj #{}) (:head (:form state)))
+        next
+        (assoc :μ-ctx (:μ-ctx state)))))
+
 (defn apply-μ [{{μ :head tail :tail :as app} :form :as state}]
   ;; Interpreter as middleware. Kind of a cool idea?
   (-> state
@@ -46,7 +53,7 @@
   {:I (simple apply-head)
    :A (simple apply-head)
    :F (simple apply-external)
-   :μ apply-μ})
+   :μ [with-ctx μ-bind walk]})
 
 (defn apply [sexp]
   ((get apply-rules (ast/type (:head sexp)) apply-error) sexp))
