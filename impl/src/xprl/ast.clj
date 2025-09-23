@@ -1,4 +1,4 @@
-(ns janus.ast
+(ns xprl.ast
   (:refer-clojure
    :exclude
    [symbol

@@ -1,11 +1,11 @@
-(ns janus.reader
+(ns xprl.reader
   "This reader uses the weirdest monadish data pattern, but it seems to work."
   (:refer-clojure :exclude [read])
   (:require
    [clojure.set :as s]
    [clojure.string :as str]
-   [janus.ast :as ast]
-   [janus.debug :as debug])
+   [xprl.ast :as ast]
+   [xprl.debug :as debug])
   (:import
    (java.io File FileReader PushbackReader StringReader)))
 

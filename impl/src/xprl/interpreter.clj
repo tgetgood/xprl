@@ -1,50 +1,34 @@
-(ns janus.interpreter
+(ns xprl.interpreter
   (:refer-clojure :exclude [resolve eval apply])
   (:require
-   [janus.ast :as ast]
-   [janus.debug :as debug]
-   [janus.env :as env]
-   [janus.system :as sys]))
+   [xprl.ast :as ast]
+   [xprl.debug :as debug]
+   [xprl.env :as env]
+   [xprl.system :as sys]))
 
 (declare walk)
 
-(defn walk-in [state form]
-  (:form (walk (assoc state :form form))))
-
-(defn xform
-  "Wraps a function that just acts on a form to act on the form embedded in a
-  state map."
-  [f]
-  (fn [next]
-    (fn [state]
-      (next (update state :form f)))))
-
-(defn tap [f]
-  (fn [state]
-    (println state)
-    (f state)))
-
 (defn walk-key [k]
-  (fn [next]
-    (fn [state]
-      (next (update-in state [:form k] #(walk-in state %))))))
+  (fn [form state]
+    (update form k walk state)
+    (walk state (get form k))))
 
 (defn walk-key-when-unev
   "If `(get state [:form ekey])` is unevaluated, then walk `wkey`. Otherwise do
   nothing."
   [wkey ekey]
-  (fn [next]
+  (fn [state form]
+    (if (ast/evaluated? (get form ekey))
+      form
+      ((walk-key wkey) state form)))
+  #_(fn [next]
     (fn [state]
       (if (ast/evaluated? (get-in state [:form ekey]))
         (next state)
         (next ((walk-key wkey) state))))))
 
-(defn walk-coll [next]
-  (fn [{xs :form :as state}]
-    (let [ys (into (ast/empty xs)
-                   (comp (map #(assoc state :form %)) (map walk) (map :form))
-                   xs)]
-      (next (assoc state :form ys)))))
+(defn walk-coll [form state]
+  (into (ast/empty form) (map #(walk % state)) form))
 
 ;;;;; Application
 
@@ -58,7 +42,7 @@
 (defn apply-μ [{μ :head tail :tail :as app}]
   (env/bind μ tail))
 
-(defn apply-external [{{f :fn} :head :as app}]
+(defn apply-external [{{f :fn} :head :as app} _]
   (f app))
 
 (defn apply-error [{app :form}]
@@ -76,6 +60,7 @@
    :F (comp (xform apply-external) (walk-key-when-unev :tail :tail))
    :μ (comp (xform apply-μ) with-ctx)})
 
+comp
 (defn apply [sexp]
   ((get apply-rules (ast/type (:head sexp)) apply-error) sexp))
 
@@ -137,9 +122,9 @@
    :M walk-coll
    :μ walk-μ})
 
-(defn walk* [sexp]
+(defn walk* [sexp state]
   (let [t     (ast/type sexp)
-        next  ((get walk-rules t identity) sexp)]
+        next  ((get walk-rules t identity) sexp state)]
     (debug/trace! "walk:" t "\n" sexp "\n->\n" next)
     next))
 
@@ -154,4 +139,4 @@
    :ctx   {}})
 
 (defn interpret [ns form]
-  (walk-in empty-state (ast/ctx sys/root-channels (env/ns-set! ns form))))
+  (walk empty-state (ast/ctx sys/root-channels (env/ns-set! ns form))))

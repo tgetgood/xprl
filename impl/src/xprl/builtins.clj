@@ -1,9 +1,9 @@
-(ns janus.builtins
+(ns xprl.builtins
   (:require
-   [janus.ast :as ast]
-   [janus.debug :as debug]
-   [janus.env :as env]
-   [janus.interpreter :as i]))
+   [xprl.ast :as ast]
+   [xprl.debug :as debug]
+   [xprl.env :as env]
+   [xprl.interpreter :as i]))
 
 ;;;;; Magic
 

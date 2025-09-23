@@ -1,4 +1,4 @@
-(ns janus.debug)
+(ns xprl.debug)
 
 (def ^:dynamic *verbose* false)
 (def ^:dynamic *sample-interval*

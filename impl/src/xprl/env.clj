@@ -1,7 +1,7 @@
-(ns janus.env
+(ns xprl.env
   (:require
    [clojure.walk :as walk]
-   [janus.ast :as ast]))
+   [xprl.ast :as ast]))
 
 (def empty-ns
   {})

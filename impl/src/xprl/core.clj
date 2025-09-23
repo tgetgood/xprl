@@ -1,12 +1,12 @@
-(ns janus.core
+(ns xprl.core
   (:refer-clojure :exclude [test])
   (:require
-   [janus.ast :as ast]
-   [janus.builtins :as builtins]
-   [janus.debug :as debug]
-   [janus.env :as env]
-   [janus.interpreter :as i]
-   [janus.reader :as r]))
+   [xprl.ast :as ast]
+   [xprl.builtins :as builtins]
+   [xprl.debug :as debug]
+   [xprl.env :as env]
+   [xprl.interpreter :as i]
+   [xprl.reader :as r]))
 
 (def the-env (atom builtins/base-env))
 

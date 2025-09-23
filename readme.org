@@ -36,7 +36,7 @@ An experiment in programming languages.
     clojure -Arepl -X
   #+END_SRC
 
-  or call =janus.core/repl= from your editor. Note: nrepl in emacs handles
+  or call =xprl.core/repl= from your editor. Note: nrepl in emacs handles
   =read= by taking stdin from the minibuffer. This is a little weird, but not
   unusable.
 * Docs

@@ -1,3 +1,3 @@
-(ns janus.system)
+(ns xprl.system)
 
 (def root-channels {})
