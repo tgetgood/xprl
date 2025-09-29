@@ -4,63 +4,44 @@
    [xprl.ast :as ast]
    [xprl.debug :as debug]
    [xprl.env :as env]
+   [xprl.meta :as meta]
    [xprl.system :as sys]))
 
 (declare walk)
 
-(defn walk-key [k]
-  (fn [form state]
-    (update form k walk state)
-    (walk state (get form k))))
+(defn walk-key
+  ([form k] (walk-key k nil))
+  ([form k check]
+   (if (and (not (nil? check)) (ast/evaluated? (get form check)))
+     form
+     (update form k walk))))
 
-(defn walk-key-when-unev
-  "If `(get state [:form ekey])` is unevaluated, then walk `wkey`. Otherwise do
-  nothing."
-  [wkey ekey]
-  (fn [state form]
-    (if (ast/evaluated? (get form ekey))
-      form
-      ((walk-key wkey) state form)))
-  #_(fn [next]
-    (fn [state]
-      (if (ast/evaluated? (get-in state [:form ekey]))
-        (next state)
-        (next ((walk-key wkey) state))))))
-
-(defn walk-coll [form state]
-  (into (ast/empty form) (map #(walk % state)) form))
+(defn walk-coll [form]
+  (meta/meta-walk walk form))
 
 ;;;;; Application
 
-(defn with-ctx [next]
-  (fn [{{μ :head} :form :as state}]
-    (-> state
-        (update :cycle (fnil conj #{}) μ)
-        next
-        (assoc :cycle (:cycle state)))))
-
 (defn apply-μ [{μ :head tail :tail :as app}]
-  (env/bind μ tail))
+  (meta/wrap [update :cycle (fnil conj #{}) μ] (env/bind μ tail) walk))
 
-(defn apply-external [{{f :fn} :head :as app} _]
-  (f app))
+(defn apply-external [{{f :fn} :head :as app}]
+  (-> app (walk-key :tail :tail) f))
 
 (defn apply-error [{app :form}]
   (throw (RuntimeException.
           (str (:head app) " is not applicable, but was called with " (:tail app)
                "\n" (debug/provenance app)))))
 
-(def apply-head
-  (comp (walk-key-when-unev :tail :head) (walk-key :head)))
+(defn apply-head [app]
+  (-> app (walk-key :head) (walk-key :tail :head)))
 
 (def apply-rules
   ;; Interpreter as middleware. Kind of a cool idea?
   {:I apply-head
    :A apply-head
-   :F (comp (xform apply-external) (walk-key-when-unev :tail :tail))
-   :μ (comp (xform apply-μ) with-ctx)})
+   :F apply-external
+   :μ apply-μ})
 
-comp
 (defn apply [sexp]
   ((get apply-rules (ast/type (:head sexp)) apply-error) sexp))
 
@@ -75,20 +56,27 @@ comp
 (defn eval-pair [{{:keys [tail head]} :form}]
   (ast/application (ast/immediate head) tail))
 
-(defn resolve [next]
-  (fn [{sym :form cycle :cycle :as state}]
-    (cond
-      (not (ast/resolved? sym))    (next state)
-      (contains? cycle (:val sym)) (next state)
-      true                         (next (update state :form :val)))))
+(defn resolve [{sym :form :as im}]
+  (cond
+    (not (ast/resolved? sym))
+    (throw (RuntimeException. (str ("unbound symbol: " sym))))
+
+    (nil? (:val sym))
+    (meta/mm im {:park {:cause :unresolved}})
+
+    (contains? (:cycle (meta im)) (:val sym))
+    (meta/mm im {:park {:cause :cycle}})
+
+    true
+    (with-meta (:val sym) (meta/clean (meta im)))))
 
 (def eval-rules
-  {:P (xform eval-pair)     ; (I (P x y)) => (A (I x) y)
-   :L (xform eval-list)     ; (I (L x y ...)) => (L (I x) (I y) ...)
-   :M (xform eval-map)      ; (I {x y ...}) => {(I x) (I y) ...}
+  {:P eval-pair     ; (I (P x y)) => (A (I x) y)
+   :L eval-list     ; (I (L x y ...)) => (L (I x) (I y) ...)
+   :M eval-map      ; (I {x y ...}) => {(I x) (I y) ...}
    :I walk-coll
    :A walk-coll
-   :V (xform :form)         ; (I V) => V. values are fixed points of eval.
+   :V :form         ; (I V) => V. values are fixed points of eval.
    :S resolve})
 
 (defn eval [sexp]
@@ -96,22 +84,13 @@ comp
 
 ;;;;; Reduction
 
-(defn walk-μ [next]
-  (fn [state]
-    (-> state
-        (assoc :μ? true)
-        (walk-key :body)
-        (assoc :μ? (:μ? state))
-        next)))
+(defn walk-μ [form]
+  (meta/wrap [assoc :μ? true] form #(walk-key % :body)))
 
-(defn walk-ctx [next]
-  (fn [{{:keys [channels form]} :form :as state}]
-    (let [s' (-> state
-                 (update :ctx merge channels)
-                 (assoc :form form)
-                 walk)]
-      ;; TODO: Index parked computations
-      (next (update state :form assoc :form (:form s'))))))
+(defn walk-ctx [{:keys [channels form] :as s}]
+  (let [m    (update (meta s) :ctx merge channels)
+        body (walk (with-meta form m))]
+    (with-meta (assoc s :form body) (meta body))))
 
 (def walk-rules
   {:I eval
@@ -122,7 +101,7 @@ comp
    :M walk-coll
    :μ walk-μ})
 
-(defn walk* [sexp state]
+(defn walk* [sexp]
   (let [t     (ast/type sexp)
         next  ((get walk-rules t identity) sexp state)]
     (debug/trace! "walk:" t "\n" sexp "\n->\n" next)
@@ -139,4 +118,4 @@ comp
    :ctx   {}})
 
 (defn interpret [ns form]
-  (walk empty-state (ast/ctx sys/root-channels (env/ns-set! ns form))))
+  (walk (ast/ctx sys/root-channels (env/ns-set! ns form)) empty-state))

@@ -84,15 +84,13 @@
 (defn μ-ready? [args]
   (every? ast/symbol? (butlast args)))
 
-(defn μ [{args :tail :as app}]
-  (let [names (ast/list (butlast args))
-        body  (last args)]
+(defn μ [{args :tail :as app} state]
+  (let [names (ast/list (butlast args))]
     (if (every? ast/symbol? names)
-      (i/walk (apply ast/μ (env/capture args)))
+      (i/walk (apply ast/μ (env/capture args)) state)
       ;; If the names don't resolve, it ~should~ be safe to walk the body
       ;; REVIEW: But what if one of them resolves and the other doesn't?
-      (i/continue app (i/prevent-emission
-                         (update app :tail i/walk))))))
+      (update app :tail i/walk state))))
 
 (defn emit [{kvs :tail :as app}]
   (assert (even? (count kvs)))
@@ -112,6 +110,11 @@
       ;; If p is not a bool, it ~should~ be safe to walk both `t` & `f`...
       (i/continue app (assoc app :tail [p (i/walk t) (i/walk f)])))))
 
+(defn with-channels [{[chmap body] :tail :as app}]
+  (wait-until-evaluated
+   [chmap]
+   (i/walk (ast/ctx chmap body))))
+
 (defn macros [m]
   (reduce (fn [acc [k f]]
             (assoc acc (ast/symbol k) (ast/extern k f))) {} m))
@@ -122,6 +125,8 @@
    {"μ"      μ
     "select" select
     "emit"   emit
+
+    "with-channels" with-channels
 
     ;; "seq*"  (when-arg ast/seq)
     ;; "conc*" (when-arg ast/conc)

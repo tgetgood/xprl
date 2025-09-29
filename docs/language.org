@@ -394,8 +394,9 @@ This is largely an aid to my own memory so bear with me.
 
   But even though metaprogramming is safer and first class, it's still often
   difficult to get right. So avoid it unless necessary.
-* Channels and Streams
+* Pipes, Channels, and Streams
   In this language channels and streams are two sides of the same phenomenon.
+  I'm calling that phenomenon a pipe for lack of creative inspiration.
 
   Channels are black boxes to which messages are sent. They take the place of
   addresses in actor languages or objects in OO languages. They act similarly to
@@ -407,10 +408,18 @@ This is largely an aid to my own memory so bear with me.
   value if it isn't. Calling =rest= on a stream returns the stream consisting of
   all but the first element and never parks.
 
-  The relationship is trivial: every channel has a corresponding stream. Writes
-  to the channel realise the next element of the stream. Thus calling =first= on
-  a stream is equivalent to taking from a channel in CSP, except that it will
-  only park once; further calls will just return the known value.
+  A pipe consists of one stream and one channel. Writes to the channel realise
+  the next element of the stream. Thus calling =first= on a stream is equivalent
+  to taking from a channel in CSP, except that it will only park once; further
+  calls will just return the known value. Calling =rest= on a stream returns a
+  new stream which just ignores the first message sent to the channel.
+
+  Importantly, if we retain the head of a stream, then the entire thing will be
+  realised into memory. If we throw away the head and pass the tail, then we are
+  effectively iterating over messages on a channel.
+
+  When a message is sent on a channel, the corresponding stream caches it since
+  it may not be possible (or safe) to recompute it.
 
   Sending a message to a channel where no one is reading the corresponding
   stream will also park. This provides backpressure on emissions and lets the
@@ -425,19 +434,22 @@ This is largely an aid to my own memory so bear with me.
 
   So a convention: application of a μ to arguments creates a return channel,
   sets up the computation and returns the first value from the return stream to
-  the syntactic return position. The return stream can be manipulated as a
-  stream within a ν construct. But a ν returns nothing, rather it connects
-  various components into a dataflow network. It's possible that a ν could pass
-  a return stream to a channel and thus expose it as a value in some part of a
-  program, but that part of the program wouldn't see different from any other
-  stream.
+  the syntactic return position. The return stream can be retrieved as a
+  stream using the aptly named =return-stream= operator. This is necessary both
+  for callers that want to use multiple return values in the old lisp sense, as
+  well as callers who want to treat the stream of return values as a signal to
+  process and pass on (generally via multiple return values).
 
-  These are my current thoughts on the matter but might change.
+  These are my current thoughts on the matter but might change. As always.
 
-  A channel/stream pair can be created explicitly within a ν. When passed as a
-  value, the stream part is passed, when passed in a continuation map, the
-  channel part is passed. This is confusing to explain, but syntactically it's
-  quite natural.
+  A pipe isn't actually a reified thing in the language as yet. The =pipe= fn
+  returns a pair [stream channel]. I just want to stop using the clunky term
+  "channel-stream pair" all over the place.
+
+  Curiously, streams have no way of knowing from which channel it is that they
+  get their values. They simply don't need to; just what the values are and when
+  no more are coming. This might have security implications. You can't leak what
+  you don't know, after all.
 * The Continuation Map and Emission
   One of the bigger differences between this language and standard lisp (or any
   von neumann style language with which I'm familiar) is that there is no single
@@ -481,8 +493,10 @@ This is largely an aid to my own memory so bear with me.
   difference.
 
   The continuation map doesn't exist as a first class thing from within the
-  language. Rather it is maintained by the runtime and can be modified within
-  νs. I don't want to write code in cps if I can avoid it.
+  language. Rather it is maintained by the runtime and can be modified in a
+  limited fashion — using =with-channels= or =capture= at present; I conjecture
+  that that's sufficient, but we'll see. I don't want to write code in cps if I
+  can avoid it.
 
   When a batch of messages are emitted, they are all delivered (logically
   speaking) concurrently. If there's enough spare compute, they'll be delivered
@@ -494,6 +508,7 @@ This is largely an aid to my own memory so bear with me.
 
   1) messages are delivered strictly after they are sent
   2) multiple messages sent from A to B are delivered exactly once and in order
+  3) receipt of messages can be verified
 
   Note that if A and C both send messages to B, then those streams can be
   interleaved in any fashion, but the subsets from A and C will be in the order
@@ -502,129 +517,56 @@ This is largely an aid to my own memory so bear with me.
   These are the only guarantees we can provide without pretending special
   relativity doesn't apply to us. For better or for worse, it does apply to us.
 
+  These are essentially the guarantees of TCP. That wasn't intended originally,
+  but isn't surprising in retrospect.
+
   In essence, a fully consistent totally ordered view of the world is only
   possible from a single point in space. Once you have multiple actors in
   different locations, perspective becomes an irreducible aspect of the system.
 
   So if you want a consistent view, put messages in a queue and process them in
   serial. It's not that hard.
+* Ordering
+  I said above that you can't control the order in which things happen. Of
+  course if that were strictly true you wouldn't be able to coordinate anything.
 
-  Now it's time to talk about our next special construct: ν.
-* ν
-  The above discussion of emission assumes that a μ is only ever called once.
-  From a point of view internal to the μ, this is true, but from the point of
-  view of the caller, it might not be.
+  All processing that is ready to happen happens concurrently. But sometimes we
+  need to ensure that one batch of messages will be received before a second
+  batch is sent. This is where the =seq= construct comes in.
 
-  From a syntactic transform point of view, the application of arguments (a
-  value) to a μ is replaced by the first value emitted by that μ to its return
-  channel.
+  =seq= is like =do= (remember I said we don't have a =do=?) except that it
+  doesn't constrain the order in which computations happen. The only guarantee
+  it makes is that if t₁ preceeds t₂ in a seq, then all messages emitted by t₁
+  must be delivered (received) before any messages emitted by t₂ are sent. This
+  applies even if t₁ and t₂ don't share any emission channels. We'll see why
+  that's necessary when we get to reduction and local state.
 
-  A μ can emit multiple values to its return channel, but if invoked in the
-  standard (f x) fashion, all but the first return value will be dropped into
-  the void.
+  The distinction between when computations happen and when emissions happen is
+  important because emissions in this system are just data which can be
+  "returned" without actually posting messages to channels until the appropriate
+  time.
 
-  A program is a network of value->value operators (μs) connected by channels
-  into an arbitrary graph. The next question that you should ask is "how do we
-  manipulate that graph?".
+  Since delivery of messages is, in general, an inexpensive operation compared
+  to the computation which determines which message to send this gives us a
+  natural way to exploit parallel hardware.
 
-  The answer is a construct that I'm calling ν because it's the next letter
-  after μ. These names are all tentative.
+  Previously there existed a =conc= construct which was like =seq= but
+  explicitely parallel. But I'm no longer confident that that's useful.
+  *Everything* should be concurrent unless otherwise specified. Mostly it is
+  concurrent, but data dependencies control the order in which things happen.
+  With =seq= we can control the order in which batches of messages are sent, but
+  again not the order in which those batches are computed.
 
-  A ν takes a continuation map and builds a computation graph. It does not
-  return anything syntactically, but it does have a :return channel in the ccs
-  passed to it and its subcomputations are free to send messages to it.
+  So =conc= is the default and thus not needed. But now I've gone an broken work
+  stealing because I no longer have a nice queue of "things to be done".
 
-  When an application of a μ to an argument is invoked, it is considered
-  "finished" when all messages emitted have been *received*. Just ensuring that
-  they are queued for delivery is insufficient, since we want to be able to
-  sequence one thing after another. Requiring receipt also has the effect of
-  applying backpressure on a network.
+  Do I need to go over the interpreter and figure out which parts can be lead to
+  forking? I'm pretty sure the only place that would be is =walk-coll=, which
+  gets called a lot, but is ultimately just a wrapper around =map=.
 
-  When an application of a ν to an argument is invoked, it is considered
-  finished when all subcomputations are finished. I haven't yet decided upon
-  whether it should be possible to wait for one ν to "finish" before doing
-  something. I'd rather not since that would add considerable complexity to the
-  language with minimal gain.
-
-  A much better way to deal with sequencing is via channels which close. Step
-  one is "complete" when the corresponding channel can receive no more input,
-  etc..
-
-  In order for a ν to create a computation graph, it needs to be able to invoke
-  multiple things. Remember we don't have a =do= or =progn= expression.
-
-  Thus we have three special operators which only make sense within within the
-  body of a ν, these are =seq=, =conc=, and =connect=.
-
-  =connect=, as the name implies, connects a form to a continuation map. This is
-  the exact same construct by which an Emission which reaches the runtime is
-  acted upon.
-
-  =seq= takes an arbitrary number of connected operators and ensures that each
-  runs after the previous has finished.
-
-  =conc= takes an arbitrary number of connected operators and sets them to run
-  concurrently.
-
-  =conc= and =seq= can be nested. A =seq= is finised when its last operator is
-  finished and a =conc= is finished when all of its operators are finished.
-
-  Note: I'd rather not allow waiting on a conc since a lot of ill can come of it
-  and I'm not sure the good outweighs that. I need to write more code to see if
-  it's actually necessary. I'm not even convinced you ever need to nest seq &
-  conc.
-
-  Examples (finally):
-
-  #+BEGIN_SRC clojure
-    (defn map [f]
-      (fn [xs]
-        (ν ccs
-           (when (first xs)
-             (seq
-              (connect (f (first xs)) ccs)
-              (connect ((map f) (rest xs)) ccs))))))
-
-    (defn comp [f g]
-      (fn [xs]
-        (ν ccs
-           (let [inner (chan)]
-             (conc
-              (connect (f xs) (assoc ccs :return inner))
-              (connect (g inner) ccs))))))
-  #+END_SRC
-
-  (map f) applies f to the first element of a stream and then applies (map f) to
-  the rest of the stream. map is stateless, so this works just fine. We could
-  also name the inner ν and use recursion but that isn't necessary here.
-
-  The steps in map are =seq= because both processes are connected to the same
-  return channel and we want to ensure that [x1 x2 ...] -> [(f x1) (f x2) ...],
-  i.e. that order is preserved.
-
-  Because it's stateless, =map= is a prime contender for parallelism. However,
-  whether that is useful or not depends not just on the data being processed
-  (compute per element vs overhead of distribution) but also on what happens
-  downstream since if we're folding with a non associative operator we're just
-  going to have to buffer everything while the fold catches up.
-
-  In the case of =comp=, we compose operators concurrently because the inner
-  channel connecting f to g provides a data dependency. g will park on reading
-  (first inner) until f has emitted a value, but if =xs= is a stream and =f=
-  transduces it onto inner, then f and g can operate in parallel at different
-  steps of the computation.
-
-  This approach is automatic pipeline parallelism. It will only actually happen
-  in parallel if a work step is expensive or cpus are sitting idle so f or g are
-  stolen by another executor, this should reduce overhead in practice. But that
-  needs empirical confirmation.
-
-  Since a ν receives a syntactic return stream, ((comp (map f) (map g)) xs) is
-  equivalent to ((map g) ((map f) xs)), as it should be.
-
-  This is a little ugly though because f and g must both be νs for this version
-  of comp to make sense. comp of μs is a different operator. Some types are
-  inherent in the calculus as such.
+  So maybe I just treat each =seq= as a fork-join point. But what about places
+  where the order of message emission really doesn't matter? Doesn't matter to
+  whom? Can we ever be sure it matters to no one?
 * Stateful computation
   Sometimes a computation needs to retain state across messages. Given that we
   have no mechanism by which to assign or mutate, how do we accomplish that?
@@ -636,45 +578,53 @@ This is largely an aid to my own memory so bear with me.
   over the order of delivery from disparate senders, so how do we know that your
   future self will receive its new state before it receives its next input?
 
-  Sadly you can't.
-
-  This, ultimately, was the deciding factor in introducing the ν. Here's how we
-  can create a stateful accumulator using ν:
+  Sadly you can't. But you can combine the state stream with the input stream
+  creating a stream of paired values — the =seq= in =map= ensures that the
+  =state= stream is updated before it is read each round.
 
   #+BEGIN_SRC clojure
-    (defn accumulate [rf init]
-      (fn [xs]
-        (ν ccs
-           ;; a read on a last-chan always returns the last thing written. They
-           ;; are sequentially consistent. Semantically it is just (last (chan)),
-           ;; but is builtin to make life easier.
-           (let [state (last-chan init)]
-             (seq
-              ;; Using a state channel to pass output back to yourself is a
-              ;; common pattern.
-              ;; Here we reduce into the state channel without returning
-              ;; anything.
-              (connect ((map (fn [[state x]] (emit :state (rf state x))))
-                        (combine state xs))
-                       (assoc ccs :state state))
-              ;; After the stream `xs` is exhausted, we return the head of the
-              ;; state stream.
-              ;; This works because values, when connected, emit themselves on
-              ;; :return
-              (connect (first state) ccs))))))
+    (defn accumulate [rf init xs]
+      ;; a read on a last-chan always returns the last thing written. They
+      ;; are sequentially consistent. Semantically it is just (last (chan)),
+      ;; but is builtin to make life easier.
+      (let [[st ch] (last-chan init)]
+        (seq
+         ;; Using a state channel to pass output back to yourself is a
+         ;; common pattern.
+         ;; Here we reduce into the state channel without returning
+         ;; anything.
+         (with-channels {:state st}
+           ((map (fn [[state x]] (emit :state (rf state x))))
+            ;; N.B.: the "combination" stream accesses its substreams on demand,
+            ;; so we only ever request the next state strictly after the
+            ;; previous step has finished emission.
+            (combine state xs)))
+         ;; After the stream `xs` is exhausted, we return the head of the
+         ;; state stream.
+         (first state))))
 
-    (defn into [coll]
-      (accumulate conj coll))
+    (defn into [coll xs]
+      (accumulate conj coll xs))
 
-    ((into []) ((map inc) ((filter even?) [1 2 3 4 5])))
-                                            ; ⇒ [2 4 6]
+    (into [] (map inc (filter even? [1 2 3 4 5]))) ; ⇒ [2 4 6]
   #+END_SRC
 
-  The api is still pretty ugly in that we need so many extra parens. Once we
-  have function overloading, that can be fixed easily. Is currying the answer? I
-  don't think so. It will get ugly when we start calling functions with non
-  sequential arguments: (f . {...}) for example. Plus we'd need to curry from
-  right to left and there will likely be ambiguity to deal with.
+  Why am I not just calling this =reduce=?
+
+  We're back at clojure's initial lazy seq api which works so well with the
+  =->>= macro. We could overload map, filter, etc, and have transducer syntax,
+  but there's no longer any benefit since we get both laziness and fusion from
+  the language guarantees. We call into above to get a vector fully realised in
+  memory. By themselves, map, filter, etc. return ~streams~ which may not be
+  realised (i.e. may park when you try to read values) and which are not
+  intended as random access datastructures.
+
+  Note that in this case, =state= could be a normal pipe and =combine= would act
+  as coordination between writers and readers by always calling the next
+  element. Howeve, this pattern breaks down in situations where you don't want
+  to update the state at each step. Are such situations still pertinent? I can't
+  think of any.
+
 * Outline
   Sections to be written.
 ** History, Environment, and Context
