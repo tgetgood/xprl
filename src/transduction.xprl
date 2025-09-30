@@ -1,72 +1,61 @@
-;; REVIEW: `mapraw` is necessary here because we don't want the returned stream
-;; to be (stream a (stream b (stream c ...))).
-(defn mapraw [f xs]
-  ;; Here I use a pipe as a semaphore. This relies on the fact that fns cannot
-  ;; emit until after they have received arguments (even if they ignore those
-  ;; args).
-  (let [[sem sem-ch] (pipe)]
-    (net
-     ;; All of `f`'s emissions are passed up, not just return. This is obscure
-     ;; but very important. I need a way to make it more intuitive.
-     ;; REVIEW: Can I really assume delivery is atomic? Transactional is more
-     ;; like it..
-     (emit :return (f (first xs)) sem-ch :token)
-     ((fn [_] (mapraw f (rest xs))) (first sem)))))
+(defn map-stream [f xs]
+  (emit-recur (f (first xs)) f (rest xs)))
+;; `emit-recur` is a new old primitive. It is largely designed to implement
+;; `map`, but it's more general. It allows a μ to control the order of its
+;; emissions with respect to an input stream.
 
-(defn map [f xs]
+(defn map-stream [f xs ys]
+  (emit-recur (f (first xs) (first ys)) f (rest xs) (rest ys)))
+
+(defn map-reduce* [f init xs]
+  (if (empty? xs)
+    init
+    (map-reduce* f (conj init (f (first xs))) (rest xs))))
+
+(defn map-stream [f xs ys . zs]
+  (emit-reduce (f (first xs) (first ys) . (map-reduce* first [] zs))
+               f (rest xs) (rest ys) . (map-reduce* rest [] zs)))
+
+(defn map [f . xs]
   ;; `return-stream` takes multiple return values and packs them into a stream.
-  (return-stream (mapraw f xs)))
-
-;; REVIEW: Is return stream really necessary except to collect results? Maybe it
-;; should be the programmer who decides when to use it? That will really confuse
-;; anyone coming here for the first time and getting back a single value from a
-;; sequence transform.
-;;
-;; No, we need it. Otherwise (map f (map g xs)) will reduce to (map f (g (first
-;; xs))) which is likely to be an error and sure to be wrong.
+  (return-stream (map-stream f . xs)))
 
 (defn filter [p xs]
   (map (fn [x] (when (p x) x)) xs))
 
+(defn last [xs]
+  (let [next (rest xs)]
+    (if (empty? next) ; curiously, this is where we have to park and wait.
+      (first xs)
+      (last next))))
+
 (defn reduce [rf init xs]
-  ;; any args to `pipe` set the initial (pre-input) prefix of the stream.
   (let [[state state-ch] (pipe init)]
     (net
-       ;; (combine x y) => (cons [(first x) (first y)] (combine (rest x) (rest y)))
-       ;; The combination stream closes if either input stream closes.
-       ;; TODO: `tuple` is probably a better name.
-     (map (fn [[state x]] (emit state-ch (rf state x))) (combine state xs))
-     ;; N.B.: `last` cannot return until `state` (i.e. it's input channel) closes.
-     ;; So we need to be sure that that happens automatically when we leave the
-     ;; `with-channels` expr above. (reference counting, in theory).
+     (with-channels {:return state-ch}
+       (map rf state xs))
      (last state))))
+;; So that instead of needing to emit explicitly, we just redirect return values
+;; within one subcomputation of the network?
 
 ;; TODO: Ensure that (map f (map g xs)) == (map (comp f g) xs)
 
 ;; TODO: Think about currying, or at least defining (map f) without xs.
 ;; Ensure that ((comp (map f) (map g)) xs) == ((map g) ((map f) xs))
 
-;; REVIEW: I'm dubious about clj's transduction syntax, since we can get fusion
-;; and laziness using the clj 1.0 sequence API.
-
 (defn into [to from]
   (reduce conj to from))
-
-(defn into [to xf from]
-  ;; REVIEW: This doesn't actually work at present and I'm not sure I care if it
-  ;; does (see above comment).
-  (reduce conj to (xf from)))
 
 (defn partition [n xs]
   (let [[state state-ch] (pipe [])]
     (net
      ;; Emit partitioned elements as you go.
-     (map (fn [[state x]]
+     (map (fn [state x]
             (let [s' (conj state x)]
               (if (= n (count s'))
                 (emit :return s' state-ch [])
                 (emit state-ch s'))))
-          (combine state xs))
+          state xs)
      ;; Flush the remaining state, if any, once `xs` is exhausted.
      (let [rem (last state)]
        (when (not (empty? rem))
@@ -74,10 +63,10 @@
 
 (defn scan [f init xs]
   (let [[state state-ch] (pipe init)]
-    (map (fn [[state x]]
+    (map (fn [state x]
            (let [next (f state x)]
              (emit state-ch next :return next)))
-         (combine state xs))))
+         state xs)))
 
 ;; This is simpler than the above `into` using `reduce`, but discards n
 ;; return values which is wasteful. Can we make the cost small enough to
@@ -88,15 +77,3 @@
 ;; places with more work. Useful as an example perhaps.
 (defn into2 [to from]
   (last (scan conj to from)))
-
-;; REVIEW: The `net` in both `reduce` and `partition` is really just a `do`.
-;; There's no longer any sequential requirement at all; data dependencies cover
-;; it. The only place I'm sure I need `net` is in the implementation of `map`.
-;; Maybe some as yet non extant constructs as well.
-;;
-;; Is it enough to realise that they share no output channels? No, `partition`
-;; does; it's a data dependency (last state) that keeps them separate.
-;;
-;; Could we implement `net` using special return channels? Maybe... but how
-;; would we wait for them? Pass (last st) to a function which ignores it,
-;; perhaps. That's very ugly...
