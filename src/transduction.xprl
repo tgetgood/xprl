@@ -8,6 +8,8 @@
     (net
      ;; All of `f`'s emissions are passed up, not just return. This is obscure
      ;; but very important. I need a way to make it more intuitive.
+     ;; REVIEW: Can I really assume delivery is atomic? Transactional is more
+     ;; like it..
      (emit :return (f (first xs)) sem-ch :token)
      ((fn [_] (mapraw f (rest xs))) (first sem)))))
 
