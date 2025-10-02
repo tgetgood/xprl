@@ -115,6 +115,13 @@
    [chmap]
    (i/walk (ast/ctx chmap body))))
 
+;; TODO: builtin macros needed for a working system.
+;;
+;; emit-recur
+;; pipe
+;; net
+
+
 (defn macros [m]
   (reduce (fn [acc [k f]]
             (assoc acc (ast/symbol k) (ast/extern k f))) {} m))

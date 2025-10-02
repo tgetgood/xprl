@@ -29,16 +29,8 @@ An experiment in programming languages.
   with the posibility of moving to native later on.
 * Usage
   This is still very early. There's no editor support, basically no tooling. All
-  we have is a some data structures, an interpreter, and a repl. To run the repl:
-
-  From one of the impl dirs ("impl/N"), run
-  #+BEGIN_SRC sh
-    clojure -Arepl -X
-  #+END_SRC
-
-  or call =xprl.core/repl= from your editor. Note: nrepl in emacs handles
-  =read= by taking stdin from the minibuffer. This is a little weird, but not
-  unusable.
+  we have is a some data structures, an interpreter, and the scaffolding of a
+  repl. You can look at `xprl.core/loadfile` for an example of how it works.
 * Docs
   For a primer on the language (in progress) See docs/language.org.
 
