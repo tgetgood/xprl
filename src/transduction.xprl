@@ -1,3 +1,12 @@
+;; REVIEW: This is only needed in `map` at present, so is there any point
+;; keeping it around as a macro?
+(def return-stream
+  (μ [form]
+     ~(let* [[st ch] ~(pipe)]
+        ~(net
+          ~(with-channels {:return ch} ~form)
+          st))))
+
 (defn map-stream [f xs]
   (emit-recur (f (first xs)) f (rest xs)))
 ;; `emit-recur` is a new old primitive. It is largely designed to implement
@@ -13,12 +22,15 @@
     (map-reduce* f (conj init (f (first xs))) (rest xs))))
 
 (defn map-stream [f xs ys . zs]
-  (emit-reduce (f (first xs) (first ys) . (map-reduce* first [] zs))
+  (emit-recur (f (first xs) (first ys) . (map-reduce* first [] zs))
                f (rest xs) (rest ys) . (map-reduce* rest [] zs)))
 
 (defn map [f . xs]
-  ;; `return-stream` takes multiple return values and packs them into a stream.
-  (return-stream (map-stream f . xs)))
+  (let [[st ch] (pipe)]
+    (net
+     ;; Redirect multiple return values into a stream and return that.
+     (with-channels {:return ch} (map-stream f . xs))
+     st)))
 
 (defn filter [p xs]
   (map (fn [x] (when (p x) x)) xs))
