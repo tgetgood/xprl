@@ -326,6 +326,8 @@ This is largely an aid to my own memory so bear with me.
    interior of that μ will be blocked to some extent until those arguments are
    known.
 * The Environment
+  - Note taken on [2025-10-04 Sat 07:10] \\
+    FIXME: The stuff about declaration and binding nodes is no longer correct.
   The core semantics of the environment are based on Scheme. Or more
   specifically on an adamantly lexically scoped version of scheme, the downsides
   of which were explained in "the art of the interpreter".
@@ -338,7 +340,7 @@ This is largely an aid to my own memory so bear with me.
 
   I haven't made these problems go away — they're not going anywhere — I just
   think priorities have shifted and the evidence of the benefits to be had from
-  immutability make some pain worthwhile.
+  immutability makes some pain worthwhile.
 
   Firstly, computers are orders of magnitude faster than they were 50 years ago.
   We don't need to change anything in place if we can recompile an entire
@@ -571,59 +573,34 @@ This is largely an aid to my own memory so bear with me.
   Sometimes a computation needs to retain state across messages. Given that we
   have no mechanism by which to assign or mutate, how do we accomplish that?
 
-  The easiest way would be to have a μ which from tail position sends messages
+  The easiest way would be to have a unit which from tail position sends messages
   to its future self (plus whatever emissions it needs to make).
 
-  This would be a perfect solution except for the fact that we have no control
-  over the order of delivery from disparate senders, so how do we know that your
-  future self will receive its new state before it receives its next input?
-
-  Sadly you can't. But you can combine the state stream with the input stream
-  creating a stream of paired values — the =seq= in =map= ensures that the
-  =state= stream is updated before it is read each round.
+  And that's exactly what we do, but we have to do some more work to make sure
+  that our messages to ourself align properly with the input:
 
   #+BEGIN_SRC clojure
-    (defn accumulate [rf init xs]
-      ;; a read on a last-chan always returns the last thing written. They
-      ;; are sequentially consistent. Semantically it is just (last (chan)),
-      ;; but is builtin to make life easier.
-      (let [[st ch] (last-chan init)]
-        (seq
-         ;; Using a state channel to pass output back to yourself is a
-         ;; common pattern.
-         ;; Here we reduce into the state channel without returning
-         ;; anything.
-         (with-channels {:state st}
-           ((map (fn [[state x]] (emit :state (rf state x))))
-            ;; N.B.: the "combination" stream accesses its substreams on demand,
-            ;; so we only ever request the next state strictly after the
-            ;; previous step has finished emission.
-            (combine state xs)))
-         ;; After the stream `xs` is exhausted, we return the head of the
-         ;; state stream.
-         (first state))))
-
-    (defn into [coll xs]
-      (accumulate conj coll xs))
-
-    (into [] (map inc (filter even? [1 2 3 4 5]))) ; ⇒ [2 4 6]
+    (defn reduce [rf init xs]
+      (let [[state state-ch] (pipe init)]
+        (net
+         (with-channels {:return state-ch}
+           (map rf state xs))
+         (last state))))
   #+END_SRC
 
-  Why am I not just calling this =reduce=?
+  =map= takes to elements of each of its input streams one at a time, so by
+  priming =state= with an initial value, we can ensure that it's always one step
+  ahead of the input stream =xs=.
 
   We're back at clojure's initial lazy seq api which works so well with the
   =->>= macro. We could overload map, filter, etc, and have transducer syntax,
   but there's no longer any benefit since we get both laziness and fusion from
-  the language guarantees. We call into above to get a vector fully realised in
-  memory. By themselves, map, filter, etc. return ~streams~ which may not be
-  realised (i.e. may park when you try to read values) and which are not
-  intended as random access datastructures.
+  the language guarantees. We can always call =into= to get a vector fully
+  realised in memory. By themselves, map, filter, etc. return ~streams~ which
+  may not be realised (i.e. may park when you try to read values) and which are
+  not intended as random access datastructures.
 
-  Note that in this case, =state= could be a normal pipe and =combine= would act
-  as coordination between writers and readers by always calling the next
-  element. Howeve, this pattern breaks down in situations where you don't want
-  to update the state at each step. Are such situations still pertinent? I can't
-  think of any.
+  TODO: Add a whole section about squiggol
 
 * Outline
   Sections to be written.
