@@ -45,7 +45,7 @@
   (let [[state state-ch] (pipe init)]
     (net
      (with-channels {:return state-ch}
-       (map rf state xs))
+       (map-stream rf state xs))
      (last state))))
 ;; So that instead of needing to emit explicitly, we just redirect return values
 ;; within one subcomputation of the network?
