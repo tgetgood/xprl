@@ -76,7 +76,8 @@ This is largely an aid to my own memory so bear with me.
      (f 4 5)
      ;; ⇒ (+ x y)
 
-     ;; which is an error because x and y aren't defined.
+     ;; That is, the pair whose head is the symbol `+` and whose tail is the
+     ;; vector of *symbols* `[x y]`
    #+END_SRC
 
    μ doesn't define a macro. A μ is first class: they can be passed and returned
@@ -149,8 +150,9 @@ This is largely an aid to my own memory so bear with me.
               ~((μ ~params ~~body) . ~~args))))
    #+END_SRC
 
-   This is the actual definition of =fn= at the core of the language (at least
-   after the point at which destructuring is defined).
+   This is almost the definition of =fn= at the core of the language (there's
+   book keeping around destructuring, docstrings, etc. which I won't go over
+   here).
 
    It may help to think of the body of a μ as quasiquoted, except that we can
    unquote as many times as we please.
@@ -158,6 +160,14 @@ This is largely an aid to my own memory so bear with me.
    That said, none of quote, unquote, quasiquote, eval, nor apply are defined as
    operators in the language — you can easily write them yourself, but please
    don't — so the analogy is a bit weak.
+
+   The key hurdle in understanding this is that the core operators which in the
+   usual course of things ~define~ lisp — that is =eval= and =apply= — are, in
+   this language, part of the syntax. Because you can't "call" eval at runtime,
+   we don't have to worry about Wand's triviality of fexprs: we always know
+   exactly what will and will not be evaluated. We actually have much more scope
+   for compiler optimisations than typical languages, but that's a whole other
+   discussion.
 ** An Exception
    One final note: I said above that there is *no* implicit evaluation. You've
    probably noticed in my examples that everything typed into the repl *is*
@@ -179,7 +189,8 @@ This is largely an aid to my own memory so bear with me.
   Syntax is topological. But it has no notion of time. The question of *whether*
   an expression will be evaluated is syntactic, but the question of *when* an
   expression will be evaluated is contextual: it depends on the unknowns in the
-  expression and on whoever provides them.
+  expression and on whoever provides them, not to mention system load and other
+  factors external to the expression itself.
 
   Take for example, the humble =λ=. Copying from above, we have:
 
@@ -326,8 +337,6 @@ This is largely an aid to my own memory so bear with me.
    interior of that μ will be blocked to some extent until those arguments are
    known.
 * The Environment
-  - Note taken on [2025-10-04 Sat 07:10] \\
-    FIXME: The stuff about declaration and binding nodes is no longer correct.
   The core semantics of the environment are based on Scheme. Or more
   specifically on an adamantly lexically scoped version of scheme, the downsides
   of which were explained in "the art of the interpreter".
@@ -355,30 +364,37 @@ This is largely an aid to my own memory so bear with me.
   in where the environment is stored and how it is managed.
 
   The interpreter does not pass the environment around. Rather the environment
-  in which a sexp is to be interpreted is attached to the sexp itself.
+  in which a sexp is to be interpreted is part of the sexp itself.
 
-  When a μ is created, we create a new node called a Declaration which declares
-  the parameters of the μ (thus wiping out previous bindings if we're shadowing
-  something in the surrounding environment).
+  When a μ is created, we transform its body by tagging all uses of its
+  parameter. This is currently called "capturing", but that might change.
 
-  When arguments are passed to a μ we add a new node called a Binding which
-  binds a value to a symbol.
+  Similarly when a μ is invoked with arguments the body is again transformed,
+  this time replacing captured symbols with symbols bound to the passed
+  arguments.
 
-  We then add rules to the interpreter of the form so that when it encounters
-  something like I-B-D-S, it checks that binding actually binds the declared
-  variable and if it does replaces the expression by the bound value. I-B-S
-  triggers an undeclared variable error, etc.. The complete set of rules is
-  extensive and still in flux. To be frank it's too complicated and I think it
-  needs reconceptualisation, but not just yet.
+  We don't necessarily know (yet) if a symbol will be evaluated. But we know
+  exactly what it will evaluate to when and if it is.
 
-  Finally, when a form is interpreted using read or loadfile, the context of
-  evaluation must be incorporated into it. This is done adding a Context node
-  to the root of the form which binds the namespace in which a form is defined
-  to the form itself.
+  References to symbols imported into the current namespace work similarly. You
+  can think of a μ defined in a namespace as a being passed a namespace as well
+  as its arguments. The version of the namespace passed is fixed statically, so
+  we always know exactly what we're calling. But having the expected namespace
+  version separated like that makes propagating changes much less painful in the
+  face of an immutable code base.
+
+  This isn't how it's actually implemented at present, but I find that way of
+  thinking about it helpful enough that I might move the implementation in that
+  direction as things mature.
 
   What we gain from this admittedly large dose of complexity, is a stateless
   interpreter. The meaning of every form is contained in the form itself.
-  Reference is static, even if it needed be looked up until runtime.
+  Reference is static but code doesn't have to be linked at compile time. Thus
+  we still get the benefits of shared libraries (if multiple things are using
+  the same version of the same library), without the typical pain of multiple
+  programs running at the same time but expecting different versions of the same
+  shared lib. Imagine maintaining a linux distro where shared lib version
+  conflicts don't exist...
 
   During reduction when we create a new form to be acted upon later, we also
   create and attach its environment so that when (if) it is eventually evaluated
@@ -395,7 +411,7 @@ This is largely an aid to my own memory so bear with me.
   can change what it means. Thus we don't need hygienic macros.
 
   But even though metaprogramming is safer and first class, it's still often
-  difficult to get right. So avoid it unless necessary.
+  difficult to get right. So judicious is still required.
 * Pipes, Channels, and Streams
   In this language channels and streams are two sides of the same phenomenon.
   I'm calling that phenomenon a pipe for lack of creative inspiration.
