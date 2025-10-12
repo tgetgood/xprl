@@ -10,38 +10,31 @@
 ;; don't they?
 
 (defn min [xs]
-  (let [[st ch] (first xs)]
-    (net
-     (last st) ; TODO: This pattern comes up so often it ought to have a name.
-     (map (fn [s x] (when (< x s) (emit ch x))) st (rest xs)))))
+  (reduce (fn [s x] (when (< x s) x)) (first xs) (rest xs)))
 
 (defn minmax [xs]
-  (let [x       (first xs)
-        [st ch] (pipe {:min x :max x})]
-    (net
-     (last st)
-     (map (fn [s x]
-            (cond
-              (< x (:min s)) (emit ch (assoc s :min x))
-              (< s (:max x)) (emit ch (assoc s :max x))
-              true    (emit)))
-          st (rest xs)))))
+  (let [x (first xs)]
+    (reduce (fn [s x]
+              (cond
+                (< x (:min s)) (assoc s :min x)
+                (< s (:max x)) (assoc s :max x)
+                true           s))
+            {:min x :max x}
+            (rest xs))))
 
 ;; This is worst case 2N. Can we get Knuth's 3N/2 without realising the whole
 ;; stream into memory? What about:
 
 (defn minmax2 [xs]
-  (let [x (first xs)
-        [st ch] (pipe {:min x :max x})]
-    (net
-     (last st)
-     (map (fn [s [x y]]
-            (let [[minv maxv] (if (< x y) [x y] [y x])]
-              (emit ch (-> (update :min min minv) (update :max max maxv)))))
-          ;; We need a version of partition that fills the last pair if the
-          ;; stream count is odd. In this case duplicating the last value would
-          ;; be correct.
-          st (partition 2 (rest xs))))))
+  (let [x (first xs)]
+    (reduce (fn [s [x y]]
+              (let [[minv maxv] (if (< x y) [x y] [y x])]
+                (-> s (update :min min minv) (update :max max maxv))))
+            {:min x :max x}
+            ;; We need a version of partition that fills the last pair if the
+            ;; stream count is odd. In this case duplicating the last value
+            ;; would be correct.
+            (partition 2 (rest xs)))))
 ;; This makes 3N/2 ~comparisons~, but it does a lot of other work that might
 ;; very well swamp the gains.
 
@@ -62,6 +55,9 @@
 ;; Those `empty?` checks on each iteration are ugly. There should be an event
 ;; when a stream finishes... and how would that work?
 
+;; So far `capture` has filled this need pretty well, but it requires buffering
+;; all output which isn't acceptable in this case.
+
 ;; Assume we're using a sorted binary tree as a set
 ;; This doesn't make a lot of sense as a stream problem.
 (defn set-insert [node val]
@@ -78,12 +74,32 @@
   )
 
 (defn insertion-sort [xs]
-  (let [[st ch] (pipe [])]
-    (net
-     (with-channels {:return ch}
-       (map insert-sorted st xs))
-     (last st))))
+  (reduce insert-sorted [] xs))
 
+(defn leaves [node]
+  (if (leaf? node)
+    node
+    ;; preserve order of leaves
+    (emit-recur (leaves (:left node)) leaves (:right node))))
 
 ;; run `rf` only on leaves of the tree, ignoring interior nodes.
-(defn reduce-leaves [rf init tree])
+(defn reduce-leaves [rf init tree]
+  (reduce rf init (return-stream (leaves tree))))
+
+;; Multiply two matricies of ints. The ints can be of arbitrary but fixed width.
+;; The matricies are square but of arbitrary size.
+(defn matmul [xs ys]
+  ;; transposing the second operand not only makes the code clearer, it also
+  ;; ought to improve cache performance enormously.
+  (let [ys' (transpose ys)]
+    ;; map should be able to handle simd itself since that's where it will
+    ;; almost always happen. Of course it depends on the operator.
+    ;; We could even use fma here if reduce and map can be aware of each other.
+    ;; That might be a bit much to ask.
+    ;;
+    ;; Honestly it's probably easier to do those optimisations on the bytecode.
+    (into [] (map (fn [x]
+                    (into [] (map (fn [y]
+                                    (reduce + (map * x y)))
+                                  ys')))
+                 xs))))

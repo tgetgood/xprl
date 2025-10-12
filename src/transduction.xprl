@@ -7,30 +7,26 @@
           ~(with-channels {:return ch} ~form)
           st))))
 
-(defn map-stream [f xs]
+(defn map* [f xs]
   (emit-recur (f (first xs)) f (rest xs)))
 ;; `emit-recur` is a new old primitive. It is largely designed to implement
 ;; `map`, but it's more general. It allows a μ to control the order of its
 ;; emissions with respect to an input stream.
 
-(defn map-stream [f xs ys]
+(defn map* [f xs ys]
   (emit-recur (f (first xs) (first ys)) f (rest xs) (rest ys)))
 
-(defn map-reduce* [f init xs]
+(defn mapv* [f init xs]
   (if (empty? xs)
     init
-    (map-reduce* f (conj init (f (first xs))) (rest xs))))
+    (mapv* f (conj init (f (first xs))) (rest xs))))
 
-(defn map-stream [f xs ys . zs]
-  (emit-recur (f (first xs) (first ys) . (map-reduce* first [] zs))
-               f (rest xs) (rest ys) . (map-reduce* rest [] zs)))
+(defn map* [f xs ys . zs]
+  (emit-recur (f (first xs) (first ys) . (mapv* first [] zs))
+               f (rest xs) (rest ys) . (mapv* rest [] zs)))
 
-(defn map [f . xs]
-  (let [[st ch] (pipe)]
-    (net
-     ;; Redirect multiple return values into a stream and return that.
-     (with-channels {:return ch} (map-stream f . xs))
-     st)))
+(defn map [f . xss]
+  (return-stream (map* f . xss)))
 
 (defn filter [p xs]
   (map (fn [x] (when (p x) x)) xs))
@@ -45,7 +41,7 @@
   (let [[state state-ch] (pipe init)]
     (net
      (with-channels {:return state-ch}
-       (map-stream rf state xs))
+       (map* rf state xs))
      (last state))))
 ;; So that instead of needing to emit explicitly, we just redirect return values
 ;; within one subcomputation of the network?
@@ -59,19 +55,20 @@
   (reduce conj to from))
 
 (defn partition [n xs]
-  (let [[state state-ch] (pipe [])]
-    (net
-     ;; Emit partitioned elements as you go.
-     (map (fn [state x]
-            (let [s' (conj state x)]
-              (if (= n (count s'))
-                (emit :return s' state-ch [])
-                (emit state-ch s'))))
-          state xs)
-     ;; Flush the remaining state, if any, once `xs` is exhausted.
-     (let [rem (last state)]
-       (when (not (empty? rem))
-         rem)))))
+  (return-stream
+   (let [[state state-ch] (pipe [])]
+     (net
+      ;; Emit partitioned elements as you go.
+      (map* (fn [state x]
+              (let [s' (conj state x)]
+                (if (= n (count s'))
+                  (emit :return s' state-ch [])
+                  (emit state-ch s'))))
+            state xs)
+      ;; Flush the remaining state, if any, once `xs` is exhausted.
+      (let [rem (last state)]
+        (when (not (empty? rem))
+          rem))))))
 
 (defn scan [f init xs]
   (let [[state state-ch] (pipe init)]
@@ -88,4 +85,4 @@
 ;; REVIEW: Is it really simpler? It just does the same things in different
 ;; places with more work. Useful as an example perhaps.
 (defn into2 [to from]
-  (last (scan conj to from)))
+  (last (return-stream (scan conj to from))))
