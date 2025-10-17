@@ -9,52 +9,27 @@
 
 (declare walk)
 
-(defn walk-key
-  ([form k] (walk-key k nil))
-  ([form k check]
-   (if (and (not (nil? check)) (ast/evaluated? (get form check)))
-     form
-     (update form k walk))))
-
-(defn walk-coll [form]
-  (meta/meta-walk walk form))
+(defn walk-unevaled [form k check]
+  (if (and (not (nil? check)) (ast/evaluated? (get form check)))
+    form
+    (update form k walk)))
 
 ;;;;; Application
 
-(defn apply-μ [{μ :head tail :tail :as app}]
-  (meta/wrap [update :cycle (fnil conj #{}) μ] (env/bind μ tail) walk))
-
-(defn apply-external [{{f :fn} :head :as app}]
-  (-> app (walk-key :tail :tail) f))
-
-(defn apply-error [{app :form}]
+(defn apply-error [app]
   (throw (RuntimeException.
           (str (:head app) " is not applicable, but was called with " (:tail app)
                "\n" (debug/provenance app)))))
 
-(defn apply-head [app]
-  (-> app (walk-key :head) (walk-key :tail :head)))
-
-(def apply-rules
-  ;; Interpreter as middleware. Kind of a cool idea?
-  {:I apply-head
-   :A apply-head
-   :F apply-external
-   :μ apply-μ})
-
-(defn apply [sexp]
-  ((get apply-rules (ast/type (:head sexp)) apply-error) sexp))
+(defn apply [{:keys [head tail] :as form}]
+  (cond
+    (ast/incomplete? head) (update form :head walk) ; REVIEW: walk tail too?
+    ;; FIXME: Walking the tail should be up to the extern.
+    (ast/external? head)   (-> form (walk-unevaled :tail :tail) ((:fn head)))
+    (ast/μ? head)          (walk (env/bind head tail)) ; REVIEW: do we need to walk here?
+    true                   (apply-error form)))
 
 ;;;;; Eval
-
-(defn eval-list [im]
-  (ast/list (map ast/immediate (:form im))))
-
-(defn eval-map [{m :form :as i}]
-  (reduce (fn [m [k v]] (assoc m (assoc i :form k) (assoc i :form v))) (empty m) m))
-
-(defn eval-pair [{{:keys [tail head]} :form}]
-  (ast/application (ast/immediate head) tail))
 
 (defn resolve [{sym :form :as im}]
   (cond
@@ -70,52 +45,37 @@
     true
     (with-meta (:val sym) (meta/clean (meta im)))))
 
-(def eval-rules
-  {:P eval-pair     ; (I (P x y)) => (A (I x) y)
-   :L eval-list     ; (I (L x y ...)) => (L (I x) (I y) ...)
-   :M eval-map      ; (I {x y ...}) => {(I x) (I y) ...}
-   :I walk-coll
-   :A walk-coll
-   :V :form         ; (I V) => V. values are fixed points of eval.
-   :S resolve})
-
-(defn eval [sexp]
-  ((get eval-rules (ast/type (:form sexp))) sexp))
+(defn eval [{form :form :as im}]
+  (cond
+    (ast/incomplete? form) (update im :form walk) ; REVIEW: walk tail too?
+    ;; (I (P x y)) => (A (I x) y)
+    (ast/pair? form)       (ast/application (ast/immediate (:head form)) (:tail form))
+    ;; (I (L x y ...)) => (L (I x) (I y) ...)
+    (ast/list? form)       (ast/list (map ast/immediate form)) ;REVIEW: why not vector?
+    ;; (I {x y ...}) => {(I x) (I y) ...}
+    (map? form)            (into {} (map #(mapv ast/immediate %)) form)
+    (symbol? form)         (resolve im)
+    ;; (I V) => V. values are fixed points of eval.
+    true                   form))
 
 ;;;;; Reduction
-
-(defn walk-μ [form]
-  (meta/wrap [assoc :μ? true] form #(walk-key % :body)))
 
 (defn walk-ctx [{:keys [channels form] :as s}]
   (let [m    (update (meta s) :ctx merge channels)
         body (walk (with-meta form m))]
     (with-meta (assoc s :form body) (meta body))))
 
-(def walk-rules
-  {:I eval
-   :A apply
-   :C walk-ctx
-   :P walk-coll
-   :L walk-coll
-   :M walk-coll
-   :μ walk-μ})
-
-(defn walk* [sexp]
-  (let [t     (ast/type sexp)
-        next  ((get walk-rules t identity) sexp state)]
-    (debug/trace! "walk:" t "\n" sexp "\n->\n" next)
-    next))
-
-;;;;; REVIEW: Debugging is still a pain with memoisation.
-
-;; (def walk (memoize walk*))
-(def walk walk*)
-
-(def empty-state
-  {:μ?    false
-   :cycle #{}
-   :ctx   {}})
+(defn walk [form]
+  (cond
+    (ast/immediate? form)   (eval form)
+    (ast/application? form) (apply form)
+    (ast/ctx? form)         (walk-ctx form)
+    (ast/list? form)        (into (empty form) (map walk) form)
+    (record? form)          (reduce (fn [acc k] (update acc k walk))
+                                    form (ast/type-keys form))
+    (map-entry? form)       [(walk (key form)) (walk (val form))]
+    (map? form)             (into (empty form) (map walk) form)
+    true                    form))
 
 (defn interpret [ns form]
-  (walk (ast/ctx sys/root-channels (env/ns-set! ns form)) empty-state))
+  (walk (ast/ctx sys/root-channels (env/ns-set! ns form))))

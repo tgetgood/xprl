@@ -140,7 +140,7 @@
 #_(def fn
   )
 
-;;(μ x ~(wrap . ~(μ  ~(nth x 1) ~~(nth x 2)))))
+;; (μ x ~(wrap . ~(μ  ~(nth x 1) ~~(nth x 2)))))
 
 ;; This one is named. Note it's the outer μ that bears the name.
 

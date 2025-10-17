@@ -23,6 +23,7 @@
 
 ;;;;; AST
 
+
 (defn split-symbolic [s]
   (cond
     ;; REVIEW: The `.` syntax is too basic to allow it to be overridden, so `.`
@@ -169,6 +170,8 @@
 (defn extern [name fn]
   (->Extern name fn))
 
+(defn external? [x]
+  (instance? Extern x))
 
 (defrecord Context [channels form]
   Object
@@ -177,6 +180,10 @@
 
 (defn ctx [channels form]
   (->Context channels form))
+
+(defn ctx? [x]
+  (instance? Context x))
+
 
 (defrecord Seq [elements]
   Object
@@ -489,46 +496,19 @@
 
 ;;;;; Sugar
 
-(def type-table
-  {Immediate   :I
-   Pair        :P
-   Symbol      :S
-   Resolved    :S
-   Application :A
-   Extern      :F
-   Mu          :μ
-   Emission    :E
-   Context     :C
-
-   Seq  :seq
-   Conc :conc
-
-   clojure.lang.MapEntry           :L
-   clojure.lang.PersistentVector   :L
-   clojure.lang.PersistentArrayMap :M
-   clojure.lang.PersistentHashMap  :M
-   clojure.lang.PersistentHashSet  :set})
-
-(defn type [x]
-  ;; There's nothing to gain in wrapping value types.
-  (get type-table (clojure.core/type x) :V))
-
 (def xkeys
   {:return  (keyword "return")
    :error   (keyword "error")
    :unbound (keyword "unbound")
    :env     (keyword "env")})
 
-(defn evaluated? [x]
-  (and (not (immediate? x)) (not (application? x))))
+(defn incomplete? [x]
+  (or (immediate? x) (application? x)))
 
-(defn empty
-  "Empty that works for map entries as well."
-  [x]
-  (if (map-entry? x)
-    [] ; Treat map entries as vectors and everything works
-    (try
-      (clojure.core/empty x)
-      ;; If IPersistentCollection isn't implemented then that means it's one of
-      ;; my records and we're going to overwrite every property anyway.
-      (catch UnsupportedOperationException _ x))))
+(defn type-keys [x]
+  (case (type x)
+    Pair        [:head :tail]
+    Application [:head :tail]
+    Mu          [:body]
+    Emission    [:kvs]
+    []))
