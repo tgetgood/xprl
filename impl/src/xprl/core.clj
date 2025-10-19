@@ -6,6 +6,7 @@
    [xprl.debug :as debug]
    [xprl.env :as env]
    [xprl.interpreter :as i]
+   [xprl.compiler :as c]
    [xprl.reader :as r]))
 
 (def the-env (atom builtins/base-env))
@@ -108,3 +109,11 @@
    `(binding [debug/*verbose* true
               debug/*sample-interval* 1000]
       ~x) )
+
+(defn ct [s]
+  (let [f (env/set-ns @the-env (:form (r/read (r/string-reader s))))]
+    (loop [f f]
+      (println "--> " f)
+      (let [next (c/step f)]
+        (when-not (= f next)
+          (recur next))))))

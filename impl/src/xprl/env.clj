@@ -15,7 +15,7 @@
 (defn ast-replace [subs form]
   (walk/postwalk (fn [x] (if (contains? subs x) (get subs x) x)) form))
 
-(defn ns-set! [ns body]
+(defn set-ns [ns body]
   (let [binds (into {} (map (fn [[k v]] [k (ast/->Resolved k :ns v)])) ns)]
     (ast-replace binds body)))
 

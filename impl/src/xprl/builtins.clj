@@ -5,30 +5,20 @@
    [xprl.env :as env]
    [xprl.interpreter :as i]))
 
-;;;;; Magic
-
-(defn ready-go
-  {:style/indent [1]}
-  [ready? go]
-  (fn [{:keys [tail] :as app}]
-    (let [tail (if (ready? tail) tail (i/walk tail))]
-      (if (ready? tail)
-        (go tail)
-        (assoc app :tail tail)))))
-
-;;;;; Simple Primitive fns
+;;;;; simple primitive fns
 
 (defn call-primitive-fn
-  "Given an external (clojure) function, returns an applicative wrapper to call
+  "given an external (clojure) function, returns an applicative wrapper to call
   it from xprl."
   [f]
-  (ready-go #(every? ast/evaluated? %)
-    (fn [args]
+  (fn [{tail :tail :as form}]
+    (if (or (ast/incomplete? tail) (some ast/incomplete? tail))
+      (update form :tail i/walk)
       (try
-        (apply f args)
+        (apply f tail)
         (catch Exception e
-          (reset! debug/*pfn {:f f :args args :e e})
-          (ast/inspect (ast/application f args))
+          (reset! debug/*pfn {:f f :args tail :e e})
+          (ast/inspect (ast/application f tail))
           (println e)
           :error)))))
 
@@ -75,22 +65,30 @@
     "rest*"  rest*
 
     "count*" count
-    "nth*"   nth* ; Base 1 indexing
+    "nth*"   nth* ; base 1 indexing
 
     }))
 
-;;;;; Specialish forms
+;;;;; specialish forms
+
+(defmacro check-tail [form body]
+  {:style/indent 1}
+  `(if (ast/incomplete? (:tail ~form))
+     (update ~form :tail i/walk)
+     ~body))
 
 (defn μ-ready? [args]
   (every? ast/symbol? (butlast args)))
 
-(defn μ [{args :tail :as app} state]
-  (let [names (ast/list (butlast args))]
-    (if (every? ast/symbol? names)
-      (i/walk (apply ast/μ (env/capture args)) state)
-      ;; If the names don't resolve, it ~should~ be safe to walk the body
-      ;; REVIEW: But what if one of them resolves and the other doesn't?
-      (update app :tail i/walk state))))
+(defn μ [{args :tail :as app}]
+  (println "creating μ")
+  (check-tail app
+    (let [names (ast/list (butlast args))]
+      (if (every? ast/symbol? names)
+        (i/walk (apply ast/μ (env/capture args)))
+        ;; if the names don't resolve, it ~should~ be safe to walk the body
+        ;; review: but what if one of them resolves and the other doesn't?
+        (update app :tail i/walk)))))
 
 (defn emit [{kvs :tail :as app}]
   (assert (even? (count kvs)))
@@ -99,23 +97,25 @@
                   (partition 2 kvs)))))
 
 (defn select [{[p t f] :tail :as app}]
-  ;; First walk *just p*. That's important.
-  (let [p (if (ast/evaluated? p) p (i/walk p))]
-    ;; If p resolves, don't walk the dead branch: it might not be safe to do so.
+  #_(check-tail app
+    ;; first walk *just p*. that's important.
+    (if (ast/incomplete? p)
+      (update-in app [:tail 0] i/walk))
+    ;; if p resolves, don't walk the dead branch: it might not be safe to do so.
     ;; e.g. (select ~(empty? xs) [] ~(first xs))
     (if (ast/evaluated? p)
       (do
-        (assert (boolean? p) (str "Non boolean passed to select: " p))
+        (assert (boolean? p) (str "non boolean passed to select: " p))
         (i/walk (if p t f)))
-      ;; If p is not a bool, it ~should~ be safe to walk both `t` & `f`...
+      ;; if p is not a bool, it ~should~ be safe to walk both `t` & `f`...
       (i/continue app (assoc app :tail [p (i/walk t) (i/walk f)])))))
 
 (defn with-channels [{[chmap body] :tail :as app}]
-  (wait-until-evaluated
+  #_(wait-until-evaluated
    [chmap]
    (i/walk (ast/ctx chmap body))))
 
-;; TODO: builtin macros needed for a working system.
+;; todo: builtin macros needed for a working system.
 ;;
 ;; emit-recur
 ;; pipe
@@ -127,7 +127,7 @@
             (assoc acc (ast/symbol k) (ast/extern k f))) {} m))
 
 (def special
-  "Things that would traditionally be special forms."
+  "things that would traditionally be special forms."
   (macros
    {"μ"      μ
     "select" select
@@ -142,12 +142,12 @@
     ;; "rest*"  rest*
     }))
 
-;;;;; The Ur context from which all programs derive.
+;;;;; the ur context from which all programs derive.
 ;;
-;; I don't really like this being so ad hoc. There will have to be a takeover
+;; i don't really like this being so ad hoc. there will have to be a takeover
 ;; moment when the intended long term context and history system is finally
-;; built. That is to say there will be a shock in the history where we suddenly
-;; have no past, no origin. Why is bootstrapping so singular like that?
+;; built. that is to say there will be a shock in the history where we suddenly
+;; have no past, no origin. why is bootstrapping so singular like that?
 
 (def base-env
   (reduce (fn [e [k v]] (env/ns-intern e k v)) env/empty-ns (merge special fns)))

@@ -6,7 +6,6 @@
     keyword
     keyword?
     empty
-    type
     list
     list?
     seq
