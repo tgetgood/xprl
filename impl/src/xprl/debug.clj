@@ -1,6 +1,7 @@
 (ns xprl.debug)
 
 (def ^:dynamic *verbose* false)
+
 (def ^:dynamic *sample-interval*
   "Only show one trace each interval. A form of rate limiting."
   0)

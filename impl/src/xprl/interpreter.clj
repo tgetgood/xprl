@@ -3,8 +3,7 @@
   (:require
    [xprl.ast :as ast]
    [xprl.debug :as debug]
-   [xprl.env :as env]
-   [xprl.system :as sys]))
+   [xprl.env :as env]))
 
 ;;;;; Apply
 
@@ -59,9 +58,5 @@
                             form (ast/type-keys form))
     (map? form)     (reduce (fn [m [k v]] (assoc m (walk k) (walk v))) {} form)
     true            form))
-
-(defn interpret [ns form]
-  (walk (ast/ctx sys/root-channels (env/ns-set! ns form))))
-
 
 ;; Well... Is it too simple now?
