@@ -10,5 +10,5 @@
     (walk/prewalk i/walk form))
 
 (defn entry [ns form]
-  (let [ctx (env/set-ns ns form)]
+  (let [sexp (env/set-ns ns form)]
     (step ctx)))

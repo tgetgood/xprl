@@ -61,7 +61,7 @@
         (if (= :eof form)
           'EOF
           (do
-            (go! @envatom form (with-return conts println))
+            (go! @envatom form #_(with-return conts println))
             (recur reader)))))))
 
 (defn reload! [fname]
@@ -109,11 +109,3 @@
    `(binding [debug/*verbose* true
               debug/*sample-interval* 1000]
       ~x) )
-
-(defn ct [s]
-  (let [f (env/set-ns @the-env (:form (r/read (r/string-reader s))))]
-    (loop [f f]
-      (println "--> " f)
-      (let [next (c/step f)]
-        (when-not (= f next)
-          (recur next))))))

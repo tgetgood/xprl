@@ -14,7 +14,6 @@
 
 (defn apply [{:keys [head tail] :as form}]
   (cond
-    (ast/incomplete? head) form ;(-> form (update :head walk) (update :tail walk))
     (ast/external? head)   ((:fn head) form) ; Punt to external interpreter.
     (ast/μ? head)          (env/bind head tail)
     true                   (apply-error form)))
@@ -28,7 +27,6 @@
 
 (defn eval [{form :form :as im}]
   (cond
-    (ast/incomplete? form) im ; (update im :form walk)
     (ast/symbol? form)     (resolve im)
     ;; (I (P x y)) => (A (I x) y)
     (ast/pair? form)       (ast/application (ast/immediate (:head form)) (:tail form))
@@ -48,15 +46,36 @@
     (with-meta (assoc s :form body) (meta body))))
 
 (defn walk [form]
+  (println "--> " form)
   (cond
-    (ast/immediate? form)   (eval form)
-    (ast/application? form) (apply form)
+    ;; REVIEW: These are repetitive but subtle. Is there anything to be gained
+    ;; by hiding the complexity somewhere else?
+    (ast/immediate? form)   (if (ast/incomplete? (:form form))
+                              (let [form (update form :form walk)]
+                                (if (ast/incomplete? (:form form))
+                                  form
+                                  (eval form)))
+                              (eval form))
+    (ast/application? form) (if (ast/incomplete? (:head form))
+                              (let [form (update form :head walk)]
+                                (if (ast/incomplete? (:head form))
+                                  (update form :tail walk)
+                                  (apply form)))
+                              (apply form))
 
     (ast/ctx? form) (walk-ctx form)
     (vector? form)  (into [] (map walk) form)
-    (record? form)  (reduce (fn [acc k] (update acc k walk))
+    (record? form)  (reduce (fn [acc [k v]] (assoc acc k (walk v)))
                             form (ast/type-keys form))
     (map? form)     (reduce (fn [m [k v]] (assoc m (walk k) (walk v))) {} form)
     true            form))
 
 ;; Well... Is it too simple now?
+
+(defn interpret [ns form]
+  (loop [f (env/set-ns ns form)]
+    (println "step")
+    (let [next (walk f)]
+      (if (= f next)
+        f
+        (recur next)))))
