@@ -21,19 +21,18 @@
 
 (defn env-updater [env]
   (fn [l]
-    (let [[sym value] l]
-      (swap! env env/ns-intern sym value))))
-
+    (let [[sym value] l
+          v (if (ast/incomplete? value)
+              (i/interpret @env value)
+              value)]
+      (swap! env env/ns-intern sym v))))
 
 (defn with-return [ccs cb]
   (assoc ccs (ast/xkeys :return) cb))
 
-(defn connect [form ccs]
-  (throw (RuntimeException. "not implemented!")))
-
 (defn go!
   ([env f] (i/interpret env (ast/immediate f)))
-  ([env f conts] (connect (go! env f) conts)))
+  ([env f conts] (i/interpret env (ast/ctx conts (ast/immediate f)))))
 
 (defn evv [s]
   (go! @the-env (:form (r/read (r/string-reader s)))))
@@ -61,7 +60,7 @@
         (if (= :eof form)
           'EOF
           (do
-            (go! @envatom form #_(with-return conts println))
+            (go! @envatom form (with-return conts println))
             (recur reader)))))))
 
 (defn reload! [fname]

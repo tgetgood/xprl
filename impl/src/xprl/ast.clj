@@ -172,7 +172,7 @@
 (defn external? [x]
   (instance? Extern x))
 
-(defrecord Context [channels form]
+(defrecord Context [chs form]
   Object
   (toString [_]
     (str "#Ctx" form)))

@@ -74,7 +74,7 @@
 (defmacro check-tail [form body]
   {:style/indent 1}
   `(if (ast/incomplete? (:tail ~form))
-     (update ~form :tail i/walk)
+     (update ~form :tail i/walk {:μ? true} )
      ~body))
 
 (defn μ-ready? [args]
@@ -85,16 +85,16 @@
   (check-tail app
     (let [names (ast/list (butlast args))]
       (if (every? ast/symbol? names)
-        (i/walk (apply ast/μ (env/capture args)))
+        (apply ast/μ (env/capture args))
         ;; if the names don't resolve, it ~should~ be safe to walk the body
         ;; review: but what if one of them resolves and the other doesn't?
-        (update app :tail i/walk)))))
+        (update app :tail i/walk {:μ? true})))))
 
 (defn emit [{kvs :tail :as app}]
+  (println kvs)
   (assert (even? (count kvs)))
   (ast/emission
-   (ast/list (map (fn [[k v]] (ast/list [(ast/immediate k) v]))
-                  (partition 2 kvs)))))
+   (mapv (fn [[k v]] [(ast/immediate k) v]) (partition 2 kvs))))
 
 (defn select [{[p t f] :tail :as app}]
   #_(check-tail app

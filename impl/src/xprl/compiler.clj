@@ -11,4 +11,4 @@
 
 (defn entry [ns form]
   (let [sexp (env/set-ns ns form)]
-    (step ctx)))
+    (step sexp)))

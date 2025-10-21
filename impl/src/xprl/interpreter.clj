@@ -3,7 +3,8 @@
   (:require
    [xprl.ast :as ast]
    [xprl.debug :as debug]
-   [xprl.env :as env]))
+   [xprl.env :as env]
+   [xprl.system :as sys]))
 
 ;;;;; Apply
 
@@ -22,7 +23,9 @@
 
 (defn resolve [{sym :form :as im}]
   (if (ast/resolved? sym)
-    (:val sym)
+    (if (:val sym)
+      (:val sym)
+      im)
     (throw (RuntimeException. (str "unbound symbol: " sym)))))
 
 (defn eval [{form :form :as im}]
@@ -33,49 +36,52 @@
     ;; (I (L x y ...)) => (L (I x) (I y) ...)
     (vector? form)         (into [] (map ast/immediate) form)
     ;; (I {x y ...}) => {(I x) (I y) ...}
-    (map? form)            (into {} (map #(mapv ast/immediate %)) form)
+    ;; FIXME: maps are a pain in the ass because records are maps...
+    ;; (map? form)            (into {} (map #(mapv ast/immediate %)) form)
     ;; (I V) => V. values are fixed points of eval.
     true                   form))
 
 ;;;;; Walk (previously `reduce`)
 
-(defn walk-ctx [{:keys [channels form] :as s}]
-  s
-  #_(let [m    (update (meta s) :ctx merge channels)
-        body (walk (with-meta form m))]
-    (with-meta (assoc s :form body) (meta body))))
-
-(defn walk [form]
-  (println "--> " form)
+(defn walk [form env]
+  (debug/trace! "--> " form)
+  ;; (println (type form) form)
   (cond
     ;; REVIEW: These are repetitive but subtle. Is there anything to be gained
     ;; by hiding the complexity somewhere else?
     (ast/immediate? form)   (if (ast/incomplete? (:form form))
-                              (let [form (update form :form walk)]
+                              (let [form (update form :form walk env)]
                                 (if (ast/incomplete? (:form form))
                                   form
                                   (eval form)))
                               (eval form))
     (ast/application? form) (if (ast/incomplete? (:head form))
-                              (let [form (update form :head walk)]
+                              (let [form (update form :head walk env)]
                                 (if (ast/incomplete? (:head form))
-                                  (update form :tail walk)
+                                  (update form :tail walk env)
                                   (apply form)))
                               (apply form))
+    (ast/emission? form)    (let [form (update form :kvs walk env)]
+                              (if (:μ? env) form (sys/emit (:ctx env) form)))
 
-    (ast/ctx? form) (walk-ctx form)
-    (vector? form)  (into [] (map walk) form)
-    (record? form)  (reduce (fn [acc [k v]] (assoc acc k (walk v)))
+    (ast/keyword? form) form
+    (ast/symbol? form)  form
+
+    ;; TODO: I'll need a special node type for capture at this rate.
+    (ast/ctx? form) (update form :form walk (update env :ctx merge (:chs form)))
+    (ast/μ? form)   (update form :body walk (assoc env :μ? true))
+    (vector? form)  (into [] (map #(walk % env)) form)
+    (record? form)  (reduce (fn [acc [k v]] (assoc acc k (walk v env)))
                             form (ast/type-keys form))
-    (map? form)     (reduce (fn [m [k v]] (assoc m (walk k) (walk v))) {} form)
+    ;; (map? form) (reduce (fn [m [k v]] (assoc m (walk k env) (walk v env))) {} form)
     true            form))
 
 ;; Well... Is it too simple now?
 
 (defn interpret [ns form]
   (loop [f (env/set-ns ns form)]
-    (println "step")
-    (let [next (walk f)]
+    (debug/trace! "step")
+    (let [next (walk f {})] ; always restart with empty env. Stateless.
       (if (= f next)
         f
         (recur next)))))
