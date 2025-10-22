@@ -43,34 +43,39 @@
 
 ;;;;; Walk (previously `reduce`)
 
-(defn walk [form env]
-  (debug/trace! "--> " form)
-  ;; (println (type form) form)
-  (cond
-    ;; REVIEW: These are repetitive but subtle. Is there anything to be gained
-    ;; by hiding the complexity somewhere else?
-    (ast/immediate? form)   (if (ast/incomplete? (:form form))
-                              (let [form (update form :form walk env)]
-                                (if (ast/incomplete? (:form form))
-                                  form
-                                  (eval form)))
-                              (eval form))
-    (ast/application? form) (if (ast/incomplete? (:head form))
-                              (let [form (update form :head walk env)]
-                                (if (ast/incomplete? (:head form))
-                                  (update form :tail walk env)
-                                  (apply form)))
-                              (apply form))
-    (ast/emission? form)    (let [form (update form :kvs walk env)]
-                              (if (:μ? env) form (sys/emit (:ctx env) form)))
+(defmacro trace [f x]
+  {:style/indent 1}
+  `(let [v# ~x]
+     (debug/trace! "---\n" ~f "\n-->\n" v# "\n---")
+     v#))
 
-    ;; TODO: I'll need a special node type for capture at this rate.
-    (ast/ctx? form)  (update form :form walk (update env :ctx merge (:chs form)))
-    (ast/μ? form)    (update form :body walk (assoc env :μ? true))
-    (ast/pair? form) (-> form (update :head walk env) (update :tail walk env))
-    (ast/list? form) (into [] (map #(walk % env)) form)
-    (ast/map? form)  (into {} (map (fn [e] (mapv (fn [x] (walk x env)) e))) form)
-    true             form))
+(defn walk [form env]
+  (trace form
+   (cond
+     ;; REVIEW: These are repetitive but subtle. Is there anything to be gained
+     ;; by hiding the complexity somewhere else?
+     (ast/immediate? form)   (if (ast/incomplete? (:form form))
+                               (let [form (update form :form walk env)]
+                                 (if (ast/incomplete? (:form form))
+                                   form
+                                   (eval form)))
+                               (eval form))
+     (ast/application? form) (if (ast/incomplete? (:head form))
+                               (let [form (update form :head walk env)]
+                                 (if (ast/incomplete? (:head form))
+                                   (update form :tail walk env)
+                                   (apply form)))
+                               (apply form))
+     (ast/emission? form)    (let [form (update form :kvs walk env)]
+                               (if (:μ? env) form (sys/emit (:ctx env) form)))
+
+     ;; TODO: I'll need a special node type for capture at this rate.
+     (ast/ctx? form)  (update form :form walk (update env :ctx merge (:chs form)))
+     (ast/μ? form)    (update form :body walk (assoc env :μ? true))
+     (ast/pair? form) (-> form (update :head walk env) (update :tail walk env))
+     (ast/list? form) (into [] (map #(walk % env)) form)
+     (ast/map? form)  (into {} (map (fn [e] (mapv (fn [x] (walk x env)) e))) form)
+     true             form)))
 
 ;; Well... Is it too simple now?
 

@@ -40,6 +40,12 @@
 
 (def str (wrap . str*))
 
+(def mod (wrap . mod*))
+
+(def even? (wrap . (μ x ~(=* 0 ~(mod* ~(nth* ~x 1) 2)))))
+
+(def odd? (wrap . (μ x ~(not* ~(even? . x)))))
+
 ;;;;; Core
 
 (def defμ

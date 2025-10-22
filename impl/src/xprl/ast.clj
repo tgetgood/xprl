@@ -76,6 +76,7 @@
     (->Resolved sym (gensym (str sym)) nil)))
 
 (defn resolve [{:keys [sym uuid]} val]
+  (assert (not (resolved? sym)))
   (->Resolved sym uuid val))
 
 (defn symbol? [s]
