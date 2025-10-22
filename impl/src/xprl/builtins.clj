@@ -5,6 +5,12 @@
    [xprl.env :as env]
    [xprl.interpreter :as i]))
 
+(def benv
+  "Env for builtins to call back into the interpreter."
+  ;; FIXME: the key :μ? is far too specific. Something like "supress-emission"
+  ;; would be more to the point.
+  {:μ? true})
+
 ;;;;; simple primitive fns
 
 (defn call-primitive-fn
@@ -13,7 +19,7 @@
   [f]
   (fn [{tail :tail :as form}]
     (if (or (ast/incomplete? tail) (some ast/incomplete? tail))
-      (update form :tail i/walk)
+      (update form :tail i/walk benv)
       (try
         (apply f tail)
         (catch Exception e
@@ -74,41 +80,41 @@
 (defmacro check-tail [form body]
   {:style/indent 1}
   `(if (ast/incomplete? (:tail ~form))
-     (update ~form :tail i/walk {:μ? true} )
+     (update ~form :tail i/walk benv)
      ~body))
 
 (defn μ-ready? [args]
   (every? ast/symbol? (butlast args)))
 
 (defn μ [{args :tail :as app}]
-  (println "creating μ")
   (check-tail app
     (let [names (ast/list (butlast args))]
       (if (every? ast/symbol? names)
         (apply ast/μ (env/capture args))
         ;; if the names don't resolve, it ~should~ be safe to walk the body
         ;; review: but what if one of them resolves and the other doesn't?
-        (update app :tail i/walk {:μ? true})))))
+        (update app :tail i/walk benv)))))
 
 (defn emit [{kvs :tail :as app}]
-  (println kvs)
   (assert (even? (count kvs)))
   (ast/emission
    (mapv (fn [[k v]] [(ast/immediate k) v]) (partition 2 kvs))))
 
 (defn select [{[p t f] :tail :as app}]
-  #_(check-tail app
+  (check-tail app
+    ;; FIXME: What the hell do we do if there's an `emit` in the condition of a
+    ;; select? Just kick them up along with emissions from the winning branch?
+    ;; That's logical, but what a shitshow. And whose job is it to make sure
+    ;; that happens properly
+
     ;; first walk *just p*. that's important.
-    (if (ast/incomplete? p)
-      (update-in app [:tail 0] i/walk))
-    ;; if p resolves, don't walk the dead branch: it might not be safe to do so.
-    ;; e.g. (select ~(empty? xs) [] ~(first xs))
-    (if (ast/evaluated? p)
-      (do
-        (assert (boolean? p) (str "non boolean passed to select: " p))
-        (i/walk (if p t f)))
-      ;; if p is not a bool, it ~should~ be safe to walk both `t` & `f`...
-      (i/continue app (assoc app :tail [p (i/walk t) (i/walk f)])))))
+    (let [p' (i/walk p benv)]
+      (if (ast/incomplete? p')
+        ;; if p is not a bool, it ~should~ be safe to walk both `t` & `f`...
+        (assoc app :tail [p' (i/walk t benv) (i/walk f benv)])
+        ;; if p resolves, don't walk the dead branch: it might not be safe to do so.
+        ;; e.g. (select ~(empty? xs) [] ~(first xs))
+        (if p' t f)))))
 
 (defn with-channels [{[chmap body] :tail :as app}]
   #_(wait-until-evaluated

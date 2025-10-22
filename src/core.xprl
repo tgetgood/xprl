@@ -40,12 +40,6 @@
 
 (def str (wrap . str*))
 
-(def seq (wrap . seq*))
-(def conc (wrap . conc*))
-
-(def connect (wrap . connect*))
-
-
 ;;;;; Core
 
 (def defμ

@@ -22,10 +22,9 @@
 (defn env-updater [env]
   (fn [l]
     (let [[sym value] l
-          v (if (ast/incomplete? value)
-              (i/interpret @env value)
-              value)]
-      (swap! env env/ns-intern sym v))))
+          k (if (ast/incomplete? sym) (i/interpret @env sym) sym)
+          v (if (ast/incomplete? value) (i/interpret @env value) value)]
+      (swap! env env/ns-intern k v))))
 
 (defn with-return [ccs cb]
   (assoc ccs (ast/xkeys :return) cb))
@@ -39,7 +38,7 @@
 
 (defn ev [s]
   (let [conts {(ast/xkeys :env)   (env-updater the-env)
-               (ast/xkeys :return) println
+               (ast/xkeys :return) #(println (i/interpret @the-env %))
                (ast/xkeys :error)  (fn [x]
                                      (println "Error: " x))}]
     (go! @the-env (:form (r/read (r/string-reader s))) conts)))
@@ -56,11 +55,12 @@
                                      (println "Error: " x))}]
     (loop [reader (r/file-reader fname)]
       (let [reader (r/read reader)
+            env    @envatom
             form   (:form reader)]
         (if (= :eof form)
           'EOF
           (do
-            (go! @envatom form (with-return conts println))
+            (go! @envatom form (with-return conts #(println (i/interpret env %))))
             (recur reader)))))))
 
 (defn reload! [fname]

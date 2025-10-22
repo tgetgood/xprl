@@ -30,16 +30,16 @@
 
 (defn eval [{form :form :as im}]
   (cond
-    (ast/symbol? form)     (resolve im)
+    (ast/symbol? form) (resolve im)
     ;; (I (P x y)) => (A (I x) y)
-    (ast/pair? form)       (ast/application (ast/immediate (:head form)) (:tail form))
+    (ast/pair? form)   (ast/application (ast/immediate (:head form)) (:tail form))
     ;; (I (L x y ...)) => (L (I x) (I y) ...)
-    (vector? form)         (into [] (map ast/immediate) form)
+    (vector? form)     (into [] (map ast/immediate) form)
     ;; (I {x y ...}) => {(I x) (I y) ...}
     ;; FIXME: maps are a pain in the ass because records are maps...
-    ;; (map? form)            (into {} (map #(mapv ast/immediate %)) form)
+    (ast/map? form)    (into {} (map #(mapv ast/immediate %)) form)
     ;; (I V) => V. values are fixed points of eval.
-    true                   form))
+    true               form))
 
 ;;;;; Walk (previously `reduce`)
 
@@ -64,17 +64,13 @@
     (ast/emission? form)    (let [form (update form :kvs walk env)]
                               (if (:μ? env) form (sys/emit (:ctx env) form)))
 
-    (ast/keyword? form) form
-    (ast/symbol? form)  form
-
     ;; TODO: I'll need a special node type for capture at this rate.
-    (ast/ctx? form) (update form :form walk (update env :ctx merge (:chs form)))
-    (ast/μ? form)   (update form :body walk (assoc env :μ? true))
-    (vector? form)  (into [] (map #(walk % env)) form)
-    (record? form)  (reduce (fn [acc [k v]] (assoc acc k (walk v env)))
-                            form (ast/type-keys form))
-    ;; (map? form) (reduce (fn [m [k v]] (assoc m (walk k env) (walk v env))) {} form)
-    true            form))
+    (ast/ctx? form)  (update form :form walk (update env :ctx merge (:chs form)))
+    (ast/μ? form)    (update form :body walk (assoc env :μ? true))
+    (ast/pair? form) (-> form (update :head walk env) (update :tail walk env))
+    (ast/list? form) (into [] (map #(walk % env)) form)
+    (ast/map? form)  (into {} (map (fn [e] (mapv (fn [x] (walk x env)) e))) form)
+    true             form))
 
 ;; Well... Is it too simple now?
 

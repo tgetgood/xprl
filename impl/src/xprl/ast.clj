@@ -489,7 +489,6 @@
         (insp (second kvs) w (inc level))
         (recur (drop 2 kvs))))))
 
-
 (defn inspect [x]
   (insp x *out* 0))
 
@@ -503,11 +502,3 @@
 
 (defn incomplete? [x]
   (or (immediate? x) (application? x)))
-
-(defn type-keys [x]
-  (case (type x)
-    Pair        [:head :tail]
-    Application [:head :tail]
-    Mu          [:body]
-    Emission    [:kvs]
-    []))
