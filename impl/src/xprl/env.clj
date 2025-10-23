@@ -16,7 +16,9 @@
   (walk/postwalk (fn [x] (if (contains? subs x) (get subs x) x)) form))
 
 (defn set-ns [ns body]
-  (let [binds (into {} (map (fn [[k v]] [k (ast/->Resolved k :ns v)])) ns)]
+  (let [binds (into {} (map (fn [[k v]]
+                              (assert (not (ast/resolved? k)))
+                              [k (ast/->Resolved k :ns v)])) ns)]
     (ast-replace binds body)))
 
 (defn capture [args]
@@ -28,4 +30,4 @@
 (defn bind [{:keys [name params body] :as μ} args]
   (let [subs (merge {params (ast/resolve params args)}
                     (when name {name (ast/resolve name μ)}))]
-    (with-meta (ast-replace subs body) (meta μ))))
+    (ast-replace subs body)))
