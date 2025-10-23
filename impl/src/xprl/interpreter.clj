@@ -2,7 +2,7 @@
   (:refer-clojure :exclude [resolve eval apply])
   (:require
    [xprl.ast :as ast]
-   [xprl.debug :as debug]
+   [xprl.debug :as debug :refer [deftracefn]]
    [xprl.env :as env]
    [xprl.system :as sys]))
 
@@ -13,7 +13,7 @@
           (str (:head app) " is not applicable, but was called with " (:tail app)
                "\n" (debug/provenance app)))))
 
-(defn apply [{:keys [head tail] :as form}]
+(deftracefn apply [{:keys [head tail] :as form}]
   (cond
     (ast/external? head)   ((:fn head) form) ; Punt to external interpreter.
     (ast/μ? head)          (env/bind head tail)
@@ -28,7 +28,7 @@
       im)
     (throw (RuntimeException. (str "unbound symbol: " sym)))))
 
-(defn eval [{form :form :as im}]
+(deftracefn eval [{form :form :as im}]
   (cond
     (ast/symbol? form) (resolve im)
     ;; (I (P x y)) => (A (I x) y)
@@ -43,44 +43,37 @@
 
 ;;;;; Walk (previously `reduce`)
 
-(defmacro trace [f x]
-  {:style/indent 1}
-  `(let [v# ~x]
-     (debug/trace! "---\n" ~f "\n-->\n" v# "\n---")
-     v#))
+(deftracefn walk [form env]
+  (cond
+    ;; REVIEW: These are repetitive but subtle. Is there anything to be gained
+    ;; by hiding the complexity somewhere else?
+    (ast/immediate? form)   (if (ast/incomplete? (:form form))
+                              (let [form (update form :form walk env)]
+                                (if (ast/incomplete? (:form form))
+                                  form
+                                  (eval form)))
+                              (eval form))
+    (ast/application? form) (if (ast/incomplete? (:head form))
+                              (let [form (update form :head walk env)]
+                                (if (ast/incomplete? (:head form))
+                                  (update form :tail walk env)
+                                  (apply form)))
+                              (apply form))
+    (ast/emission? form)    (let [form (update form :kvs walk env)]
+                              (if (:μ? env) form (sys/emit (:ctx env) form)))
 
-(defn walk [form env]
-  (trace form
-   (cond
-     ;; REVIEW: These are repetitive but subtle. Is there anything to be gained
-     ;; by hiding the complexity somewhere else?
-     (ast/immediate? form)   (if (ast/incomplete? (:form form))
-                               (let [form (update form :form walk env)]
-                                 (if (ast/incomplete? (:form form))
-                                   form
-                                   (eval form)))
-                               (eval form))
-     (ast/application? form) (if (ast/incomplete? (:head form))
-                               (let [form (update form :head walk env)]
-                                 (if (ast/incomplete? (:head form))
-                                   (update form :tail walk env)
-                                   (apply form)))
-                               (apply form))
-     (ast/emission? form)    (let [form (update form :kvs walk env)]
-                               (if (:μ? env) form (sys/emit (:ctx env) form)))
-
-     ;; TODO: I'll need a special node type for capture at this rate.
-     (ast/ctx? form)  (update form :form walk (update env :ctx merge (:chs form)))
-     (ast/μ? form)    (update form :body walk (assoc env :μ? true))
-     (ast/pair? form) (-> form (update :head walk env) (update :tail walk env))
-     (ast/list? form) (into [] (map #(walk % env)) form)
-     (ast/map? form)  (into {} (map (fn [e] (mapv (fn [x] (walk x env)) e))) form)
-     true             form)))
+    ;; TODO: I'll need a special node type for capture at this rate.
+    (ast/ctx? form)  (update form :form walk (update env :ctx merge (:chs form)))
+    (ast/μ? form)    (update form :body walk (assoc env :μ? true))
+    (ast/pair? form) (-> form (update :head walk env) (update :tail walk env))
+    (ast/list? form) (into [] (map #(walk % env)) form)
+    (ast/map? form)  (into {} (map (fn [e] (mapv (fn [x] (walk x env)) e))) form)
+    true             form))
 
 ;; Well... Is it too simple now?
 
-(defn interpret [ns form]
-  (loop [f (env/set-ns ns form)]
+(defn interpret [form]
+  (loop [f form]
     (debug/trace! "step")
     (let [next (walk f {})] ; always restart with empty env. Stateless.
       (if (= f next)

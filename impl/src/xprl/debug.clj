@@ -33,3 +33,16 @@
 
 ;; storage location for errors when invoking clj externals. akin to *e
 (defonce *pfn (atom nil))
+
+;; TODO: Now if I could only reverse these before printing, it would be a lot
+;; easier to read...
+(defmacro deftracefn [name args & body]
+  (let [farg  (first args)
+        input (cond
+                (symbol? farg) farg
+                (map? farg)    (get farg :as)
+                true           (assert false))]
+    `(defn ~name ~args
+       (let [v# (do ~@body)]
+         (trace! "---" ~(str name) "---\n" ~input "\n-->\n" v# "\n---")
+         v#))))

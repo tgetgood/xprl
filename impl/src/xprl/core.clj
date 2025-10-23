@@ -22,23 +22,23 @@
 (defn env-updater [env]
   (fn [l]
     (let [[sym value] l
-          k (if (ast/incomplete? sym) (i/interpret @env sym) sym)
-          v (if (ast/incomplete? value) (i/interpret @env value) value)]
+          k (if (ast/incomplete? sym) (i/interpret sym) sym)
+          v (if (ast/incomplete? value) (i/interpret value) value)]
       (swap! env env/ns-intern k v))))
 
 (defn with-return [ccs cb]
   (assoc ccs (ast/xkeys :return) cb))
 
 (defn go!
-  ([env f] (i/interpret env (ast/immediate f)))
-  ([env f conts] (i/interpret env (ast/ctx conts (ast/immediate f)))))
+  ([env f] (i/interpret (ast/immediate (env/set-ns env f))))
+  ([env f conts] (i/interpret (ast/ctx conts (ast/immediate (env/set-ns env f))))))
 
 (defn evv [s]
   (go! @the-env (:form (r/read (r/string-reader s)))))
 
 (defn ev [s]
   (let [conts {(ast/xkeys :env)   (env-updater the-env)
-               (ast/xkeys :return) #(println (i/interpret @the-env %))
+               (ast/xkeys :return) #(println (i/interpret %))
                (ast/xkeys :error)  (fn [x]
                                      (println "Error: " x))}]
     (go! @the-env (:form (r/read (r/string-reader s))) conts)))
@@ -60,7 +60,7 @@
         (if (= :eof form)
           'EOF
           (do
-            (go! @envatom form (with-return conts #(println (i/interpret env %))))
+            (go! @envatom form (with-return conts #(println (i/interpret %))))
             (recur reader)))))))
 
 (defn reload! [fname]
