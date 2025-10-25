@@ -15,17 +15,17 @@
 
 (deftracefn apply [{:keys [head tail] :as form}]
   (cond
-    (ast/external? head)   ((:fn head) form) ; Punt to external interpreter.
-    (ast/μ? head)          (env/bind head tail)
-    true                   (apply-error form)))
+    (ast/external? head) ((:fn head) form) ; Punt to external interpreter.
+    (ast/μ? head)        (env/bind head tail)
+    true                 (apply-error form)))
 
 ;;;;; Eval
 
 (defn resolve [{sym :form :as im}]
   (if (ast/resolved? sym)
-    (if (:val sym)
-      (:val sym)
-      im)
+    (if (nil? (:val sym))
+      im
+      (:val sym))
     (throw (RuntimeException. (str "unbound symbol: " sym)))))
 
 (deftracefn eval [{form :form :as im}]

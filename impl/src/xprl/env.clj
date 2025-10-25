@@ -6,6 +6,13 @@
 (def empty-ns
   {})
 
+(defn sym-replace [subs form]
+  (let [f   (fn [x] (if (contains? subs x) (get subs x) x))
+        rec (partial sym-replace subs)]
+    (if
+        (ast/resolved? form) (f form) ; DON'T walk into resolved values.
+        (walk/walk rec f form))))
+
 (defn ns-intern [ns sym val]
   (assoc ns (ast/unresolve sym) val))
 
@@ -16,18 +23,14 @@
   (walk/postwalk (fn [x] (if (contains? subs x) (get subs x) x)) form))
 
 (defn set-ns [ns body]
-  (let [binds (into {} (map (fn [[k v]]
-                              (assert (not (ast/resolved? k)))
-                              [k (ast/->Resolved k :ns v)])) ns)]
-    (ast-replace binds body)))
+  (sym-replace (into {} (map (fn [[k v]] [k (ast/resolved k v)])) ns) body))
 
 (defn capture [args]
-  (let [[name params body] (if (= 3 (count args)) args (into [nil] args))
-        p                  (ast/capture params)
-        n                  (when name (ast/capture name))]
-    [n p (ast-replace (merge {params p} (when name {name n})) body)]))
+  (let [syms (mapv ast/capture (butlast args))
+        subs (apply hash-map (interleave (butlast args) syms))]
+    (conj syms (sym-replace subs (last args)))))
 
 (defn bind [{:keys [name params body] :as μ} args]
   (let [subs (merge {params (ast/resolve params args)}
                     (when name {name (ast/resolve name μ)}))]
-    (ast-replace subs body)))
+    (sym-replace subs body)))

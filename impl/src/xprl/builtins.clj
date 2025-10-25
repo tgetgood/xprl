@@ -114,7 +114,9 @@
         (assoc app :tail [p' (i/walk t benv) (i/walk f benv)])
         ;; if p resolves, don't walk the dead branch: it might not be safe to do so.
         ;; e.g. (select ~(empty? xs) [] ~(first xs))
-        (if p' t f)))))
+        (do
+          (assert (boolean? p'))
+          (if p' t f))))))
 
 (defn with-channels [{[chmap body] :tail :as app}]
   #_(wait-until-evaluated

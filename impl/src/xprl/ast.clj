@@ -62,29 +62,39 @@
   (toString [_]
     (str sym "=" #_form)))
 
+(defn resolved [sym val]
+  (assert (unresolved? sym))
+  (->Resolved sym (gensym sym) val))
+
 (defn resolved? [x]
   (instance? Resolved x))
 
 (defn unresolve [x]
   (if (resolved? x)
-    (:sym x)
+    (recur (:sym x))
     x))
 
 (defn capture [sym]
   (if (resolved? sym)
     (recur (unresolve sym))
-    (->Resolved sym (gensym (str sym)) nil)))
+    (resolved sym nil)))
 
-(defn resolve [{:keys [sym uuid]} val]
-  (if (resolved? sym)
-    (recur sym val)
-    (->Resolved sym uuid val)))
+(defn captured? [sym]
+  (and (resolved? sym) (unresolved? (:sym sym)) (nil? (:val sym))))
+
+(defn resolve [sym val]
+  (assert (captured? sym))
+  (->Resolved (:sym sym) (:uuid sym) val))
 
 (defn symbol? [s]
   (or
    (instance? Symbol s)
    (instance? Resolved s)))
 
+(defn sym [s]
+  (cond
+    (instance? Symbol s) s
+    (instance? Resolved s) (:sym s)))
 
 (defn elements [l]
   l)
@@ -149,7 +159,10 @@
 
 (defn μ
   ([params body] (μ nil params body))
-  ([name params body] (->Mu name params body)))
+  ([name params body]
+   (assert (or nil? name) (resolved? name))
+   (assert (resolved? params))
+   (->Mu name params body)))
 
 (defn μ? [x]
   (instance? Mu x))
