@@ -78,7 +78,10 @@
   (ast/inspect (:form (r/read (r/string-reader s) @the-env))))
 
 (defn test []
-  (let [conts {(ast/xkeys :env) (env-updater the-env)}]
+  (let [conts {(ast/xkeys :env)    (env-updater the-env)
+               (ast/xkeys :return) #(println (i/interpret %))}
+        retwrap (fn [f] (ast/pair (ast/symbol "emit")
+                                  [(ast/xkeys :return) (ast/immediate f)]))]
     (loop [reader (r/file-reader testxprl)]
       (let [reader (r/read reader)
             form1  (:form reader)
@@ -90,9 +93,9 @@
             (println "Evaluating: " form1)
             (println "---")
             (print "result: ")
-            (go! @the-env form1 (with-return conts println))
+            (go! @the-env (retwrap form1) conts)
             (print "expected: " )
-            (go! @the-env form2 (with-return conts println))
+            (go! @the-env (retwrap form2) conts)
             (println )
             (recur reader)))))))
 
