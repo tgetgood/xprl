@@ -60,7 +60,7 @@
 (defrecord Resolved [sym uuid val]
   Object
   (toString [_]
-    (str sym "=" (if (nil? val) "C=" "R="))))
+    (str sym "^" (when (nil? val) "?"))))
 
 (defn resolved [sym val]
   (assert (unresolved? sym) sym)
