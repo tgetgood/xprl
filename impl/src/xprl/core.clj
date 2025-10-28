@@ -24,6 +24,7 @@
     (let [[sym value] l
           k (if (ast/incomplete? sym) (i/interpret sym) sym)
           v (if (ast/incomplete? value) (i/interpret value) value)]
+      ;; (assert (ast/symbol? k))
       (swap! env env/ns-intern k v))))
 
 (defn with-return [ccs cb]

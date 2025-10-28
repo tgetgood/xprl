@@ -61,6 +61,11 @@
                               (apply form))
     (ast/emission? form)    (let [form (update form :kvs walk env)]
                               (if (:μ? env) form (sys/emit (:ctx env) form)))
+    ;; This is no good because `walk` will never settle if we keep changing nodes.
+    ;; (ast/μ? form)           (let [p' (ast/capture (:params form))]
+    ;;                           (-> (env/sym-replace {(:params form) p'} form)
+    ;;                               (assoc :params p')
+    ;;                               (update :body walk (assoc env :μ? true))))
 
     ;; TODO: I'll need a special node type for capture at this rate.
     (ast/ctx? form)  (update form :form walk (update env :ctx merge (:chs form)))

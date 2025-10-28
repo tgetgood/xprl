@@ -60,10 +60,10 @@
 (defrecord Resolved [sym uuid val]
   Object
   (toString [_]
-    (str sym "=" #_form)))
+    (str sym "=" (if (nil? val) "C=" "R="))))
 
 (defn resolved [sym val]
-  (assert (unresolved? sym))
+  (assert (unresolved? sym) sym)
   (->Resolved sym (gensym sym) val))
 
 (defn resolved? [x]
@@ -436,7 +436,9 @@
   Resolved
   (insp [{:keys [sym val]} w level]
     (spacer w level)
-    (.write w "R[")
+    (if (nil? val)
+      (.write w "C[")
+      (.write w "R["))
     (.write w (str sym))
     (.write w "]\n"))
 
