@@ -73,6 +73,7 @@
     (ast/pair? form) (-> form (update :head walk env) (update :tail walk env))
     (ast/list? form) (into [] (map #(walk % env)) form)
     (ast/map? form)  (into {} (map (fn [e] (mapv (fn [x] (walk x env)) e))) form)
+    (= :error form)  (throw (RuntimeException. "fatal error"))
     true             form))
 
 ;; Well... Is it too simple now?

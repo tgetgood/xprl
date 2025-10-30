@@ -8,7 +8,8 @@
   {})
 
 (defn strip [m {:keys [name params]}]
-  (apply dissoc m (map ast/sym (remove nil? [name params]))))
+  (let [ks (into #{} (comp (remove nil?) (map ast/sym)) [name params])]
+    (into {} (remove #(contains? ks (ast/sym (key %)))) m)))
 
 (defn rep [subs] (fn [form] (if (contains? subs form) (get subs form) form)))
 
@@ -24,7 +25,9 @@
     (empty? subs)      form
     (ast/symbol? form) (let [next ((repfn subs) form)]
                          (if (= next form)
-                           (update form :val sym-replace repfn subs)
+                           (if (ast/resolved? form)
+                             (update form :val sym-replace repfn subs)
+                             form)
                            next))
     (ast/μ? form)      (update form :body sym-replace repfn (strip subs form))
     true               (walk/walk #(sym-replace % repfn subs) (repfn subs) form)))
@@ -54,5 +57,5 @@
                     (when name {name (ast/resolve name μ)}))
         _    (assert (every? ast/captured? (keys subs)))
         next (sym-replace body rep subs)]
-    (trace! "bind" subs "\n" body " \n-->\n" next)
+    (trace! "bind" (into {} (map (fn [[k v]] [k (:val v)])) subs) "\n" body " \n-->\n" next)
     next))
