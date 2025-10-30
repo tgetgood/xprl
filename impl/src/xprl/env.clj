@@ -21,9 +21,13 @@
 
 (defn sym-replace [form repfn subs]
   (cond
-    (empty? subs) form
-    (ast/μ? form) (update form :body sym-replace repfn (strip subs form))
-    true          (walk/walk #(sym-replace % repfn subs) (repfn subs) form)))
+    (empty? subs)      form
+    (ast/symbol? form) (let [next ((repfn subs) form)]
+                         (if (= next form)
+                           (update form :val sym-replace repfn subs)
+                           next))
+    (ast/μ? form)      (update form :body sym-replace repfn (strip subs form))
+    true               (walk/walk #(sym-replace % repfn subs) (repfn subs) form)))
 
 (defn ns-intern [ns sym val]
   (assert (ast/unresolved? sym) sym)
@@ -40,13 +44,15 @@
 
 (defn capture [args]
   (let [syms (mapv ast/capture (butlast args))
-        subs (apply hash-map (interleave (map ast/unresolve (butlast args)) syms))]
-    (trace! "capture" subs)
-    (conj syms (sym-replace (last args) crep subs))))
+        subs (apply hash-map (interleave (map ast/unresolve (butlast args)) syms))
+        next (conj syms (sym-replace (last args) crep subs))]
+    (trace! "capture" subs "\n" args "\n-->\n" next)
+    next))
 
 (defn bind [{:keys [name params body] :as μ} args]
   (let [subs (merge {params (ast/resolve params args)}
-                    (when name {name (ast/resolve name μ)}))]
-    (trace! "bind" subs)
-    (assert (every? ast/captured? (keys subs)))
-    (sym-replace body rep subs)))
+                    (when name {name (ast/resolve name μ)}))
+        _    (assert (every? ast/captured? (keys subs)))
+        next (sym-replace body rep subs)]
+    (trace! "bind" subs "\n" body " \n-->\n" next)
+    next))
