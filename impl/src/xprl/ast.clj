@@ -22,6 +22,7 @@
 
 ;;;;; AST
 
+(def ^:dynamic *verbose* false)
 
 (defn split-symbolic [s]
   (cond
@@ -60,7 +61,7 @@
 (defrecord Resolved [sym uuid val]
   Object
   (toString [_]
-    (str sym "^" (when (nil? val) "?"))))
+    (str sym "^" (if (nil? val) "?" (when *verbose* (str "=" val))))))
 
 (defn resolved [sym val]
   (assert (unresolved? sym) sym)
@@ -440,7 +441,9 @@
       (.write w "C[")
       (.write w "R["))
     (.write w (str sym))
-    (.write w "]\n"))
+    (.write w "]\n")
+    (when (and *verbose* (not (nil? val)))
+      (insp val w (inc level))))
 
   Application
   (insp [form ^Writer w level]
@@ -495,6 +498,15 @@
     (spacer w level)
     (.write w "conc\n")
     (dorun (map #(insp % w (inc level)) elements)))
+
+  Context
+  (insp [{:keys [chs form]} ^Writer w level]
+    (spacer w level)
+    (.write w "Ctx[")
+    (run! #(.write w (str %)) (interpose " " (sort-by :names (keys chs))))
+    (.write w "]\n")
+    (when form
+      (insp form w (inc level))))
 
   Emission
   (insp [form ^Writer w level]

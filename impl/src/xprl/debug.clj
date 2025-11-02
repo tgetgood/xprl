@@ -1,4 +1,5 @@
-(ns xprl.debug)
+(ns xprl.debug
+  (:require [xprl.ast :refer [inspect]]))
 
 (def ^:dynamic *verbose* false)
 
@@ -12,13 +13,10 @@
   (apply println args)
   (println))
 
-(defn trace! [& args]
-  (when *verbose*
-    (swap! counter inc)
-    (if (< 0 *sample-interval*)
-      (when (= 0 (mod @counter *sample-interval*))
-        (print! args))
-      (print! args))))
+(defmacro trace! [& args]
+  `(when *verbose*
+     (apply println [~@args])
+     (println)))
 
 (defn provenance [x]
   (::provenance (meta x)))
@@ -44,5 +42,7 @@
                 true           (assert false))]
     `(defn ~name ~args
        (let [v# (do ~@body)]
-         (trace! "---" ~(str name) "---\n" ~input "\n-->\n" v# "\n---")
+         (binding [ast/*verbose* true]
+           ;; FIXME: Don't build these strings unless *verbose* is true!
+           (trace! "---" ~(str name) "---\n" ~input "\n-->\n" v# "\n---"))
          v#))))

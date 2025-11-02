@@ -68,6 +68,11 @@
   (μ x
      ~((μ ~(nth* ~x 1) ~(nth* ~x 3)) . ~(nth* ~x 2))))
 
+(defμ let-test x
+  (let1 bindings ~(nth* ~x 1)
+        ~(let1 body ~(nth* ~x 2)
+               ~(let1 ~(nth* ~bindings 1) ~(nth* ~bindings 2)
+                      ~body))))
 (defμ let* x
   (let1 bindings ~(nth* ~x 1)
         ~(let1 body ~(nth* ~x 2)
