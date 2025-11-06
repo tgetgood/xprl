@@ -44,5 +44,6 @@
        (let [v# (do ~@body)]
          (binding [ast/*verbose* true]
            ;; FIXME: Don't build these strings unless *verbose* is true!
-           (trace! "---" ~(str name) "---\n" ~input "\n-->\n" v# "\n---"))
+           (trace! "---" ~(str name) "in" (:bindings ~(second args))"---\n"
+                   ~input "\n-->\n" v# "\n---"))
          v#))))

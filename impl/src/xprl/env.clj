@@ -23,11 +23,13 @@
   (assert (ast/unresolved? sym) sym)
   (get env sym))
 
+;; Curiously, it's best to always reset the entire set of bindings rather than
+;; allow it to grow with scope.
 (defn incorporate [env {:keys [bindings]}]
-  (update env :bindings merge bindings))
+  (assoc env :bindings bindings))
 
-(defn bind [{:keys [name params body] :as μ} args]
-  (ast/lex (merge {params args} (when name {name μ})) body))
+(defn bind [bindings {:keys [name params body] :as μ} args]
+  (ast/lex (merge bindings {params args} (when name {name μ})) body))
 
 (defn walk-μ [env {:keys [name params]}]
   (-> env
@@ -41,32 +43,3 @@
   ;; The name and params of a μ must be naked symbols. It doesn't make sense for
   ;; them to refer to anything until the μ receives arguments.
   (conj (mapv ast/unresolve (butlast args)) (last args)))
-
-(defn mdiff [m1 m2]
-  (reduce dissoc m1 (keys m2)))
-
-;; HACK: I can't think of any other reasonably compact way to avoid walking the
-;; entire tree every time...
-(def hackee (proxy [Exception] ["break!"]))
-
-(defn bound?* [bindings form]
-  (cond
-    (empty? bindings)  form
-    (ast/lex? form)    (bound?* (mdiff bindings (:bindings form)) (:form form))
-    (ast/symbol? form) (when (contains? bindings (ast/sym form))
-                         (throw hackee))
-    (ast/μ? form)      (bound?* (dissoc bindings (:name form) (:params form))
-                                (:body form))
-    (map-entry? form)  [(bound?* bindings (key form)) (bound?* bindings (val form))]
-    (coll? form)       (mapv (partial bound?* bindings) form)))
-
-(defn bound? [{:keys [bindings form]}]
-  (let [c (try
-            (bound?* bindings form)
-            false
-            (catch Exception e
-              (if (= e hackee)
-                true
-                (throw e))))]
-    (trace! "checking:" bindings "on" form "::" c)
-    c))

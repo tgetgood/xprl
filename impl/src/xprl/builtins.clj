@@ -17,7 +17,7 @@
       (try
         (apply f tail)
         (catch Exception e
-          (reset! debug/*pfn {:f f :args tail :e e})
+          (reset! debug/*pfn {:f f :args tail :env env :e e})
           (ast/inspect (ast/application f tail))
           (println e)
           :error)))))

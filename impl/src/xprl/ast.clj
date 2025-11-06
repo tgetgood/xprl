@@ -538,6 +538,66 @@
 (defn inspect [x]
   (insp x *out* 0))
 
+;;;;; Symbolic
+
+(defprotocol Symbolic
+  (free-symbols [this]))
+
+(defn has-free-symbols? [x]
+  (not (empty? (free-symbols x))))
+
+(extend-protocol Symbolic
+  Object
+  (free-symbols [_] #{})
+
+  Symbol
+  (free-symbols [s]
+    #{s})
+
+  Pair
+  (free-symbols [{:keys [head tail]}]
+    (set/union (free-symbols head) (free-symbols tail)))
+
+  Application
+  (free-symbols [{:keys [head tail]}]
+    (set/union (free-symbols head) (free-symbols tail)))
+
+  Immediate
+  (free-symbols [{:keys [form]}]
+    (free-symbols form))
+
+  LexicalBinding
+  (free-symbols [{:keys [form]}]
+    (free-symbols form))
+
+  Context
+  (free-symbols [{:keys [form]}]
+    (free-symbols form))
+
+  Mu
+  (free-symbols [{:keys [name params body]}]
+    (disj (free-symbols body) name params))
+
+  Emission
+  (free-symbols [{:keys [kvs]}]
+    (transduce (map free-symbols) set/union kvs))
+
+  clojure.lang.PersistentVector
+  (free-symbols [xs]
+    (transduce (map free-symbols) set/union xs))
+
+  clojure.lang.MapEntry
+  (free-symbols [e]
+    (set/union (free-symbols (key e)) (free-symbols (val e))))
+
+  clojure.lang.PersistentArrayMap
+  (free-symbols [xs]
+    (transduce (map free-symbols) set/union xs))
+
+  clojure.lang.PersistentHashMap
+  (free-symbols [xs]
+    (transduce (map free-symbols) set/union xs)))
+
 ;;;;; Sugar
 
 (def xkeys
@@ -549,4 +609,4 @@
 (defn incomplete? [x]
   ;; Lexicals are incomplete because a complete expression wouldn't have any
   ;; unbound variables.
-  (or (lex? x) (immediate? x) (application? x)))
+  (or (immediate? x) (application? x) (has-free-symbols? x)))

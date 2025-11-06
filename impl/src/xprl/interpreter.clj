@@ -14,21 +14,19 @@
 (deftracefn apply [{:keys [head tail] :as form} env]
   (cond
     (ast/external? head) ((:fn head) form env) ; Punt to external interpreter.
-    (ast/μ? head)        (env/bind head tail)
+    (ast/μ? head)        (env/bind (:bindings env) head tail)
     true                 (apply-error form)))
 
 ;;;;; Eval
 
 (defn resolve [{sym :form :as im} {:keys [bindings] :as env}]
-  (println sym "===" env)
   (let [s (ast/sym sym)]
     (cond
-      (contains? bindings s) (get bindings s)
+      (contains? bindings s) (ast/lex (dissoc bindings s) (get bindings s))
       (ast/resolved? sym)    (:val sym)
       true                   im)))
 
 (deftracefn eval [{form :form :as im} env]
-  (println "eeee" form env)
   (cond
     (ast/symbol? form) (resolve im env)
     ;; (I (B X)) => (B (I X)) i.e. evaluation uses inner bindings
@@ -60,7 +58,6 @@
                     []))))
 
 (deftracefn walk [form env]
-  (println "walking" form "in" env)
   (cond
     (ast/immediate? form)   (if (ast/incomplete? (:form form))
                               (let [form (update form :form walk env)]
@@ -79,10 +76,8 @@
                                 form
                                 (try-emission! (update form :kvs walk env) env)))
     (ast/lex? form)         (let [env  (env/incorporate env form)
-                                  _    (println "entering lex" env "::" (:form form))
                                   next (update form :form walk env)]
-                              (println "exiting lex" env "::" (:form form))
-                              (if (env/bound? next)
+                              (if (ast/has-free-symbols? next)
                                 next
                                 (:form next)))
 
