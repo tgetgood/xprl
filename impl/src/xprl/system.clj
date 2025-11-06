@@ -4,11 +4,12 @@
 
 (def root-channels {})
 
-(defn emit [chs {msgs :kvs :as e}]
-  (trace! "emitting" msgs "on" (sort-by :names (keys chs)))
-  (run! (fn [[k v]]
-          (assert (ast/keyword? k) (str (type k) k))
-          (if (contains? chs k)
-            ((get chs k) v)
-            (println "message to unbound channel: " k v)))
-        msgs))
+(defn emit! [channels k v]
+  (trace! "emitting" [k v] "on" (sort-by :names (keys channels)))
+  (assert (ast/keyword? k) (str (type k) k))
+  (if (contains? channels k)
+    ((get channels k) v) ; keep context on messages!
+    ;; TODO: use the "unbound" channel if it exists to report these errors.
+    ;; otherwise use the error channel if it exists
+    ;; otherwise report to repl
+    (println "message to unbound channel: " k v)))

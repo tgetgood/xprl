@@ -58,14 +58,14 @@
 (defn unresolved? [s]
   (instance? Symbol s))
 
-(defrecord Resolved [sym uuid val]
+(defrecord Resolved [sym val]
   Object
   (toString [_]
-    (str sym "^" (if (nil? val) "?" (when *verbose* (str "=" val))))))
+    (str sym "^" (when *verbose* (str "=" val)))))
 
-(defn resolved [sym val]
+(defn resolve [sym val]
   (assert (unresolved? sym) sym)
-  (->Resolved sym (gensym sym) val))
+  (->Resolved sym  val))
 
 (defn resolved? [x]
   (instance? Resolved x))
@@ -75,18 +75,6 @@
     (recur (:sym x))
     x))
 
-(defn capture [sym]
-  (if (resolved? sym)
-    (recur (unresolve sym))
-    (resolved sym nil)))
-
-(defn captured? [sym]
-  (and (resolved? sym) (unresolved? (:sym sym)) (nil? (:val sym))))
-
-(defn resolve [sym val]
-  (assert (captured? sym))
-  (->Resolved (:sym sym) (:uuid sym) val))
-
 (defn symbol? [s]
   (or
    (instance? Symbol s)
@@ -95,7 +83,21 @@
 (defn sym [s]
   (cond
     (instance? Symbol s) s
-    (instance? Resolved s) (:sym s)))
+    (resolved? s) (:sym s)))
+
+;; A context barrier basically says that everything beneath this node is foreign
+;; to what's above it and should not be processed in the external context.
+(defrecord LexicalBinding [bindings form]
+  Object
+  (toString [_]
+    (str bindings "::" form)))
+
+(defn lex [bindings form]
+  (->LexicalBinding bindings form))
+
+(defn lex? [form]
+  (instance? LexicalBinding form))
+
 
 (defn elements [l]
   l)
@@ -112,7 +114,6 @@
 
 (defn set? [x]
   (instance? clojure.lang.PersistentHashSet x))
-
 
 (defrecord Pair [head tail]
   Object
@@ -144,7 +145,9 @@
 (defrecord Application [head tail]
   Object
   (toString [_]
-    (str "#" (str (pair head tail)))))
+    (if (and (= "#F[nth*]" (str head)) (int? (last tail)))
+      (str "|" (first tail) "|_" (last tail))
+      (str "#" (str (pair head tail))))))
 
 (defn application [head tail]
   (->Application head tail))
@@ -161,8 +164,8 @@
 (defn μ
   ([params body] (μ nil params body))
   ([name params body]
-   (assert (or nil? name) (resolved? name))
-   (assert (resolved? params))
+   (assert (or nil? name) (instance? Symbol name))
+   (assert (instance? Symbol params))
    (->Mu name params body)))
 
 (defn μ? [x]
@@ -258,6 +261,11 @@
 (ps Resolved)
 
 (defmethod pp/simple-dispatch Resolved [o]
+  (pp/write-out (clojure.core/symbol (str o))))
+
+(ps LexicalBinding)
+
+(defmethod pp/simple-dispatch LexicalBinding [o]
   (pp/write-out (clojure.core/symbol (str o))))
 
 ;;; Keyword
@@ -435,15 +443,21 @@
     (.write w "]\n"))
 
   Resolved
-  (insp [{:keys [sym val]} w level]
+  (insp [{:keys [sym val]} ^Writer w level]
     (spacer w level)
-    (if (nil? val)
-      (.write w "C[")
-      (.write w "R["))
+    (.write w "R[")
     (.write w (str sym))
     (.write w "]\n")
     (when (and *verbose* (not (nil? val)))
       (insp val w (inc level))))
+
+  LexicalBinding
+  (insp [{:keys [bindings form]} ^Writer w level]
+    (spacer w level)
+    (.write w "B")
+    (when *verbose* (.write w (str bindings)))
+    (.write w "\n")
+    (insp form w (inc level)))
 
   Application
   (insp [form ^Writer w level]
@@ -502,9 +516,12 @@
   Context
   (insp [{:keys [chs form]} ^Writer w level]
     (spacer w level)
-    (.write w "Ctx[")
-    (run! #(.write w (str %)) (interpose " " (sort-by :names (keys chs))))
-    (.write w "]\n")
+    (.write w "Ctx")
+    (when *verbose*
+      (.write w "[")
+      (run! #(.write w (str %)) (interpose " " (sort-by :names (keys chs))))
+      (.write w "]"))
+    (.write w "\n")
     (when form
       (insp form w (inc level))))
 

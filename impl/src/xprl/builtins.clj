@@ -93,6 +93,12 @@
         (apply ast/μ (env/capture args))
         ;; if the names don't resolve, it ~should~ be safe to walk the body
         ;; review: but what if one of them resolves and the other doesn't?
+        ;;
+        ;; We *could* put a barrier in here saying "don't resolve anything",
+        ;; i.e. just wipe out the lexical env beneath this point so that nothing
+        ;; gets evaluated out of phase.
+        ;;
+        ;; I don't think that's necessary, but it's something to keep in mind.
         (update app :tail i/walk benv)))))
 
 (defn emit [{kvs :tail :as app}]
