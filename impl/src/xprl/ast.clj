@@ -547,4 +547,6 @@
    :env     (keyword "env")})
 
 (defn incomplete? [x]
-  (or (immediate? x) (application? x)))
+  ;; Lexicals are incomplete because a complete expression wouldn't have any
+  ;; unbound variables.
+  (or (lex? x) (immediate? x) (application? x)))

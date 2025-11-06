@@ -6,7 +6,6 @@
 
 (defn emit! [channels k v]
   (trace! "emitting" [k v] "on" (sort-by :names (keys channels)))
-  (assert (ast/keyword? k) (str (type k) k))
   (if (contains? channels k)
     ((get channels k) v) ; keep context on messages!
     ;; TODO: use the "unbound" channel if it exists to report these errors.

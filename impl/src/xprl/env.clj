@@ -6,8 +6,9 @@
    [xprl.debug :refer [trace!]]))
 
 ;; TODO: Rewrite this entire ns. It's just a mess.
-(def empty-ns
-  {})
+(def empty-ns {})
+
+(def empty-env {:bindings {} :ctx {}})
 
 (defn set-ns [ns body]
   (trace! "ns replace" (sort-by :names (keys ns)))
@@ -15,7 +16,7 @@
   (walk/postwalk #(if (contains? ns %) (get ns %) %) body))
 
 (defn ns-intern [ns sym val]
-  (assert (ast/unresolved? sym) sym)
+  (assert (ast/unresolved? sym) (ast/incomplete? sym))
   (assoc ns sym val))
 
 (defn lookup [env sym]
@@ -57,13 +58,15 @@
     (ast/μ? form)      (bound?* (dissoc bindings (:name form) (:params form))
                                 (:body form))
     (map-entry? form)  [(bound?* bindings (key form)) (bound?* bindings (val form))]
-    (coll? form)       (map (partial bound?* bindings) form)))
+    (coll? form)       (mapv (partial bound?* bindings) form)))
 
 (defn bound? [{:keys [bindings form]}]
-  (try
-    (bound?* bindings form)
-    false
-    (catch Exception e
-      (if (= e hackee)
-        true
-        (throw e)))))
+  (let [c (try
+            (bound?* bindings form)
+            false
+            (catch Exception e
+              (if (= e hackee)
+                true
+                (throw e))))]
+    (trace! "checking:" bindings "on" form "::" c)
+    c))

@@ -5,21 +5,15 @@
    [xprl.env :as env]
    [xprl.interpreter :as i]))
 
-(def benv
-  "Env for builtins to call back into the interpreter."
-  ;; FIXME: the key :μ? is far too specific. Something like "supress-emission"
-  ;; would be more to the point.
-  {:μ? true})
-
 ;;;;; simple primitive fns
 
 (defn call-primitive-fn
   "given an external (clojure) function, returns an applicative wrapper to call
   it from xprl."
   [f]
-  (fn [{tail :tail :as form}]
+  (fn [{tail :tail :as form} env]
     (if (or (ast/incomplete? tail) (some ast/incomplete? tail))
-      (update form :tail i/walk benv)
+      (update form :tail i/walk (assoc env :μ? true))
       (try
         (apply f tail)
         (catch Exception e
@@ -77,17 +71,17 @@
 
 ;;;;; specialish forms
 
-(defmacro check-tail [form body]
-  {:style/indent 1}
+(defmacro check-tail [env form body]
+  {:style/indent 2}
   `(if (ast/incomplete? (:tail ~form))
-     (update ~form :tail i/walk benv)
+     (update ~form :tail i/walk (assoc ~env :μ? true))
      ~body))
 
 (defn μ-ready? [args]
   (every? ast/symbol? (butlast args)))
 
-(defn μ [{args :tail :as app}]
-  (check-tail app
+(defn μ [{args :tail :as app} env]
+  (check-tail env app
     (let [names (ast/list (butlast args))]
       (if (every? ast/symbol? names)
         (apply ast/μ (env/capture args))
@@ -99,25 +93,31 @@
         ;; gets evaluated out of phase.
         ;;
         ;; I don't think that's necessary, but it's something to keep in mind.
-        (update app :tail i/walk benv)))))
+        (update app :tail i/walk (assoc env :μ? true))))))
 
-(defn emit [{kvs :tail :as app}]
+(defn emit [{kvs :tail :as app} {:keys [bindings]}]
   (assert (even? (count kvs)))
   (ast/emission
-   (mapv (fn [[k v]] [(ast/immediate k) v]) (partition 2 kvs))))
+   ;; REVIEW: We reset the lexical bindings on the message since it may be sent
+   ;; before being walked and must carry its context with it to the receiver!
+   (mapv (fn [[k v]] [(ast/immediate k) (ast/lex bindings v)])
+         (partition 2 kvs))))
 
-(defn select [{[p t f] :tail :as app}]
-  (check-tail app
+;; TODO: revisit the smalltalk style impl of if. I think I can control
+;; evaluation better that way and not have to worry about walking branches not
+;; taken and all of the possible errors that come with that.
+(defn select [{[p t f] :tail :as app} env]
+  (check-tail env app
     ;; FIXME: What the hell do we do if there's an `emit` in the condition of a
     ;; select? Just kick them up along with emissions from the winning branch?
     ;; That's logical, but what a shitshow. And whose job is it to make sure
     ;; that happens properly
 
     ;; first walk *just p*. that's important.
-    (let [p' (i/walk p benv)]
+    (let [p' (i/walk p env)]
       (if (ast/incomplete? p')
         ;; if p is not a bool, it ~should~ be safe to walk both `t` & `f`...
-        (assoc app :tail [p' (i/walk t benv) (i/walk f benv)])
+        (assoc app :tail [p' (i/walk t env) (i/walk f env)])
         ;; if p resolves, don't walk the dead branch: it might not be safe to do so.
         ;; e.g. (select ~(empty? xs) [] ~(first xs))
         (do
