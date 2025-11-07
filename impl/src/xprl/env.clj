@@ -78,6 +78,6 @@
     (ast/μ? x)      (update x :body pushdown (walk-μ env x))
     (ast/symbol? x) (if (bound? env x) (ast/lex {(ast/sym x) (resolve env x)} x) x)
     (map-entry? x)  [(pushdown (key x) env) (pushdown (val x) env)]
-    (record? x)     (reduce (fn [r x] (conj r (pushdown x env))) x x)
+    (record? x)     (reduce (fn [r k] (update r k pushdown env)) x (keys x))
     (coll? x)       (into (empty x) (map #(pushdown % env)) x)
     true            x))
