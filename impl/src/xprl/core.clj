@@ -20,6 +20,7 @@
 (def testxprl (str srcpath "test.xprl"))
 
 (def te (atom nil))
+
 (defn env-updater [env]
   (fn [l]
     (reset! te l)
@@ -108,6 +109,6 @@
   `(binding [debug/*verbose* true] ~x))
 
 (defmacro ddb [x]
-   `(binding [debug/*verbose* true
-              debug/*sample-interval* 1000]
-      ~x) )
+  `(binding [debug/*verbose*         true
+             debug/*sample-interval* 1000]
+     ~x))
