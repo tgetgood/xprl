@@ -13,7 +13,9 @@
   [f]
   (fn [{tail :tail :as form} env]
     (if (or (ast/incomplete? tail) (some ast/incomplete? tail))
-      (update form :tail i/walk (assoc env :μ? true))
+      (-> form
+       (update :tail i/walk (assoc env :μ? true))
+       (update :tail env/flatten-lexical))
       (try
         (apply f tail)
         (catch Exception e
@@ -78,23 +80,19 @@
      (update ~form :tail i/walk (assoc ~env :μ? true))
      ~body))
 
-(defn μ-ready? [args]
-  (every? ast/symbol? (butlast args)))
-
 (defn μ [{args :tail :as app} env]
   (check-tail env app
-    (let [names (ast/list (butlast args))]
-      (if (every? ast/symbol? names)
-        (apply ast/μ (env/capture args))
-        ;; if the names don't resolve, it ~should~ be safe to walk the body
-        ;; review: but what if one of them resolves and the other doesn't?
-        ;;
-        ;; We *could* put a barrier in here saying "don't resolve anything",
-        ;; i.e. just wipe out the lexical env beneath this point so that nothing
-        ;; gets evaluated out of phase.
-        ;;
-        ;; I don't think that's necessary, but it's something to keep in mind.
-        (update app :tail i/walk (assoc env :μ? true))))))
+    (if-let [args (env/capture args)]
+      (apply ast/μ args)
+      ;; if the names don't resolve, it ~should~ be safe to walk the body
+      ;; REVIEW: but what if one of them resolves and the other doesn't?
+      ;;
+      ;; We *could* put a barrier in here saying "don't resolve anything",
+      ;; i.e. just wipe out the lexical env beneath this point so that nothing
+      ;; gets evaluated out of phase.
+      ;;
+      ;; I don't think that's necessary, but it's something to keep in mind.
+      (update app :tail i/walk (assoc env :μ? true)))))
 
 (defn emit [{kvs :tail :as app} _]
   (assert (even? (count kvs)))
@@ -104,29 +102,30 @@
 ;; evaluation better that way and not have to worry about walking branches not
 ;; taken and all of the possible errors that come with that.
 (defn select [{[p t f] :tail :as app} env]
-  (check-tail env app
-    ;; FIXME: What the hell do we do if there's an `emit` in the condition of a
-    ;; select? Just kick them up along with emissions from the winning branch?
-    ;; That's logical, but what a shitshow. And whose job is it to make sure
-    ;; that happens properly
+  (let [env (assoc env :μ? true)]
+    (check-tail env app
+      ;; FIXME: What the hell do we do if there's an `emit` in the condition of a
+      ;; select? Just kick them up along with emissions from the winning branch?
+      ;; That's logical, but what a shitshow. And whose job is it to make sure
+      ;; that happens properly
 
-    ;; first walk *just p*. that's important.
-    (let [p' (i/walk p env)]
-      (if (ast/incomplete? p')
-        ;; if p is not a bool, it ~should~ be safe to walk both `t` & `f`...
-        (assoc app :tail [p' (i/walk t env) (i/walk f env)])
-        ;; if p resolves, don't walk the dead branch: it might not be safe to do so.
-        ;; e.g. (select ~(empty? xs) [] ~(first xs))
-        (do
-          (assert (boolean? p'))
-          (if p' t f))))))
+      ;; first walk *just p*. that's important.
+      (let [p' (i/walk p env)]
+        (if (ast/incomplete? p')
+          ;; if p is not a bool, it ~should~ be safe to walk both `t` & `f`...
+          (assoc app :tail [p' (i/walk t env) (i/walk f env)])
+          ;; if p resolves, don't walk the dead branch: it might not be safe to do so.
+          ;; e.g. (select ~(empty? xs) [] ~(first xs))
+          (do
+            (assert (boolean? p'))
+            (if p' t f)))))))
 
 (defn with-channels [{[chmap body] :tail :as app}]
   #_(wait-until-evaluated
    [chmap]
    (i/walk (ast/ctx chmap body))))
 
-;; todo: builtin macros needed for a working system.
+;; TODO: builtin macros needed for a working system.
 ;;
 ;; emit-recur
 ;; pipe
@@ -155,7 +154,7 @@
 
 ;;;;; the ur context from which all programs derive.
 ;;
-;; i don't really like this being so ad hoc. there will have to be a takeover
+;; I don't really like this being so ad hoc. there will have to be a takeover
 ;; moment when the intended long term context and history system is finally
 ;; built. that is to say there will be a shock in the history where we suddenly
 ;; have no past, no origin. why is bootstrapping so singular like that?

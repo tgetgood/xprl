@@ -80,13 +80,7 @@
    (instance? Symbol s)
    (instance? Resolved s)))
 
-(defn sym [s]
-  (cond
-    (instance? Symbol s) s
-    (resolved? s) (:sym s)))
 
-;; A context barrier basically says that everything beneath this node is foreign
-;; to what's above it and should not be processed in the external context.
 (defrecord LexicalBinding [bindings form]
   Object
   (toString [_]
@@ -100,6 +94,13 @@
 
 (defn block [s form]
   (assoc (lex #{s} form) :block? true))
+
+(defn sym [s]
+  (cond
+    (instance? Symbol s) s
+    (resolved? s)        (:sym s)
+    (lex? s)             (recur (:form s))))
+
 
 (defn elements [l]
   l)
@@ -570,8 +571,10 @@
 
   LexicalBinding
   (free-symbols [{:keys [form bindings block?]}]
-    (transduce (map free-symbols) set/union (free-symbols form)
-               ((if block? identity vals) bindings)))
+    (let [body-syms (reduce disj (free-symbols form)
+                            (if block? [] (keys bindings)))
+          bind-syms (map free-symbols (if block? [] (vals bindings)))]
+      (reduce set/union body-syms bind-syms)))
 
   Context
   (free-symbols [{:keys [form]}]

@@ -1,6 +1,8 @@
 (ns xprl.env
+  ;; FIXME: This namespace is a trash heap of confused concepts.
   (:refer-clojure :exclude [bound? resolve])
   (:require
+   [clojure.set :as set]
    [clojure.walk :as walk]
    [xprl.ast :as ast]
    [xprl.debug :refer [trace!]]))
@@ -23,30 +25,54 @@
   (assert (ast/unresolved? sym) sym)
   (get env sym))
 
+;; REVIEW: Is it permissible to block the binding of a symbol that has no bindings?
 (defn popbind [x]
-  (if (empty? x)
-    x
-    (pop x)))
+  (if (empty? x) x (pop x)))
 
-;; Curiously, it's best to always reset the entire set of bindings rather than
-;; allow it to grow with scope.
 (defn incorporate [env {:keys [bindings block?]}]
   (if block?
     (update env :bindings #(reduce (fn [b k] (update b k popbind)) % bindings))
     (update env :bindings #(reduce (fn [b [k v]] (update b k conj v)) % bindings))))
 
-(defn bind [{:keys [name params body] :as μ} args]
+(defn μ-binding [{:keys [name params body] :as μ} args]
   (ast/lex (merge {params args} (when name {name μ})) body))
 
-(defn bound? [{:keys [bindings block?]} sym]
+(defn bound? [{:keys [bindings]} sym]
   (let [s (ast/sym sym)]
     (when (contains? bindings s)
-      (or block? (not (empty? (get bindings s)))))))
+      (not (empty? (get bindings s))))))
 
 (defn resolve [{:keys [bindings]} sym]
   (let [s   (ast/sym sym)
         res (peek (get bindings s))]
     (ast/block s res)))
+
+(defn compact-bindings [{:keys [form bindings block?] :as lex}]
+  (assoc lex :bindings
+         (let [syms (ast/free-symbols form)]
+           (if block?
+             (reduce disj bindings (remove #(contains? syms %) bindings))
+             (reduce dissoc bindings (remove #(contains? syms %) (keys bindings)))))))
+
+(defn compact-nested [{ob :bindings {ib :bindings block? :block? :as il} :form :as ol}]
+  ;; outer will never be blocked.
+  (if block?
+    (let [nob (reduce dissoc ob ib)
+          nib (reduce disj ib (key ob))]
+      (-> ol
+          (assoc :bindings nob)
+          (assoc-in [:form :bindings] nib)))
+    ;; Inner bindings clobber outer bindings
+    (update il :bindings #(merge ob %))))
+
+(defn compact [x]
+  (if (ast/lex? x)
+    (let [{:keys [form bindings block?] :as lex} (compact-bindings x)]
+      (cond
+        (empty? bindings) (recur form)
+        (ast/lex? form)   (recur (compact-nested lex))
+        true              lex))
+    x))
 
 (defn walk-μ [env {:keys [name params]}]
   (-> env
@@ -56,28 +82,21 @@
 (defn walk-channels [env {:keys [chs]}]
   (update env :ctx merge chs))
 
-(defn capture [args]
-  ;; The name and params of a μ must be naked symbols. It doesn't make sense for
-  ;; them to refer to anything until the μ receives arguments.
-  (conj (mapv ast/unresolve (butlast args)) (last args)))
-
 (defn anchor [env form]
   (ast/lex (into {} (comp (filter #(bound? env %))
                           (map (fn [x] [(ast/sym x) (resolve env x)])))
                  (ast/free-symbols form))
            form))
 
-(defn pushdown [x env]
-  (let [pbind (fn [bi])])
-  (cond
-    (and (ast/lex? x) (empty? (:bindings x))) (:form x)
-    (and (ast/lex? x) (:block? x))            (pushdown (:form x) (incorporate env x))
+(defn capture [args]
+  (let [names (mapv ast/sym (butlast args))]
+    (when (every? ast/unresolved? names)
+      (conj names (last args)))))
 
-    (ast/lex? x)    (let [bs (into {} (map (fn [[k v]] [k (pushdown v env)])) (:bindings x))]
-                      (pushdown (:form x) (incorporate env {:bindings bs})))
-    (ast/μ? x)      (update x :body pushdown (walk-μ env x))
-    (ast/symbol? x) (if (bound? env x) (ast/lex {(ast/sym x) (resolve env x)} x) x)
-    (map-entry? x)  [(pushdown (key x) env) (pushdown (val x) env)]
-    (record? x)     (reduce (fn [r k] (update r k pushdown env)) x (keys x))
-    (coll? x)       (into (empty x) (map #(pushdown % env)) x)
-    true            x))
+(defn flatten-lexical [form]
+  (if (ast/lex? form)
+    (let [{:keys [bindings form] :as lex} (compact form)]
+      (if (vector? form)
+        (mapv #(assoc lex :form %) form)
+        lex))
+    form))
