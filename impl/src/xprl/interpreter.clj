@@ -28,8 +28,6 @@
 (deftracefn eval [{form :form :as im} env]
   (cond
     (ast/symbol? form) (resolve im env)
-    ;; ;; (I (B X)) => (B (I X)) i.e. evaluation uses inner bindings
-    ;; (ast/lex? form)    (ast/lex (:bindings form) (ast/immediate (:form form)))
     ;; (I (P x y)) => (A (I x) y)
     (ast/pair? form)   (ast/application (ast/immediate (:head form)) (:tail form))
     ;; (I (L x y ...)) => (L (I x) (I y) ...)
@@ -59,8 +57,7 @@
 (deftracefn walk [form env]
   (cond
     (ast/immediate? form)   (cond
-                              ;; we need this case to prevent a cycle when pushing
-                              (ast/lex? (:form form))
+                              (ast/lex? (:form form)) ; (I (B X)) => (B (I X))
                               (walk (ast/lex (:bindings (:form form))
                                              (ast/immediate (:form (:form form)))) env)
                               (ast/incomplete? (:form form))
@@ -80,7 +77,6 @@
                                 form
                                 (try-emission! (update form :kvs walk env) env)))
 
-    ;; todo: i'll need a special node type for capture at this rate.
     (ast/lex? form)  (update form :form walk (env/incorporate env form))
     (ast/ctx? form)  (update form :form walk (env/walk-channels env form))
     (ast/μ? form)    (update form :body walk (env/walk-μ env form))
