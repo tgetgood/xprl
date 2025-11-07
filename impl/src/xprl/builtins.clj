@@ -18,7 +18,8 @@
         (apply f tail)
         (catch Exception e
           (reset! debug/*pfn {:f f :args tail :env env :e e})
-          (ast/inspect (ast/application f tail))
+          (binding [ast/*verbose* true]
+            (ast/inspect (ast/application f tail)))
           (println e)
           :error)))))
 
@@ -95,13 +96,9 @@
         ;; I don't think that's necessary, but it's something to keep in mind.
         (update app :tail i/walk (assoc env :μ? true))))))
 
-(defn emit [{kvs :tail :as app} {:keys [bindings]}]
+(defn emit [{kvs :tail :as app} _]
   (assert (even? (count kvs)))
-  (ast/emission
-   ;; REVIEW: We reset the lexical bindings on the message since it may be sent
-   ;; before being walked and must carry its context with it to the receiver!
-   (mapv (fn [[k v]] [(ast/immediate k) (ast/lex bindings v)])
-         (partition 2 kvs))))
+  (ast/emission (mapv (fn [[k v]] [(ast/immediate k) v]) (partition 2 kvs))))
 
 ;; TODO: revisit the smalltalk style impl of if. I think I can control
 ;; evaluation better that way and not have to worry about walking branches not

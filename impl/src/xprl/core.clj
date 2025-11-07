@@ -19,8 +19,10 @@
 (def td (str srcpath "base-transduction.xprl"))
 (def testxprl (str srcpath "test.xprl"))
 
+(def te (atom nil))
 (defn env-updater [env]
   (fn [l]
+    (reset! te l)
     (let [[sym value] (i/interpret l)]
       (swap! env env/ns-intern sym value))))
 

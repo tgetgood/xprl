@@ -98,6 +98,8 @@
 (defn lex? [form]
   (instance? LexicalBinding form))
 
+(defn block [s form]
+  (assoc (lex #{s} form) :block? true))
 
 (defn elements [l]
   l)
@@ -567,8 +569,9 @@
     (free-symbols form))
 
   LexicalBinding
-  (free-symbols [{:keys [form]}]
-    (free-symbols form))
+  (free-symbols [{:keys [form bindings block?]}]
+    (transduce (map free-symbols) set/union (free-symbols form)
+               ((if block? identity vals) bindings)))
 
   Context
   (free-symbols [{:keys [form]}]
@@ -609,4 +612,4 @@
 (defn incomplete? [x]
   ;; Lexicals are incomplete because a complete expression wouldn't have any
   ;; unbound variables.
-  (or (immediate? x) (application? x) (has-free-symbols? x)))
+  (or (immediate? x) (application? x) (lex? x)))
