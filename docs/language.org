@@ -616,8 +616,6 @@ This is largely an aid to my own memory so bear with me.
   may not be realised (i.e. may park when you try to read values) and which are
   not intended as random access datastructures.
 
-  TODO: Add a whole section about squiggol
-
 * Outline
   Sections to be written.
 ** History, Environment, and Context
@@ -1023,7 +1021,12 @@ This is largely an aid to my own memory so bear with me.
     facilitate the composition of systems.
 
     Somewhat hyperbolically, I want a language whose todomvc is kubernetes.
+** Squiggol
+   TODO: stub
 
+   I've clearly borrowed heavily from squiggol. It wouldn't be unreasonable to
+   say that this entire project began as an attempt to create a "natural"
+   implementation of squiggol's core concepts, but it's grown far beyond that.
 * References
   Some reading that ~might~ help you understand this project:
   - The Act of Creation — Arthur Koestler

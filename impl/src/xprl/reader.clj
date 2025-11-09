@@ -124,7 +124,9 @@
           v)))))
 
 (defn parse-symbol [{:keys [token gensyms] :as r}]
-  ;; FIXME: gensyms are unnecessary and never used. drop them.
+  ;; REVIEW: gensyms are never used at present. Will there be a future use for
+  ;; them? I suspect not, but I don't see harm in keeping them for the time
+  ;; being.
   (if (str/ends-with? token "#")
     (let [s (apply str (butlast token))]
       (if-let [sym (get @gensyms s)]

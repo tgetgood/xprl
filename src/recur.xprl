@@ -102,8 +102,8 @@
                    ~(** ~x ~(! . ~(-* ~x 1)))))))
 
 
-;; ;; FIXME: Just defining this one leads to an infinite loop. No SO, just loops.
-;; ;; Does that mean there's a cycle in the rules?
+;; FIXME: Just defining this one leads to an infinite loop. No SO, just loops.
+;; Does that mean there's a cycle in the rules?
 
 ;; (def !
 ;;   (sc . ~(μ f ~(!! . ~(sc . f)))))

@@ -43,8 +43,20 @@
     `(defn ~name ~args
        (let [v# (do ~@body)]
          (binding [ast/*verbose* true]
-           ;; FIXME: Don't build these strings unless *verbose* is true!
            (trace! "---" ~(str name) "in"
                    (into {} (map (fn [[k# v#]] [k# (peek v#)])) (:bindings ~(second args)))
                    "---\n" ~input "\n-->\n" v# "\n---"))
          v#))))
+
+;; REVIEW: A more useful debugging tool might be to store a map of all
+;; transitions that occur during interpretation.
+;;
+;; Interpretation isn't actually an ordered process. It's a set of
+;; (theoretically) reversible transformations that we search until we reach a
+;; value. Thus printing out the sequence of things that happen is misleading in
+;; some ways.
+;;
+;; Of course it sometimes helps to be able to trace the execution of the current
+;; implementation, but that could likely be better accomplished by keeping the
+;; set of all transforms performed and just following the paths in which we're
+;; interested.

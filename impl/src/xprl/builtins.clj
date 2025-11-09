@@ -85,20 +85,13 @@
     (if-let [args (env/capture args)]
       (apply ast/μ args)
       ;; if the names don't resolve, it ~should~ be safe to walk the body
-      ;; REVIEW: but what if one of them resolves and the other doesn't?
-      ;;
-      ;; We *could* put a barrier in here saying "don't resolve anything",
-      ;; i.e. just wipe out the lexical env beneath this point so that nothing
-      ;; gets evaluated out of phase.
-      ;;
-      ;; I don't think that's necessary, but it's something to keep in mind.
       (update app :tail i/walk (assoc env :μ? true)))))
 
 (defn emit [{kvs :tail :as app} _]
   (assert (even? (count kvs)))
   (ast/emission (mapv (fn [[k v]] [(ast/immediate k) v]) (partition 2 kvs))))
 
-;; TODO: revisit the smalltalk style impl of if. I think I can control
+;; TODO: revisit the smalltalk style impl of branching. I think I can control
 ;; evaluation better that way and not have to worry about walking branches not
 ;; taken and all of the possible errors that come with that.
 (defn select [{[p t f] :tail :as app} env]
