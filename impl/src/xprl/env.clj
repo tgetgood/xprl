@@ -1,5 +1,4 @@
 (ns xprl.env
-  ;; FIXME: This namespace is a trash heap of confused concepts.
   (:refer-clojure :exclude [bound? resolve])
   (:require
    [clojure.set :as set]
@@ -7,10 +6,11 @@
    [xprl.ast :as ast]
    [xprl.debug :refer [trace!]]))
 
-;; TODO: Rewrite this entire ns. It's just a mess.
-(def empty-ns {})
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;; Namespaces
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(def empty-env {:bindings {} :ctx {}})
+(def empty-ns {})
 
 (defn set-ns [ns body]
   (trace! "ns replace" (sort-by :names (keys ns)))
@@ -25,54 +25,53 @@
   (assert (ast/unresolved? sym) sym)
   (get env sym))
 
-;; REVIEW: Is it permissible to block the binding of a symbol that has no bindings?
-(defn popbind [x]
-  (if (empty? x) x (pop x)))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;; Lexical env in AST
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn incorporate [env {:keys [bindings block?]}]
-  (if block?
-    (update env :bindings #(reduce (fn [b k] (update b k popbind)) % bindings))
-    (update env :bindings #(reduce (fn [b [k v]] (update b k conj v)) % bindings))))
+(defn merge-env [outer inner]
+  (if (nil? inner)
+    outer
+    (merge outer
+           {:bindings (merge (reduce dissoc (:bindings outer) (:blocks inner))
+                             (:bindings inner))
+            :blocks   (into (or (:blocks outer) #{})
+                            (remove #(contains? (:bindings outer) %))
+                            (:blocks inner))})))
 
-(defn μ-binding [{:keys [name params body] :as μ} args]
-  (ast/lex (merge {params args} (when name {name μ})) body))
+(defn attach [form env]
+  (trace! "incorporating" (::lex form) "into" env)
+  (let [env (merge-env env (::lex form))]
+    (trace! "->" env)
+    (cond
+      (empty? env) form
+      (vector? form)  (mapv #(attach % env) form)
+      (record? form)  (assoc form ::lex env)
+      (map? form)     (into {} (map (fn [[k v]] [(attach k env) (attach v env)]) form))
+      true            form)))
 
-(defn bound? [{:keys [bindings]} sym]
-  (let [s (ast/sym sym)]
-    (when (contains? bindings s)
-      (not (empty? (get bindings s))))))
+(defonce tt (atom nil))
 
-(defn resolve [{:keys [bindings]} sym]
-  (let [s   (ast/sym sym)
-        res (peek (get bindings s))]
-    (ast/block s res)))
+(defn bindμ [{:keys [name params body] :as μ} args]
+  (trace! "binding μ:" (merge {params args} (when name {name μ})))
+  (reset! tt {:in {params args}
+              :out (attach body {:bindings (merge {params args} (when name {name μ}))})})
+  (attach body {:bindings (merge {params args} (when name {name μ}))}))
 
-(defn compact-bindings [{:keys [form bindings block?] :as lex}]
-  (assoc lex :bindings
-         (let [syms (ast/free-symbols form)]
-           (if block?
-             (reduce disj bindings (remove #(contains? syms %) bindings))
-             (reduce dissoc bindings (remove #(contains? syms %) (keys bindings)))))))
+(defn block [form & syms]
+  (trace! "blocking:" syms)
+  (attach form {:blocks (set syms)}))
 
-(defn compact-nested [{ob :bindings {ib :bindings block? :block? :as il} :form :as ol}]
-  ;; outer will never be blocked.
-  (if block?
-    (let [nob (reduce dissoc ob ib)
-          nib (reduce disj ib (key ob))]
-      (-> ol
-          (assoc :bindings nob)
-          (assoc-in [:form :bindings] nib)))
-    ;; Inner bindings clobber outer bindings
-    (update il :bindings #(merge ob %))))
+(defn capture [args]
+  (let [names (mapv ast/sym (butlast args))]
+    (when (every? ast/unresolved? names)
+      (conj names (last args)))))
 
-(defn compact [x]
-  (if (ast/lex? x)
-    (let [{:keys [form bindings block?] :as lex} (compact-bindings x)]
-      (cond
-        (empty? bindings) (recur form)
-        (ast/lex? form)   (recur (compact-nested lex))
-        true              lex))
-    x))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;; Dynamic env During Interpretation
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(def empty-env {:bindings {} :ctx {}})
 
 (defn walk-μ [env {:keys [name params]}]
   (-> env
@@ -82,21 +81,38 @@
 (defn walk-channels [env {:keys [chs]}]
   (update env :ctx merge chs))
 
-(defn anchor [env form]
-  (ast/lex (into {} (comp (filter #(bound? env %))
-                          (map (fn [x] [(ast/sym x) (resolve env x)])))
-                 (ast/free-symbols form))
-           form))
+;; REVIEW: Is it permissible to block the binding of a symbol that has no bindings?
+(defn popbind [m k]
+  (update m k #(if (empty? %) % (pop %))))
 
-(defn capture [args]
-  (let [names (mapv ast/sym (butlast args))]
-    (when (every? ast/unresolved? names)
-      (conj names (last args)))))
+(defn pushbind [m [k v]]
+  (update m k conj v))
 
-(defn flatten-lexical [form]
-  (if (ast/lex? form)
-    (let [{:keys [bindings form] :as lex} (compact form)]
-      (if (vector? form)
-        (mapv #(assoc lex :form %) form)
-        lex))
-    form))
+(defn incorporate [form env]
+  (if-let [local (::lex form)]
+    (update env :bindings #(as-> % bindings
+                             (reduce popbind bindings (:blocks local))
+                             (reduce pushbind bindings (:bindings local))))
+    env))
+
+(defn bound? [{:keys [bindings]} sym]
+  (let [s (ast/sym sym)]
+    (when (contains? bindings s)
+      (not (empty? (get bindings s))))))
+
+(defn resolve [{:keys [bindings]} sym]
+  (let [s   (ast/sym sym)
+        res (peek (get bindings s))]
+    (block res s)))
+
+(defn popall [env]
+  {:bindings (into {} (comp (map (fn [[k v]] (when-not (empty? v)
+                                               [k (peek v)])))
+                            (remove nil?))
+                   (:bindings env))
+   :blocks   (:blocks env)})
+
+(defmacro propagate [form env body]
+  {:style/indent 2}
+  `(let [~env (incorporate ~form ~env)]
+     (attach ~body (popall ~env))))

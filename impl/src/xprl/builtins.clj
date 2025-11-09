@@ -13,9 +13,7 @@
   [f]
   (fn [{tail :tail :as form} env]
     (if (or (ast/incomplete? tail) (some ast/incomplete? tail))
-      (-> form
-       (update :tail i/walk (assoc env :μ? true))
-       (update :tail env/flatten-lexical))
+      (update form :tail i/walk (assoc env :μ? true))
       (try
         (apply f tail)
         (catch Exception e

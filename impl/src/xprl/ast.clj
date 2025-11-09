@@ -81,25 +81,10 @@
    (instance? Resolved s)))
 
 
-(defrecord LexicalBinding [bindings form]
-  Object
-  (toString [_]
-    (str bindings "::" form)))
-
-(defn lex [bindings form]
-  (->LexicalBinding bindings form))
-
-(defn lex? [form]
-  (instance? LexicalBinding form))
-
-(defn block [s form]
-  (assoc (lex #{s} form) :block? true))
-
 (defn sym [s]
   (cond
     (instance? Symbol s) s
-    (resolved? s)        (:sym s)
-    (lex? s)             (recur (:form s))))
+    (resolved? s)        (:sym s)))
 
 
 (defn elements [l]
@@ -266,11 +251,6 @@
 (defmethod pp/simple-dispatch Resolved [o]
   (pp/write-out (clojure.core/symbol (str o))))
 
-(ps LexicalBinding)
-
-(defmethod pp/simple-dispatch LexicalBinding [o]
-  (pp/write-out (clojure.core/symbol (str o))))
-
 ;;; Keyword
 
 (ps Keyword)
@@ -371,7 +351,7 @@
 
 (defmethod print-method Extern [{:keys [name]} ^Writer w]
   (.write w "#F[")
-  (.write w name)
+  (.write w (str name))
   (.write w "]"))
 
 (defmethod pp/simple-dispatch Extern [{:keys [name]}]
@@ -454,14 +434,6 @@
     (when (and *verbose* (not (nil? val)))
       (insp val w (inc level))))
 
-  LexicalBinding
-  (insp [{:keys [bindings form]} ^Writer w level]
-    (spacer w level)
-    (.write w "B")
-    (when *verbose* (.write w (str bindings)))
-    (.write w "\n")
-    (insp form w (inc level)))
-
   Application
   (insp [form ^Writer w level]
     (spacer w level)
@@ -494,7 +466,7 @@
   (insp [form ^Writer w level]
     (spacer w level)
     (.write w "F[")
-    (.write w (:name form))
+    (.write w ^String (:name form))
     (.write w "]\n"))
 
   Mu
@@ -549,6 +521,10 @@
 (defn has-free-symbols? [x]
   (not (empty? (free-symbols x))))
 
+;; FIXME: We'll need to walk over symbols in the ::env/env key of all nodes if
+;; we keep up the symbolic approach.
+;;
+;; I'm skeptical that we ought to.
 (extend-protocol Symbolic
   Object
   (free-symbols [_] #{})
@@ -569,12 +545,12 @@
   (free-symbols [{:keys [form]}]
     (free-symbols form))
 
-  LexicalBinding
-  (free-symbols [{:keys [form bindings block?]}]
-    (let [body-syms (reduce disj (free-symbols form)
-                            (if block? [] (keys bindings)))
-          bind-syms (map free-symbols (if block? [] (vals bindings)))]
-      (reduce set/union body-syms bind-syms)))
+  ;; LexicalBinding
+  ;; (free-symbols [{:keys [form bindings block?]}]
+  ;;   (let [body-syms (reduce disj (free-symbols form)
+  ;;                           (if block? [] (keys bindings)))
+  ;;         bind-syms (map free-symbols (if block? [] (vals bindings)))]
+  ;;     (reduce set/union body-syms bind-syms)))
 
   Context
   (free-symbols [{:keys [form]}]
@@ -613,6 +589,4 @@
    :env     (keyword "env")})
 
 (defn incomplete? [x]
-  ;; Lexicals are incomplete because a complete expression wouldn't have any
-  ;; unbound variables.
-  (or (immediate? x) (application? x) (lex? x)))
+  (or (immediate? x) (application? x)))
