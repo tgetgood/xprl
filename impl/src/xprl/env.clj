@@ -6,6 +6,11 @@
    [xprl.ast :as ast]
    [xprl.debug :refer [trace!]]))
 
+(defn strip
+  "Removes lexical env from a form"
+  [x]
+  (dissoc x ::lex))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;; Namespaces
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -19,7 +24,7 @@
 
 (defn ns-intern [ns sym val]
   (assert (ast/unresolved? sym) sym)
-  (assoc ns sym val))
+  (assoc ns (strip sym) val))
 
 (defn lookup [env sym]
   (assert (ast/unresolved? sym) sym)
@@ -30,11 +35,12 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defn dyn->lex [env]
-  {:bindings (into {} (comp (map (fn [[k v]] (when-not (empty? v)
-                                               [k (peek v)])))
-                            (remove nil?))
-                   (:bindings env))
-   :blocks   (:blocks env)})
+  (merge env
+         {:bindings (into {} (comp (map (fn [[k v]] (when-not (empty? v)
+                                                      [k (peek v)])))
+                                   (remove nil?))
+                          (:bindings env))
+          :blocks   (:blocks env)}))
 
 (defn merge-env [outer inner]
   (if (nil? inner)
@@ -51,14 +57,21 @@
   the new env."
   [form env]
   (trace! "incorporating" (::lex form) "into" env)
-  (let [env (merge-env (dyn->lex env) (::lex form))]
+  (let [env (merge-env env (::lex form))]
     (trace! "->" env)
     (cond
-      (empty? env) form
-      (vector? form)  (mapv #(attach % env) form)
-      (record? form)  (assoc form ::lex env)
-      (map? form)     (into {} (map (fn [[k v]] [(attach k env) (attach v env)]) form))
-      true            form)))
+      (empty? env)   form
+      (vector? form) (mapv #(attach % env) form)
+
+      ;; This is a mess. We don't want keywords or other datatypes modified with
+      ;; useless envs.
+      (or (ast/pair? form) (ast/application? form) (ast/immediate? form)
+          (ast/emission? form) (ast/symbol? form) (ast/μ? form))
+      (assoc form ::lex env)
+
+      (record? form) form
+      (map? form)    (into {} (map (fn [[k v]] [(attach k env) (attach v env)]) form))
+      true           form)))
 
 (defn attach-dyn
   "Like `attach` but first lexicalises the dynamic env `env`."

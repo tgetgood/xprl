@@ -44,7 +44,8 @@
        (let [v# (do ~@body)]
          (binding [ast/*verbose* true]
            (trace! "---" ~(str name) "in"
-                   (into {} (map (fn [[k# v#]] [k# (peek v#)])) (:bindings ~(second args)))
+                   (update ~(second args) :bindings
+                           #(into {} (map (fn [[k# v#]] [k# (peek v#)])) %))
                    "---\n" ~input "\n-->\n" v# "\n---"))
          v#))))
 
