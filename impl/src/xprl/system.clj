@@ -24,6 +24,6 @@
                       (if (or #_(ast/incomplete? v) (not (ast/keyword? k)))
                         kvs
                         (do
-                          (emit! ctx k (env/attach v env))
+                          (emit! ctx k (env/attach-dyn v env))
                           (recur more))))
                     []))))

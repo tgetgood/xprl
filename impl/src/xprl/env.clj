@@ -29,6 +29,13 @@
 ;;;;; Lexical env in AST
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defn dyn->lex [env]
+  {:bindings (into {} (comp (map (fn [[k v]] (when-not (empty? v)
+                                               [k (peek v)])))
+                            (remove nil?))
+                   (:bindings env))
+   :blocks   (:blocks env)})
+
 (defn merge-env [outer inner]
   (if (nil? inner)
     outer
@@ -39,9 +46,12 @@
                             (remove #(contains? (:bindings outer) %))
                             (:blocks inner))})))
 
-(defn attach [form env]
+(defn attach
+  "Merges `env` into the lexical env of `form` if any and updates `form` with
+  the new env."
+  [form env]
   (trace! "incorporating" (::lex form) "into" env)
-  (let [env (merge-env env (::lex form))]
+  (let [env (merge-env (dyn->lex env) (::lex form))]
     (trace! "->" env)
     (cond
       (empty? env) form
@@ -49,6 +59,11 @@
       (record? form)  (assoc form ::lex env)
       (map? form)     (into {} (map (fn [[k v]] [(attach k env) (attach v env)]) form))
       true            form)))
+
+(defn attach-dyn
+  "Like `attach` but first lexicalises the dynamic env `env`."
+  [form env]
+  (attach form (dyn->lex env)))
 
 (defonce tt (atom nil))
 
@@ -73,20 +88,24 @@
 
 (def empty-env {:bindings {} :ctx {}})
 
-(defn walk-μ [env {:keys [name params]}]
-  (-> env
-      (assoc :μ? true)
-      (update :bindings dissoc name params)))
-
-(defn walk-channels [env {:keys [chs]}]
-  (update env :ctx merge chs))
-
-;; REVIEW: Is it permissible to block the binding of a symbol that has no bindings?
 (defn popbind [m k]
   (update m k #(if (empty? %) % (pop %))))
 
 (defn pushbind [m [k v]]
   (update m k conj v))
+
+(defn walk-μ [env {:keys [name params]}]
+  (-> env
+      (assoc :μ? true)
+      ;; Here's a tricky one. We don't want any bindings for `name` or `params`
+      ;; to leak through when walking the body of a μ: they must remain
+      ;; unresolved. So while walking we remove those bindings completely and
+      ;; rely on them being reinserted on any future traversal where args are
+      ;; applied to the μ.
+      (update :bindings dissoc name params)))
+
+(defn walk-channels [env {:keys [chs]}]
+  (update env :ctx merge chs))
 
 (defn incorporate [form env]
   (if-let [local (::lex form)]
@@ -105,14 +124,7 @@
         res (peek (get bindings s))]
     (block res s)))
 
-(defn popall [env]
-  {:bindings (into {} (comp (map (fn [[k v]] (when-not (empty? v)
-                                               [k (peek v)])))
-                            (remove nil?))
-                   (:bindings env))
-   :blocks   (:blocks env)})
-
 (defmacro propagate [form env body]
   {:style/indent 2}
   `(let [~env (incorporate ~form ~env)]
-     (attach ~body (popall ~env))))
+     (attach-dyn ~body ~env)))

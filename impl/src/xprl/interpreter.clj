@@ -14,7 +14,7 @@
 (deftracefn apply [{:keys [head tail] :as form} env]
   (cond
     (ast/external? head) ((:fn head) form env) ; Punt to external interpreter.
-    (ast/μ? head)        (env/bindμ head (env/attach tail env))
+    (ast/μ? head)        (env/bindμ head (env/attach-dyn tail env))
     true                 (apply-error form)))
 
 ;;;;; Eval
