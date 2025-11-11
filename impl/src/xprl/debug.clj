@@ -44,9 +44,11 @@
        (let [v# (do ~@body)]
          (binding [ast/*verbose* true]
            (trace! "---" ~(str name) "in"
-                   (update ~(second args) :bindings
-                           #(into {} (map (fn [[k# v#]] [k# (peek v#)])) %))
-                   "---\n" ~input "\n-->\n" v# "\n---"))
+                   (-> ~(second args)
+                       (update  :bindings
+                                #(into {} (map (fn [[k# v#]] [k# (peek v#)])) %))
+                       (update :ctx #(sort-by :names (keys %))))
+                   "\n---\n" ~input "\n-->\n" v# "\n---"))
          v#))))
 
 ;; REVIEW: A more useful debugging tool might be to store a map of all

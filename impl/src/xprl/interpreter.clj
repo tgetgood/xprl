@@ -21,9 +21,9 @@
 
 (defn resolve [{sym :form :as im} env]
   (cond
-    (env/bound? env sym) (env/resolve env sym)
-    (ast/resolved? sym)  (:val sym)
-    true                 im))
+    (env/bound? sym env)       (env/resolve sym env)
+    (env/ns-resolved? sym env) (:val sym)
+    true                       im))
 
 (deftracefn eval [{form :form :as im} env]
   (cond
@@ -36,12 +36,13 @@
     ;; FIXME: maps are a pain in the ass because records are maps...
     (ast/map? form)    (into {} (map #(mapv ast/immediate %)) form)
     ;; (I V) => V. values are fixed points of eval.
-    true               form))
+    true               form)
+  (::env/lex im))
 
 ;;;;; Walk (previously `reduce`)
 
 (deftracefn walk [form env]
-  (env/propagate form env
+  (let [env (env/incorporate form env)]
     (cond
       (ast/immediate? form)   (if (ast/incomplete? (:form form))
                                 (let [form (update form :form walk env)]

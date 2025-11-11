@@ -133,7 +133,8 @@
 (defrecord Application [head tail]
   Object
   (toString [_]
-    (if (and (= "#F[nth*]" (str head)) (int? (last tail)))
+    (str "#" (str (pair head tail)))
+    #_(if (and (= "#F[nth*]" (str head)) (int? (last tail)))
       (str "|" (first tail) "|_" (last tail))
       (str "#" (str (pair head tail))))))
 
