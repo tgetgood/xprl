@@ -30,129 +30,11 @@
   (assert (ast/unresolved? sym) sym)
   (get env sym))
 
-(defn ns-resolved? [sym env]
-  (and (ast/resolved? sym)
-       (not (contains? (:unresolve env) (strip (ast/sym sym))))))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;; Lexical env in AST
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defn dyn->lex [env]
-  (merge env
-         {:bindings (into {} (comp (map (fn [[k v]] (when-not (empty? v)
-                                                      [k (peek v)])))
-                                   (remove nil?))
-                          (:bindings env))
-          :blocks   (:blocks env)}))
-
-(defn merge-env [outer inner]
-  (if (nil? inner)
-    outer
-    (merge outer
-           {:bindings (merge (reduce dissoc (:bindings outer) (:blocks inner))
-                             (:bindings inner))
-            :blocks   (into (or (:blocks outer) #{})
-                            (remove #(contains? (:bindings outer) %))
-                            (:blocks inner))})))
-
-(defn attach
-  "Merges `env` into the lexical env of `form` if any and updates `form` with
-  the new env."
-  [form env]
-  (trace! "incorporating" (::lex form) "into" env)
-  (let [env (merge-env env (::lex form))]
-    (trace! "->" env)
-    (cond
-      (empty? env)   form
-      (vector? form) (mapv #(attach % env) form)
-
-      ;; This is a mess. We don't want keywords or other datatypes modified with
-      ;; useless envs.
-      (or (ast/pair? form) (ast/application? form) (ast/immediate? form)
-          (ast/emission? form) (ast/symbol? form) (ast/μ? form))
-      (assoc form ::lex env)
-
-      (record? form) form
-      (map? form)    (into {} (map (fn [[k v]] [(attach k env) (attach v env)]) form))
-      true           form)))
-
-(defn attach-dyn
-  "Like `attach` but first lexicalises the dynamic env `env`."
-  [form env]
-  (attach form (dyn->lex env)))
-
-(defn bindμ [{:keys [name params body] :as μ} args]
-  (trace! "binding μ:" (merge {params args} (when name {name μ})))
-  (attach body {:bindings (merge {params args} (when name {name μ}))}))
-
-(defn block [form & syms]
-  (trace! "blocking:" syms)
-  (attach form {:blocks (set (map strip syms))}))
-
-(defn capture [args]
-  (let [names (mapv strip (map ast/sym (butlast args)))]
-    (when (every? ast/unresolved? names)
-      (conj names (last args)))))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;; Dynamic env During Interpretation
+;;;;; Env Frames
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (def empty-env ::root)
-
-(defn popbind [m k]
-  (update m (strip k) #(if (empty? %) % (pop %))))
-
-(defn pushbind [m [k v]]
-  (trace! "pushing binding" k "=" v)
-  (update m (strip k) conj v))
-
-(defn walk-μ [env {:keys [name params]}]
-  (-> env
-      (assoc :μ? true)
-      ;; Here's a tricky one. We don't want any bindings for `name` or `params`
-      ;; to leak through when walking the body of a μ: they must remain
-      ;; unbound. So while walking we remove those bindings completely and rely
-      ;; on them being reinserted on any future traversal where args are applied
-      ;; to the μ.
-      (update :bindings dissoc name params)
-      (update :unresolve (set (remove nil? [name params])))))
-
-(defn walk-channels [env {:keys [chs]}]
-  (update env :ctx merge chs))
-
-(defn incorporate [form env]
-  (if-let [local (::lex form)]
-    (update env :bindings #(as-> % bindings
-                             (reduce popbind bindings (:blocks local))
-                             (reduce pushbind bindings (:bindings local))))
-    env))
-
-(defn bound? [sym env]
-  (let [{:keys [bindings]} (incorporate sym env)
-        s                  (strip (ast/sym sym))]
-    (when (contains? bindings s)
-      (not (empty? (get bindings s))))))
-
-(defn resolve [sym env]
-  (let [{:keys [bindings]} (incorporate sym env)
-        s                  (strip (ast/sym sym))
-        res                (peek (get bindings s))]
-    (block res s)))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;; Frames Rewrite
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(def empty-env ::root)
-(def μ-env {::μ? true})
-
-(defn μ-ctx? [env]
-  (cond
-    (= ::root env) false
-    (::μ? env)     true
-    true           (recur (::previous env))))
 
 (defn push [env frame]
   (assoc frame ::previous env))
@@ -172,17 +54,21 @@
     inner
     (loop [i (invert inner)
            o (invert outer)]
-      (if (= (::previous (::next i)) (::previous (::next o)))
+      (if (= (dissoc i ::next) (dissoc o ::next))
         (recur (::next i) (::next o))
-        (loop [root (::previous i)
-               o    o]
-          (if (contains? o ::next)
-            (recur (push root (dissoc o ::next)) (::next o))
-            (loop [root (push root o)
-                   i    i]
-              (if (contains? i ::next)
-                (recur (push root (dissoc i ::next)) (::next i))
-                (push root i)))))))))
+        (cond ; the first two cases are just an optimisation.
+          (nil? i) outer
+          (nil? o) inner
+          true
+          (loop [root (::previous o)
+                 o    o]
+            (if (contains? o ::next)
+              (recur (push root (dissoc o ::next)) (::next o))
+              (loop [root (push root o)
+                     i    i]
+                (if (contains? i ::next)
+                  (recur (push root (dissoc i ::next)) (::next i))
+                  (push root i))))))))))
 
 (defn attach [env form]
   (cond
@@ -190,11 +76,76 @@
     (map? form)    (assoc form ::env env)
     true           form))
 
+;; OPTIMISE: This may benefit from memoisation.
 (defn resolve [env {:keys [sym] :as im}]
-  (let [s (strip (ast/sym sym))]
+  (let [s   (strip (ast/sym sym))
+        env (if (contains? sym ::env) (::env sym) env)]
     (loop [{:keys [bindings] :as env} env]
       (cond
         (= ::root env)         im
         (contains? bindings s) (let [next (get bindings s)] ; `next` might be `false`!
                                  (attach next (merge-stacks (::env next) (::previous env))))
         true                   (recur (::previous env))))))
+
+(defn local [x]
+  (when (map? x)
+    (::env x)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;; μ
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(def μ-env {::μ? true})
+
+(defn μ-ctx? [env]
+  (cond
+    (= ::root env) false
+    (::μ? env)     true
+    true           (recur (::previous env))))
+
+(defn capture [args env]
+  (let [names (mapv strip (map ast/sym (butlast args)))
+        body  (last args)
+        env   (or (::env body) env)]
+    (when (every? ast/unresolved? names)
+      (conj names (attach (push env μ-env) body)))))
+
+(defn bindargs
+  "Returns `:body` of `μ` wrapped in a new env which unbinds the μ-env from
+  `:body` and replaces it with the call frame."
+  [env {:keys [name params body] :as μ} args]
+  (assert (::μ? (::env body))) ; should be invariant
+  (let [inner   (::previous (::env body)) ; remove μ-env frame.
+        binding {:bindings (merge {params args} (when name {name μ}))}]
+    (attach (push (merge-stacks inner env) binding) body)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Ctx
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn with-channels [chs env form]
+  {:style/indent 2}
+  (let [env (or (::env form) env)]
+    (attach (push env {:ctx chs}) form)))
+
+;; OPTIMISE: This may benefit from memoisation.
+(defn get-channel [env k]
+  (when (not= ::root env)
+    (if-let [ch (get-in env [:ctx k])]
+      ch                               ; ch = false would be an error
+      (recur (::previous env) k))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;; test cases
+;; TODO: real tests
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; (def f (reduce push empty-env [{:a 1} {:b 2} {:c 4}]))
+;; (def g (reduce push empty-env [{:a 1} {:b 2} {:d 5} {:e 7}]))
+;; (def g' (push g {:test 42}))
+
+;; (assert (= (merge-stacks f f) f))
+;; (assert (= (merge-stacks g g') (merge-stacks g' g) g'))
+
+;; (assert (= 4 (:c (merge-stacks f g))))
+;; (assert (= 7 (:e (merge-stacks g f))))

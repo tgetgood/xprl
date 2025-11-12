@@ -14,16 +14,18 @@
 (deftracefn apply [{:keys [head tail] :as form} env]
   (cond
     (ast/external? head) ((:fn head) form env) ; Punt to external interpreter.
-    (ast/μ? head)        (env/bindμ head (env/attach-dyn tail env))
+    (ast/μ? head)        (env/bindargs env head (env/attach env tail))
     true                 (apply-error form)))
 
 ;;;;; Eval
 
 (defn resolve [{sym :form :as im} env]
-  (cond
-    (env/bound? sym env)       (env/resolve sym env)
-    (env/ns-resolved? sym env) (:val sym)
-    true                       im))
+  (let [res (env/resolve env im)]
+    (if (= res im) ; lexical bindings shadow ns bindings!
+      (if (ast/resolved? sym)
+        (:val sym)
+        res)
+      res)))
 
 (deftracefn eval [{form :form :as im} env]
   (cond
@@ -36,13 +38,12 @@
     ;; FIXME: maps are a pain in the ass because records are maps...
     (ast/map? form)    (into {} (map #(mapv ast/immediate %)) form)
     ;; (I V) => V. values are fixed points of eval.
-    true               form)
-  (::env/lex im))
+    true               form))
 
 ;;;;; Walk (previously `reduce`)
 
 (deftracefn walk [form env]
-  (let [env (env/incorporate form env)]
+  (let [env (or (env/local form) env)]
     (cond
       (ast/immediate? form)   (if (ast/incomplete? (:form form))
                                 (let [form (update form :form walk env)]
@@ -61,8 +62,7 @@
                                   form
                                   (sys/try-emissions! (update form :kvs walk env) env)))
 
-      (ast/ctx? form)  (update form :form walk (env/walk-channels env form))
-      (ast/μ? form)    (update form :body walk (env/walk-μ env form))
+      (ast/μ? form)    (update form :body walk env)
       (ast/pair? form) (-> form (update :head walk env) (update :tail walk env))
       (ast/list? form) (into [] (map #(walk % env)) form)
       (ast/map? form)  (into {} (map (fn [e] (mapv (fn [x] (walk x env)) e))) form)

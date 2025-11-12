@@ -180,44 +180,6 @@
 (defn external? [x]
   (instance? Extern x))
 
-(defrecord Context [chs form]
-  Object
-  (toString [_]
-    (str "#Ctx" form)))
-
-(defn ctx [channels form]
-  (->Context channels form))
-
-(defn ctx? [x]
-  (instance? Context x))
-
-
-(defrecord Seq [elements]
-  Object
-  (toString [_]
-    (str "#seq" elements)))
-
-(defn seq [xs]
-  (->Seq (list xs)))
-
-(defn seq? [x]
-  (instance? Seq x))
-
-
-(defrecord Conc [elements]
-  Object
-  (toString [_]
-    (str "#conc" elements)))
-
-(defn conc [xs]
-  (->Conc (list xs)))
-
-(defn conc? [x]
-  (instance? Conc x))
-
-(defn elist? [x]
-  (or (seq? x) (conc? x)))
-
 
 (defrecord Emission [kvs]
   Object
@@ -360,26 +322,6 @@
    :prefix "#F[" :suffix "]"
    (pp/write-out name)))
 
-;;; seq & conc
-
-(defmethod print-method Seq [{:keys [elements]} ^Writer w]
-  (.write w "#seq")
-  (print-method elements w))
-
-(defmethod pp/simple-dispatch Seq [{:keys [elements]}]
-  (pp/write-out "#seq")
-  (pp/simple-dispatch elements))
-
-
-(defmethod print-method Conc [{:keys [elements]} ^Writer w]
-  (.write w "#conc")
-  (print-method elements w))
-
-(defmethod pp/simple-dispatch Conc [{:keys [elements]}]
-  (pp/write-out "#conc")
-  (pp/simple-dispatch elements))
-
-
 ;;; Emission
 
 (defmethod print-method Emission [{:keys [kvs]} ^Writer w]
@@ -477,30 +419,6 @@
     (insp (:params form) w (inc level))
     (insp (:body form) w (inc level)))
 
-  Seq
-  (insp [{:keys [elements]} ^Writer w level]
-    (spacer w level)
-    (.write w "seq\n")
-    (dorun (map #(insp % w (inc level)) elements)))
-
-  Conc
-  (insp [{:keys [elements]} ^Writer w level]
-    (spacer w level)
-    (.write w "conc\n")
-    (dorun (map #(insp % w (inc level)) elements)))
-
-  Context
-  (insp [{:keys [chs form]} ^Writer w level]
-    (spacer w level)
-    (.write w "Ctx")
-    (when *verbose*
-      (.write w "[")
-      (run! #(.write w (str %)) (interpose " " (sort-by :names (keys chs))))
-      (.write w "]"))
-    (.write w "\n")
-    (when form
-      (insp form w (inc level))))
-
   Emission
   (insp [form ^Writer w level]
     (spacer w level)
@@ -513,73 +431,6 @@
 
 (defn inspect [x]
   (insp x *out* 0))
-
-;;;;; Symbolic
-
-(defprotocol Symbolic
-  (free-symbols [this]))
-
-(defn has-free-symbols? [x]
-  (not (empty? (free-symbols x))))
-
-;; FIXME: We'll need to walk over symbols in the ::env/env key of all nodes if
-;; we keep up the symbolic approach.
-;;
-;; I'm skeptical that we ought to.
-(extend-protocol Symbolic
-  Object
-  (free-symbols [_] #{})
-
-  Symbol
-  (free-symbols [s]
-    #{s})
-
-  Pair
-  (free-symbols [{:keys [head tail]}]
-    (set/union (free-symbols head) (free-symbols tail)))
-
-  Application
-  (free-symbols [{:keys [head tail]}]
-    (set/union (free-symbols head) (free-symbols tail)))
-
-  Immediate
-  (free-symbols [{:keys [form]}]
-    (free-symbols form))
-
-  ;; LexicalBinding
-  ;; (free-symbols [{:keys [form bindings block?]}]
-  ;;   (let [body-syms (reduce disj (free-symbols form)
-  ;;                           (if block? [] (keys bindings)))
-  ;;         bind-syms (map free-symbols (if block? [] (vals bindings)))]
-  ;;     (reduce set/union body-syms bind-syms)))
-
-  Context
-  (free-symbols [{:keys [form]}]
-    (free-symbols form))
-
-  Mu
-  (free-symbols [{:keys [name params body]}]
-    (disj (free-symbols body) name params))
-
-  Emission
-  (free-symbols [{:keys [kvs]}]
-    (transduce (map free-symbols) set/union kvs))
-
-  clojure.lang.PersistentVector
-  (free-symbols [xs]
-    (transduce (map free-symbols) set/union xs))
-
-  clojure.lang.MapEntry
-  (free-symbols [e]
-    (set/union (free-symbols (key e)) (free-symbols (val e))))
-
-  clojure.lang.PersistentArrayMap
-  (free-symbols [xs]
-    (transduce (map free-symbols) set/union xs))
-
-  clojure.lang.PersistentHashMap
-  (free-symbols [xs]
-    (transduce (map free-symbols) set/union xs)))
 
 ;;;;; Sugar
 

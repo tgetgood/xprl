@@ -80,7 +80,7 @@
 
 (defn μ [{args :tail :as app} env]
   (check-tail env app
-    (if-let [args (env/capture args)]
+    (if-let [args (env/capture args env)]
       (apply ast/μ args)
       ;; if the names don't resolve, it ~should~ be safe to walk the body
       (update app :tail i/walk (assoc env :μ? true)))))
@@ -111,10 +111,10 @@
             (assert (boolean? p'))
             (if p' t f)))))))
 
-(defn with-channels [{[chmap body] :tail :as app}]
-  #_(wait-until-evaluated
-   [chmap]
-   (i/walk (ast/ctx chmap body))))
+(defn with-channels [{[chmap body] :tail :as app} env]
+  (if (ast/incomplete? chmap)
+    (update app :tail i/walk env)
+    (env/with-channels chmap env body)))
 
 ;; TODO: builtin macros needed for a working system.
 ;;
@@ -136,16 +136,13 @@
 
     "with-channels" with-channels
 
-    ;; "seq*"  (when-arg ast/seq)
-    ;; "conc*" (when-arg ast/conc)
-
     ;; "first*" first*
     ;; "rest*"  rest*
     }))
 
-;;;;; the ur context from which all programs derive.
+;;;;; The Ur context from which all programs derive.
 ;;
-;; I don't really like this being so ad hoc. there will have to be a takeover
+;; I don't really like this being so ad hoc. There will have to be a takeover
 ;; moment when the intended long term context and history system is finally
 ;; built. that is to say there will be a shock in the history where we suddenly
 ;; have no past, no origin. why is bootstrapping so singular like that?

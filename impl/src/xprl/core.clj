@@ -32,7 +32,8 @@
 
 (defn go!
   ([env f] (i/interpret (ast/immediate (env/set-ns env f))))
-  ([env f conts] (i/interpret (ast/ctx conts (ast/immediate (env/set-ns env f))))))
+  ([env f conts] (i/interpret (env/with-channels conts env/empty-env
+                                (ast/immediate (env/set-ns env f))))))
 
 (defn evv [s]
   (go! @the-env (:form (r/read (r/string-reader s)))))
