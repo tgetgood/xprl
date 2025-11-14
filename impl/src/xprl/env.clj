@@ -18,6 +18,9 @@
     e
     empty-env))
 
+(defn local? [x]
+  (not (nil? (::env x))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;; Namespaces
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -87,49 +90,37 @@
 ;; OPTIMISE: This may benefit from memoisation.
 (defn resolve [env {sym :form :as im}]
   (let [s   (strip (ast/sym sym))
-        env (if (contains? sym ::env) (::env sym) env)]
+        env (merge-stacks (local sym) env)]
     (loop [{:keys [bindings] :as env} env]
       (cond
         (= ::root env)         im
         (contains? bindings s) (let [next (get bindings s)] ; `next` might be `false`!
-                                 (with-env (merge-stacks (local next) (::previous env)) next))
+                                 (with-env (merge-stacks (local next) (::previous env))
+                                   next))
         true                   (recur (::previous env))))))
 
 (defmacro in-env [form env body]
   {:style/indent 2}
-  `(let [~env (merge-stacks (::env ~form) ~env)]
+  `(let [~env (merge-stacks (local ~form) ~env)]
      ~body))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;; μ
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(def μ-env {::μ? true})
-
-(defn μ-ctx? [env]
-  (cond
-    (= ::root env) false
-    (::μ? env)     true
-    true           (recur (::previous env))))
-
-(defn capture [args env]
-  (let [names (mapv strip (map ast/sym (butlast args)))
-        body  (last args)
-        env   (or (::env body) env)
-        env'  (if (::μ? env) env (push env μ-env))]
+(defn capture [args]
+  (let [names (mapv strip (map ast/sym (butlast args)))]
     (when (every? ast/unresolved? names)
-      (conj names (with-env env' body)))))
+      (conj names (last args)))))
 
 (defn bindargs
-  "Returns `:body` of `μ` wrapped in a new env which unbinds the μ-env from
-  `:body` and replaces it with the call frame."
   [env {:keys [name params body] :as μ} args]
-  (assert (::μ? (::env body))) ; should be invariant
-  (trace! "binding" (merge {params args} (when name {name μ})))
-  (let [inner   (::previous (::env body)) ; remove μ-env frame.
-        binding {:bindings (merge {params args} (when name {name μ}))}]
-
-    (with-env (push (merge-stacks inner env) binding) body)))
+  (trace! "binding" (merge {params args} (when name {name μ}))
+          "\nin\n" env "->" (merge-stacks (local body) env)
+          "\nwith\nparams" (local args)
+          "\nμ" (local μ))
+  (let [binding {:bindings (merge {params args} (when name {name μ}))}]
+    (with-env (push (merge-stacks (local body) env) binding) body)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;; test cases

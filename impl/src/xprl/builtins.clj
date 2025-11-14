@@ -11,17 +11,19 @@
   "given an external (clojure) function, returns an applicative wrapper to call
   it from xprl."
   [f]
-  (fn [{tail :tail :as form} env]
+  (fn [{tail :tail :as form} env opts]
     (if (or (ast/incomplete? tail) (some ast/incomplete? tail))
-      (update form :tail i/walk env)
-      (try
-        (apply f tail)
-        (catch Exception e
-          (reset! debug/*pfn {:f f :args tail :env env :e e})
-          (binding [ast/*verbose* true]
-            (ast/inspect (ast/application f tail)))
-          (println e)
-          :error)))))
+      (let [{:keys [tail] :as next} (update form :tail i/walk env opts)]
+        (if (or (ast/incomplete? tail) (some ast/incomplete? tail))
+          next
+          (try
+            (apply f tail)
+            (catch Exception e
+              (reset! debug/*pfn {:f f :args tail :env env :e e})
+              (binding [ast/*verbose* true]
+                (ast/inspect (ast/application f tail)))
+              (println e)
+              :error)))))))
 
 (defn primitive [n f]
   (ast/extern n (call-primitive-fn f)))
@@ -72,30 +74,39 @@
 
 ;;;;; specialish forms
 
-(defmacro check-tail [env form body]
+(defmacro check-tail [env opts form body]
   {:style/indent 2}
   `(if (ast/incomplete? (:tail ~form))
-     (update ~form :tail i/walk (assoc ~env :μ? true))
+     (let [next# (update ~form :tail i/walk ~env (assoc ~opts :freeze? true))]
+      (debug/trace! "delaying μ" ~form "->" next#)
+       next#)
      ~body))
 
-(defn μ [{args :tail :as app} env]
-  (check-tail env app
-    (if-let [args (env/capture args env)]
-      (apply ast/μ args)
-      ;; if the names don't resolve, then there has to be a μ context
-      ;; surrounding our current context.
-      (update app :tail i/walk env))))
+(defn μ [{args :tail :as app} env opts]
+  (let [args (if (ast/incomplete? args) (i/walk args env opts) args)]
+    (if (ast/incomplete? args)
+      (assoc app :tail args)
+      (if-let [args (env/capture args)]
+        (do
+          (debug/trace! "building μ" args "in" env)
+          (i/walk (apply ast/μ args) env opts))
+        ;; if the names don't resolve, then there has to be a μ context
+        ;; surrounding our current context.
+        (let [next (update app :tail i/walk env (assoc opts :freeze? true))]
+          (debug/trace! "postponing μ" app "->" next "in" env)
+          next)))))
 
-(defn emit [{kvs :tail :as app} _]
+(defn emit [{kvs :tail :as app} env opts]
   (assert (even? (count kvs)))
-  (ast/emission (mapv (fn [[k v]] [(ast/immediate k) v]) (partition 2 kvs))))
+  (i/walk
+    (ast/emission (mapv (fn [[k v]] [(ast/immediate k) v]) (partition 2 kvs)))
+    env opts))
 
 ;; TODO: revisit the smalltalk style impl of branching. I think I can control
 ;; evaluation better that way and not have to worry about walking branches not
 ;; taken and all of the possible errors that come with that.
-(defn select [{[p t f] :tail :as app} env]
-  (let [env (assoc env :μ? true)]
-    (check-tail env app
+(defn select [{[p t f] :tail :as app} env opts]
+  (check-tail env opts app
       ;; FIXME: What the hell do we do if there's an `emit` in the condition of a
       ;; select? Just kick them up along with emissions from the winning branch?
       ;; That's logical, but what a shitshow. And whose job is it to make sure
@@ -110,11 +121,11 @@
           ;; e.g. (select ~(empty? xs) [] ~(first xs))
           (do
             (assert (boolean? p'))
-            (if p' t f)))))))
+            (if p' t f))))))
 
-(defn with-channels [{[chmap body] :tail :as app} env]
+(defn with-channels [{[chmap body] :tail :as app} env opts]
   (if (ast/incomplete? chmap)
-    (update app :tail i/walk env)
+    (update app :tail i/walk env opts)
     (ast/ctx chmap body)))
 
 ;; TODO: builtin macros needed for a working system.

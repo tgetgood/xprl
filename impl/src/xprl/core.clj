@@ -24,7 +24,7 @@
 (defn env-updater [env]
   (fn [l]
     (reset! te l)
-    (let [[sym value] (i/interpret l)]
+    (let [[sym value] l]
       (swap! env env/ns-intern sym value))))
 
 (defn with-return [ccs cb]
