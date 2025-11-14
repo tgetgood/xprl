@@ -78,22 +78,11 @@
                   (recur (push root (dissoc i ::next)) (::next i))
                   (push root i))))))))))
 
-(defn attach [env form]
+(defn with-env [env form]
   (cond
-    (vector? form) (into [] (map (partial attach env)) form)
+    (vector? form) (into [] (map (partial with-env env)) form)
     (map? form)    (assoc form ::env env)
     true           form))
-
-(defn attach-naked [env form]
-  (cond
-    (vector? form)         (mapv (partial attach-naked env) form)
-    (map? form)            (update form ::env #(or % env))
-    true                   form))
-
-(defn detach [form]
-  (if (map? form)
-    (dissoc form ::env)
-    form))
 
 ;; OPTIMISE: This may benefit from memoisation.
 (defn resolve [env {sym :form :as im}]
@@ -103,16 +92,12 @@
       (cond
         (= ::root env)         im
         (contains? bindings s) (let [next (get bindings s)] ; `next` might be `false`!
-                                 (attach (merge-stacks (local next) (::previous env)) next))
+                                 (with-env (merge-stacks (local next) (::previous env)) next))
         true                   (recur (::previous env))))))
 
 (defmacro in-env [form env body]
   {:style/indent 2}
-  `(if (::env ~form)
-     (let [~env  (merge-stacks (::env ~form) ~env)
-           ~form (detach ~form)
-           next# ~body]
-       (attach-naked (merge-stacks (local next#) ~env) next#))
+  `(let [~env (merge-stacks (::env ~form) ~env)]
      ~body))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -133,7 +118,7 @@
         env   (or (::env body) env)
         env'  (if (::μ? env) env (push env μ-env))]
     (when (every? ast/unresolved? names)
-      (conj names (attach env' body)))))
+      (conj names (with-env env' body)))))
 
 (defn bindargs
   "Returns `:body` of `μ` wrapped in a new env which unbinds the μ-env from
@@ -143,7 +128,8 @@
   (trace! "binding" (merge {params args} (when name {name μ})))
   (let [inner   (::previous (::env body)) ; remove μ-env frame.
         binding {:bindings (merge {params args} (when name {name μ}))}]
-    (attach (push (merge-stacks inner env) binding) body)))
+
+    (with-env (push (merge-stacks inner env) binding) body)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;; test cases

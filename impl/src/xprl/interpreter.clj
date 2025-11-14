@@ -14,7 +14,7 @@
 (deftracefn apply [{:keys [head tail] :as form} env]
   (cond
     (ast/external? head) ((:fn head) form env) ; Punt to external interpreter.
-    (ast/μ? head)        (env/bindargs env head (env/attach env tail))
+    (ast/μ? head)        (env/bindargs env head (env/with-env env tail))
     true                 (apply-error form)))
 
 ;;;;; Eval
@@ -28,17 +28,20 @@
       res)))
 
 (deftracefn eval [{form :form :as im} env]
-  (cond
-    (ast/symbol? form) (resolve im env)
-    ;; (I (P x y)) => (A (I x) y)
-    (ast/pair? form)   (ast/application (ast/immediate (:head form)) (:tail form))
-    ;; (I (L x y ...)) => (L (I x) (I y) ...)
-    (vector? form)     (into [] (map ast/immediate) form)
-    ;; (I {x y ...}) => {(I x) (I y) ...}
-    ;; FIXME: maps are a pain in the ass because records are maps...
-    (ast/map? form)    (into {} (map #(mapv ast/immediate %)) form)
-    ;; (I V) => V. values are fixed points of eval.
-    true               form))
+  (if (ast/symbol? form)
+    (resolve im env)
+    ;; These are the cases that create de novo nodes.
+    (env/with-env env
+      (cond
+        ;; (I (P x y)) => (A (I x) y)
+        (ast/pair? form)   (ast/application (ast/immediate (:head form)) (:tail form))
+        ;; (I (L x y ...)) => (L (I x) (I y) ...)
+        (vector? form)     (into [] (map ast/immediate) form)
+        ;; (I {x y ...}) => {(I x) (I y) ...}
+        ;; FIXME: maps are a pain in the ass because records are maps...
+        (ast/map? form)    (into {} (map #(mapv ast/immediate %)) form)
+        ;; (I V) => V. values are fixed points of eval.
+        true               form))))
 
 ;;;;; Walk (previously `reduce`)
 
