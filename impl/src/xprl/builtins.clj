@@ -115,7 +115,7 @@
 (defn with-channels [{[chmap body] :tail :as app} env]
   (if (ast/incomplete? chmap)
     (update app :tail i/walk env)
-    (env/with-channels chmap env body)))
+    (ast/ctx chmap body)))
 
 ;; TODO: builtin macros needed for a working system.
 ;;

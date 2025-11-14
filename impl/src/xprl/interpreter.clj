@@ -62,6 +62,7 @@
                                   form
                                   (sys/try-emissions! (update form :kvs walk env) env)))
 
+      (ast/ctx? form)  (sys/with-ctx (:chs form) (update form :form walk env))
       (ast/μ? form)    (update form :body walk env)
       (ast/pair? form) (-> form (update :head walk env) (update :tail walk env))
       (ast/list? form) (into [] (map #(walk % env)) form)

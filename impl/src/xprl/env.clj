@@ -131,7 +131,7 @@
   (let [names (mapv strip (map ast/sym (butlast args)))
         body  (last args)
         env   (or (::env body) env)
-        env'  (if (contains? env ::μ?) env (push env μ-env))]
+        env'  (if (::μ? env) env (push env μ-env))]
     (when (every? ast/unresolved? names)
       (conj names (attach env' body)))))
 
@@ -144,23 +144,6 @@
   (let [inner   (::previous (::env body)) ; remove μ-env frame.
         binding {:bindings (merge {params args} (when name {name μ}))}]
     (attach (push (merge-stacks inner env) binding) body)))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Ctx
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defn with-channels [chs env form]
-  {:style/indent 2}
-  (let [env (or (::env form) env)]
-    (attach (push env {:ctx chs}) form)))
-
-;; OPTIMISE: This may benefit from memoisation.
-(defn get-channel [env k]
-  (let [k (strip k)]
-    (when (not= ::root env)
-      (if-let [ch (get-in env [:ctx k])]
-        ch                               ; ch = false would be an error
-        (recur (::previous env) k)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;; test cases
