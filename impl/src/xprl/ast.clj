@@ -180,6 +180,17 @@
 (defn external? [x]
   (instance? Extern x))
 
+(defrecord Context [chs form]
+  Object
+  (toString [_]
+    (str "#Ctx" form)))
+
+(defn ctx [channels form]
+  (->Context channels form))
+
+(defn ctx? [x]
+  (instance? Context x))
+
 
 (defrecord Emission [kvs]
   Object
@@ -418,6 +429,18 @@
     (.write w "μ\n")
     (insp (:params form) w (inc level))
     (insp (:body form) w (inc level)))
+
+  Context
+  (insp [{:keys [chs form]} ^Writer w level]
+    (spacer w level)
+    (.write w "Ctx")
+    (when *verbose*
+      (.write w "[")
+      (run! #(.write w (str %)) (interpose " " (sort-by :names (keys chs))))
+      (.write w "]"))
+    (.write w "\n")
+    (when form
+      (insp form w (inc level))))
 
   Emission
   (insp [form ^Writer w level]
