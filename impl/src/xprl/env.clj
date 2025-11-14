@@ -9,7 +9,14 @@
 (defn strip
   "Removes lexical env from a form"
   [x]
-  (dissoc x ::lex))
+  (dissoc x ::env))
+
+(def empty-env ::root)
+
+(defn local [x]
+  (if-let [e (::env x)]
+    e
+    empty-env))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;; Namespaces
@@ -34,8 +41,6 @@
 ;;;;; Env Frames
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(def empty-env ::root)
-
 (defn push [env frame]
   (assoc frame ::previous env))
 
@@ -50,8 +55,11 @@
   "Given two stacks, find their common root and create a new stack of the form
   root<-unique part of `outer`<-unique part of `inner`."
   [inner outer]
-  (if (= inner outer) ; this case would lead to infinite looping below
-    inner
+  (cond
+    (= inner outer)     inner ; this case would lead to infinite looping below
+    (= empty-env inner) outer
+    (= empty-env outer) inner
+    true
     (loop [i (invert inner)
            o (invert outer)]
       (if (= (dissoc i ::next) (dissoc o ::next))
@@ -76,20 +84,36 @@
     (map? form)    (assoc form ::env env)
     true           form))
 
+(defn attach-naked [env form]
+  (cond
+    (vector? form)         (mapv (partial attach-naked env) form)
+    (map? form)            (update form ::env #(or % env))
+    true                   form))
+
+(defn detach [form]
+  (if (map? form)
+    (dissoc form ::env)
+    form))
+
 ;; OPTIMISE: This may benefit from memoisation.
-(defn resolve [env {:keys [sym] :as im}]
+(defn resolve [env {sym :form :as im}]
   (let [s   (strip (ast/sym sym))
         env (if (contains? sym ::env) (::env sym) env)]
     (loop [{:keys [bindings] :as env} env]
       (cond
         (= ::root env)         im
         (contains? bindings s) (let [next (get bindings s)] ; `next` might be `false`!
-                                 (attach next (merge-stacks (::env next) (::previous env))))
+                                 (attach (merge-stacks (local next) (::previous env)) next))
         true                   (recur (::previous env))))))
 
-(defn local [x]
-  (when (map? x)
-    (::env x)))
+(defmacro in-env [form env body]
+  {:style/indent 2}
+  `(if (::env ~form)
+     (let [~env  (merge-stacks (::env ~form) ~env)
+           ~form (detach ~form)
+           next# ~body]
+       (attach-naked (merge-stacks (local next#) ~env) next#))
+     ~body))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;; μ
@@ -106,15 +130,17 @@
 (defn capture [args env]
   (let [names (mapv strip (map ast/sym (butlast args)))
         body  (last args)
-        env   (or (::env body) env)]
+        env   (or (::env body) env)
+        env'  (if (contains? env ::μ?) env (push env μ-env))]
     (when (every? ast/unresolved? names)
-      (conj names (attach (push env μ-env) body)))))
+      (conj names (attach env' body)))))
 
 (defn bindargs
   "Returns `:body` of `μ` wrapped in a new env which unbinds the μ-env from
   `:body` and replaces it with the call frame."
   [env {:keys [name params body] :as μ} args]
   (assert (::μ? (::env body))) ; should be invariant
+  (trace! "binding" (merge {params args} (when name {name μ})))
   (let [inner   (::previous (::env body)) ; remove μ-env frame.
         binding {:bindings (merge {params args} (when name {name μ}))}]
     (attach (push (merge-stacks inner env) binding) body)))
@@ -130,10 +156,11 @@
 
 ;; OPTIMISE: This may benefit from memoisation.
 (defn get-channel [env k]
-  (when (not= ::root env)
-    (if-let [ch (get-in env [:ctx k])]
-      ch                               ; ch = false would be an error
-      (recur (::previous env) k))))
+  (let [k (strip k)]
+    (when (not= ::root env)
+      (if-let [ch (get-in env [:ctx k])]
+        ch                               ; ch = false would be an error
+        (recur (::previous env) k)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;; test cases
@@ -144,6 +171,7 @@
 ;; (def g (reduce push empty-env [{:a 1} {:b 2} {:d 5} {:e 7}]))
 ;; (def g' (push g {:test 42}))
 
+;; (assert (= f (merge-stacks f empty-env) (merge-stacks empty-env f)))
 ;; (assert (= (merge-stacks f f) f))
 ;; (assert (= (merge-stacks g g') (merge-stacks g' g) g'))
 

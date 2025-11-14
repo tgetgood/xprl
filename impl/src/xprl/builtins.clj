@@ -13,7 +13,7 @@
   [f]
   (fn [{tail :tail :as form} env]
     (if (or (ast/incomplete? tail) (some ast/incomplete? tail))
-      (update form :tail i/walk (assoc env :μ? true))
+      (update form :tail i/walk env)
       (try
         (apply f tail)
         (catch Exception e
@@ -82,8 +82,9 @@
   (check-tail env app
     (if-let [args (env/capture args env)]
       (apply ast/μ args)
-      ;; if the names don't resolve, it ~should~ be safe to walk the body
-      (update app :tail i/walk (assoc env :μ? true)))))
+      ;; if the names don't resolve, then there has to be a μ context
+      ;; surrounding our current context.
+      (update app :tail i/walk env))))
 
 (defn emit [{kvs :tail :as app} _]
   (assert (even? (count kvs)))

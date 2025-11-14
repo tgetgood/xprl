@@ -43,11 +43,7 @@
     `(defn ~name ~args
        (let [v# (do ~@body)]
          (binding [ast/*verbose* true]
-           (trace! "---" ~(str name) "in"
-                   (-> ~(second args)
-                       (update  :bindings
-                                #(into {} (map (fn [[k# v#]] [k# (peek v#)])) %))
-                       (update :ctx #(sort-by :names (keys %))))
+           (trace! "---" ~(str name) "in\n" ~(second args)
                    "\n---\n" ~input "\n-->\n" v# "\n---"))
          v#))))
 

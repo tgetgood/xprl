@@ -43,7 +43,7 @@
 ;;;;; Walk (previously `reduce`)
 
 (deftracefn walk [form env]
-  (let [env (or (env/local form) env)]
+  (env/in-env form env
     (cond
       (ast/immediate? form)   (if (ast/incomplete? (:form form))
                                 (let [form (update form :form walk env)]
@@ -58,7 +58,7 @@
                                     (apply form env)))
                                 (apply form env))
       (ast/emission? form)    (let [form (update form :kvs walk env)]
-                                (if (:μ? env)
+                                (if (env/μ-ctx? env)
                                   form
                                   (sys/try-emissions! (update form :kvs walk env) env)))
 
@@ -69,12 +69,12 @@
       (= :error form)  (throw (RuntimeException. "fatal error"))
       true             form)))
 
-;; Well... Is it too simple now?
+;; Rewalk until fixed point. Is this really the best I can do?
 
 (defn interpret [form]
   (loop [f form]
     (debug/trace! "step")
-    (let [next    (walk f env/empty-env)]
+    (let [next (walk f env/empty-env)] ; Always start over from the empty-env
       (if (= f next)
         f
         (recur next)))))

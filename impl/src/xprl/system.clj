@@ -25,6 +25,6 @@
                         kvs
                         (do
                           (emit! env k (env/attach
-                                        (env/merge-stacks (::env/env v) env) v))
+                                        (env/merge-stacks (env/local v) env) v))
                           (recur more))))
                     []))))
