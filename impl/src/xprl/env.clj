@@ -11,16 +11,6 @@
   [x]
   (dissoc x ::env))
 
-(def empty-env ::root)
-
-(defn local [x]
-  (if-let [e (::env x)]
-    e
-    empty-env))
-
-(defn local? [x]
-  (not (nil? (::env x))))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;; Namespaces
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -44,42 +34,22 @@
 ;;;;; Env Frames
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(def empty-env [])
+
+(defn local [x]
+  (if-let [e (::env x)]
+    e
+    empty-env))
+
+(defn local? [x]
+  (not (nil? (::env x))))
+
 (defn push [env frame]
-  (assoc frame ::previous env))
+  (conj env (assoc frame ::id (gensym))))
 
-;; Not reverse! something much weirder.
-(defn invert [s]
-  (if (= (::previous s) ::root)
-    s
-    (recur (assoc (::previous s) ::next s))))
-
-(defn merge-stacks
-  ;; AKA despaghettify
-  "Given two stacks, find their common root and create a new stack of the form
-  root<-unique part of `outer`<-unique part of `inner`."
-  [inner outer]
-  (cond
-    (= inner outer)     inner ; this case would lead to infinite looping below
-    (= empty-env inner) outer
-    (= empty-env outer) inner
-    true
-    (loop [i (invert inner)
-           o (invert outer)]
-      (if (= (dissoc i ::next) (dissoc o ::next))
-        (recur (::next i) (::next o))
-        (cond ; the first two cases are just an optimisation.
-          (nil? i) outer
-          (nil? o) inner
-          true
-          (loop [root (::previous o)
-                 o    o]
-            (if (contains? o ::next)
-              (recur (push root (dissoc o ::next)) (::next o))
-              (loop [root (push root o)
-                     i    i]
-                (if (contains? i ::next)
-                  (recur (push root (dissoc i ::next)) (::next i))
-                  (push root i))))))))))
+(defn merge-stacks [inner outer]
+  (let [index (into #{} (map ::id) inner)]
+    (into (into [] (remove #(contains? index (::id %))) outer) inner)))
 
 (defn with-env [env form]
   (cond
@@ -91,13 +61,14 @@
 (defn resolve [env {sym :form :as im}]
   (let [s   (strip (ast/sym sym))
         env (merge-stacks (local sym) env)]
-    (loop [{:keys [bindings] :as env} env]
-      (cond
-        (= ::root env)         im
-        (contains? bindings s) (let [next (get bindings s)] ; `next` might be `false`!
-                                 (with-env (merge-stacks (local next) (::previous env))
-                                   next))
-        true                   (recur (::previous env))))))
+    (loop [n (dec (count env))]
+      (let [frame (nth env n)]
+        (cond
+          (zero? n)           im
+          (contains? frame s) (let [next (get frame s)] ; `next` might be `false`!
+                                (with-env (merge-stacks (local next) (subvec env 0 n))
+                                  next))
+          true                (recur (dec n)))))))
 
 (defmacro in-env [form env body]
   {:style/indent 2}
@@ -133,7 +104,8 @@
 
 ;; (assert (= f (merge-stacks f empty-env) (merge-stacks empty-env f)))
 ;; (assert (= (merge-stacks f f) f))
-;; (assert (= (merge-stacks g g') (merge-stacks g' g) g'))
+;; (assert (not= (merge-stacks g' g) (merge-stacks g g')))
+;; (assert (= (merge-stacks g' g) g'))
 
-;; (assert (= 4 (:c (merge-stacks f g))))
-;; (assert (= 7 (:e (merge-stacks g f))))
+;; (assert (= 4 (:c (last (merge-stacks f g)))))
+;; (assert (= 7 (:e (last (merge-stacks g f)))))
