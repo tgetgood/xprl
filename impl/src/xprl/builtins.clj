@@ -20,7 +20,7 @@
         (try
           (apply f tail)
           (catch Exception e
-            (reset! debug/*pfn {:f f :args tail :env :e e})
+            (reset! debug/*pfn {:f f :args tail :e e})
             (binding [ast/*verbose* true]
               (ast/inspect (ast/application f tail)))
             (println e)
@@ -89,12 +89,12 @@
       (assoc app :tail args)
       (if-let [args (env/μ-prepare args)]
         (do
-          (debug/trace! "building μ" args "in" env)
+          (debug/trace! "building μ" args)
           (i/walk (apply ast/μ args) opts))
         ;; if the names don't resolve, then there has to be a μ context
         ;; surrounding our current context.
         (let [next (update app :tail i/walk (assoc opts :freeze? true))]
-          (debug/trace! "postponing μ" app "->" next "in" env)
+          (debug/trace! "postponing μ" app "->" next)
           next)))))
 
 (defn emit [{kvs :tail :as app} opts]
@@ -114,10 +114,10 @@
       ;; that happens properly
 
       ;; first walk *just p*. that's important.
-      (let [p' (i/walk p env)]
+      (let [p' (i/walk p opts)]
         (if (ast/incomplete? p')
           ;; if p is not a bool, it ~should~ be safe to walk both `t` & `f`...
-          (assoc app :tail [p' (i/walk t env) (i/walk f env)])
+          (assoc app :tail [p' (i/walk t opts) (i/walk f opts)])
           ;; if p resolves, don't walk the dead branch: it might not be safe to do so.
           ;; e.g. (select ~(empty? xs) [] ~(first xs))
           (do
