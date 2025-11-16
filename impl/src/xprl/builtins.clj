@@ -12,18 +12,19 @@
   it from xprl."
   [f]
   (fn [{tail :tail :as form} env opts]
-    (if (or (ast/incomplete? tail) (some ast/incomplete? tail))
-      (let [{:keys [tail] :as next} (update form :tail i/walk env opts)]
-        (if (or (ast/incomplete? tail) (some ast/incomplete? tail))
-          next
-          (try
-            (apply f tail)
-            (catch Exception e
-              (reset! debug/*pfn {:f f :args tail :env env :e e})
-              (binding [ast/*verbose* true]
-                (ast/inspect (ast/application f tail)))
-              (println e)
-              :error)))))))
+    (let [{:keys [tail] :as next} (if (or (ast/incomplete? tail) (some ast/incomplete? tail))
+                                    (update form :tail i/walk env opts)
+                                    form)]
+      (if (or (ast/incomplete? tail) (some ast/incomplete? tail))
+        next
+        (try
+          (apply f tail)
+          (catch Exception e
+            (reset! debug/*pfn {:f f :args tail :env env :e e})
+            (binding [ast/*verbose* true]
+              (ast/inspect (ast/application f tail)))
+            (println e)
+            :error))))))
 
 (defn primitive [n f]
   (ast/extern n (call-primitive-fn f)))

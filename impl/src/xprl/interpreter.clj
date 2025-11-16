@@ -48,7 +48,7 @@
 ;;;;; Walk (previously `reduce`)
 
 (deftracefn walk [form env & [{:keys [freeze?] :as opts}]]
-  (env/in-env form env
+  (let [env (if-let [env (::env form)] env env)] ; <- this is awful..
     (cond
       (ast/immediate? form)   (if (ast/incomplete? (:form form))
                                 (let [form (update form :form walk env opts)]

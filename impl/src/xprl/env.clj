@@ -62,13 +62,17 @@
   (let [s   (strip (ast/sym sym))
         env (merge-stacks (local sym) env)]
     (loop [n (dec (count env))]
-      (let [frame (nth env n)]
-        (cond
-          (zero? n)           im
-          (contains? frame s) (let [next (get frame s)] ; `next` might be `false`!
-                                (with-env (merge-stacks (local next) (subvec env 0 n))
-                                  next))
-          true                (recur (dec n)))))))
+      (if (< n 0)
+        im
+        (let [frame (nth env n)]
+          (if (contains? frame s)
+            (let [next (get frame s)] ; `next` might be `false`!
+              (with-env (merge-stacks
+                         (local next)
+                         (into (subvec env 0 n) (map #(select-keys % [::id]))
+                               (subvec env n)))
+                next))
+            (recur (dec n))))))))
 
 (defmacro in-env [form env body]
   {:style/indent 2}
@@ -90,7 +94,7 @@
           "\nin\n" env "->" (merge-stacks (local body) env)
           "\nwith\nparams" (local args)
           "\nμ" (local μ))
-  (let [binding {:bindings (merge {params args} (when name {name μ}))}]
+  (let [binding (merge {params args} (when name {name μ}))]
     (with-env (push (merge-stacks (local body) env) binding) body)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
