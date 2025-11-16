@@ -62,6 +62,7 @@
     "map?*"   ast/map?
     "merge*"  merge
     "empty?*" empty?*
+    "get*"    get
 
     "symbol?*" ast/symbol?
 
@@ -103,27 +104,6 @@
     (ast/emission (mapv (fn [[k v]] [(ast/immediate k) v]) (partition 2 kvs)))
     opts))
 
-;; TODO: revisit the smalltalk style impl of branching. I think I can control
-;; evaluation better that way and not have to worry about walking branches not
-;; taken and all of the possible errors that come with that.
-(defn select [{[p t f] :tail :as app} opts]
-  (check-tail opts app
-      ;; FIXME: What the hell do we do if there's an `emit` in the condition of a
-      ;; select? Just kick them up along with emissions from the winning branch?
-      ;; That's logical, but what a shitshow. And whose job is it to make sure
-      ;; that happens properly
-
-      ;; first walk *just p*. that's important.
-      (let [p' (i/walk p opts)]
-        (if (ast/incomplete? p')
-          ;; if p is not a bool, it ~should~ be safe to walk both `t` & `f`...
-          (assoc app :tail [p' (i/walk t opts) (i/walk f opts)])
-          ;; if p resolves, don't walk the dead branch: it might not be safe to do so.
-          ;; e.g. (select ~(empty? xs) [] ~(first xs))
-          (do
-            (assert (boolean? p'))
-            (if p' t f))))))
-
 (defn with-channels [{[chmap body] :tail :as app} opts]
   (if (ast/incomplete? chmap)
     (update app :tail i/walk opts)
@@ -144,7 +124,6 @@
   "things that would traditionally be special forms."
   (macros
    {"μ"      μ
-    "select" select
     "emit"   emit
 
     "with-channels" with-channels

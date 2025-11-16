@@ -60,9 +60,13 @@
                    ~~(nth* ~body 2)
                    ~(cond . ~(rest* ~(rest* ~body))))))
 
+(def bool-ints
+  {true  1
+   false 0})
+
 (def if
   (μ x
-     ~~(select ~~(nth* ~x 1) ~(nth* ~x 2) ~(nth* ~x 3))))
+     ~~(nth* ~x ~(-* 3 ~(get* ~bool-ints ~~(nth* ~x 1))))))
 
 (def let1
   (μ x
