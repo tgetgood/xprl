@@ -14,7 +14,7 @@
 
 (defn emit! [[k v]]
   (trace! "emitting" [k v] "in" (env/local v))
-  (if-let [ch (get *ccmap* (env/strip k))]
+  (if-let [ch (get *ccmap* k)]
     (ch v)
     (if-let [unbound (get *ccmap* (ast/xkeys :unbound))]
       (unbound [k v])

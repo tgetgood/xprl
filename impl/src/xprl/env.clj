@@ -1,115 +1,121 @@
 (ns xprl.env
-  (:refer-clojure :exclude [bound? resolve])
+  (:refer-clojure :exclude [resolve extend])
   (:require
    [clojure.set :as set]
    [clojure.walk :as walk]
    [xprl.ast :as ast]
    [xprl.debug :refer [trace!]]))
 
-(defn strip
-  "Removes lexical env from a form"
-  [x]
-  (dissoc x ::env))
+(defn sym-walk
+  "Replace every Symbol s in `form` with (`f` s). Leaves the rest unchanged."
+  [f form]
+  (if (ast/symbol? form)
+    (f form)
+    (walk/walk (partial sym-walk f) identity form)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;; Namespaces
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (def empty-ns {})
+(def empty-env [[]])
 
 (defn set-ns [ns body]
   (trace! "ns replace" (sort-by :names (keys ns)))
-  (assert (every? ast/unresolved? (keys ns)) ns)
-  (walk/postwalk #(if (contains? ns %) (get ns %) %) body))
+  (assert (every? ast/symbol? (keys ns)) ns)
+  (sym-walk #(assoc % ::ns ns ::env empty-env) body))
 
 (defn ns-intern [ns sym val]
-  (assert (ast/unresolved? sym) sym)
-  (assoc ns (strip sym) val))
+  (assert (ast/symbol? sym) sym)
+  (assoc ns (ast/symbol sym) val))
 
+;; N.B.: This is used for tooling. Don't delete it.
 (defn lookup [env sym]
-  (assert (ast/unresolved? sym) sym)
+  (assert (ast/symbol? sym) sym)
   (get env sym))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;; Env Frames
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(def empty-env [])
+(defn push [sym frame]
+  ;; Always update the last
+  (update sym ::env
+          (fn [eq] (update eq (dec (count eq))
+                           (fn [es] (conj es frame))))))
 
-(defn local [x]
-  (if-let [e (::env x)]
-    e
-    empty-env))
+(defn bind [bindings form]
+  (sym-walk (fn [s] (push s {:bindings bindings})) form))
 
-(defn local? [x]
-  (not (nil? (::env x))))
+(defn capture [syms form]
+  (sym-walk (fn [s] (push s {:capture (into #{} syms)})) form))
 
-(defn push [env frame]
-  (conj env (assoc frame ::id (gensym))))
+(defn uncapture [env s]
+  (loop [n (dec (count env))]
+    (if (< n 0)
+      (throw (RuntimeException. (str "Resolved uncaptured variable: " s)))
+      (if (contains? (:capture (nth env n)) s)
+        (into (subvec env 0 n) (subvec env (inc n)))
+        (recur (dec n))))))
 
-(defn merge-stacks [inner outer]
-  (let [index (into #{} (map ::id) inner)]
-    (into (into [] (remove #(contains? index (::id %))) outer) inner)))
+(defn frame-lookup
+  "Looks up `s` in *stack* `env`. Returns the resolved value as well as the
+  remainder of the stack (minus a preceeding capture frame if applicable)."
+  [env s]
+  (loop [n (dec (count env))]
+    (when (< 0 n)
+      (let [frame (nth env n)]
+        (if-let [caps (:capture frame)]
+          (when-not (contains? caps s) ; If a symbol is captured, give up and come
+            (recur (dec n)))           ; back later
+          (let [bs (:bindings frame)]
+            (if (contains? bs s)
+              [(get bs env) (uncapture (subvec env 0 n) s)]
+              (recur (dec n)))))))))
 
-(defn with-env [env form]
-  (cond
-    (vector? form) (into [] (map (partial with-env env)) form)
-    (map? form)    (assoc form ::env env)
-    true           form))
+(defn env-lookup
+  "Returns the first binding of `s` in the queue of `envs` as well as the
+  remaining unconsumed environment. "
+  [envs s]
+  (when-not (empty? envs)
+    (let [[v rem] (frame-lookup (first envs) s)]
+      (if (nil? v)
+        (recur (rest envs) s)
+        [v (into [rem] (rest envs))]))))
 
-;; OPTIMISE: This may benefit from memoisation.
-(defn resolve [env {sym :form :as im}]
-  (let [s   (strip (ast/sym sym))
-        env (merge-stacks (local sym) env)]
-    (loop [n (dec (count env))]
-      (if (< n 0)
-        im
-        (let [frame (nth env n)]
-          (if (contains? frame s)
-            (let [next (get frame s)] ; `next` might be `false`!
-              (with-env (merge-stacks
-                         (local next)
-                         (into (subvec env 0 n) (map #(select-keys % [::id]))
-                               (subvec env n)))
-                next))
-            (recur (dec n))))))))
+(defn ns-lookup [ns s]
+  (get ns s))
 
-(defmacro in-env [form env body]
-  {:style/indent 2}
-  `(let [~env (merge-stacks (local ~form) ~env)]
-     ~body))
+(defn extend [sym env]
+  ;; Extensions go at the end of the queue, so they get tried last.
+  (update sym ::env into env))
+
+(defn resolve [{:keys [::env ::ns] sym :form :as im}]
+  (let [s       (ast/symbol sym)
+        [v env] (env-lookup env s)]
+    (if (nil? v)
+      (let [v (ns-lookup ns s)]
+        (if (nil? v)
+          ;; If sym is unbound in the current env, then all pinned stacks before
+          ;; the last can be thrown away since they will never update and thus
+          ;; can never influence anything downstream of this symbol.
+          ;; The last stack, however, might effect the resolved value if it ends
+          ;; up bound in the stack at a later point in time.
+          ;; Ugh, that's confusing. Which more or less matches my understanding.
+          (update im :form update ::env (fn [e] [(last e)]))
+          v))
+      (extend v env))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;; μ
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn capture [args]
-  (let [names (mapv strip (map ast/sym (butlast args)))]
-    (when (every? ast/unresolved? names)
-      (conj names (last args)))))
+(defn μ-prepare [args]
+  (when (every? ast/symbol? (butlast args))
+    (let [names (conj (into (map ast/symbol) (butlast args)))]
+      (conj names (capture names (last args))))))
 
 (defn bindargs
-  [env {:keys [name params body] :as μ} args]
-  (trace! "binding" (merge {params args} (when name {name μ}))
-          "\nin\n" env "->" (merge-stacks (local body) env)
-          "\nwith\nparams" (local args)
-          "\nμ" (local μ))
-  (let [binding (merge {params args} (when name {name μ}))]
-    (with-env (push (merge-stacks (local body) env) binding) body)))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;; test cases
-;; TODO: real tests
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;; (def f (reduce push empty-env [{:a 1} {:b 2} {:c 4}]))
-;; (def g (reduce push empty-env [{:a 1} {:b 2} {:d 5} {:e 7}]))
-;; (def g' (push g {:test 42}))
-
-;; (assert (= f (merge-stacks f empty-env) (merge-stacks empty-env f)))
-;; (assert (= (merge-stacks f f) f))
-;; (assert (not= (merge-stacks g' g) (merge-stacks g g')))
-;; (assert (= (merge-stacks g' g) g'))
-
-;; (assert (= 4 (:c (last (merge-stacks f g)))))
-;; (assert (= 7 (:e (last (merge-stacks g f)))))
+  [{:keys [name params body] :as μ} args]
+  (trace! "binding" (merge {params args} (when name {name μ})) "\nin\n" body)
+  (bind (merge {params args} (when name {name μ})) body))

@@ -52,39 +52,18 @@
   (toString [_]
     (transduce (interpose ".") str "" names)))
 
-(def symbol
-    (memoize (fn [s] (->Symbol (split-symbolic s)))))
-
-(defn unresolved? [s]
-  (instance? Symbol s))
-
-(defrecord Resolved [sym val]
-  Object
-  (toString [_]
-    (str sym "^" (when *verbose* (str "=" val)))))
-
-(defn resolve [sym val]
-  (assert (unresolved? sym) sym)
-  (->Resolved sym  val))
-
-(defn resolved? [x]
-  (instance? Resolved x))
-
-(defn unresolve [x]
-  (if (resolved? x)
-    (recur (:sym x))
-    x))
+(def symbol-cache
+  (memoize (fn [names] (->Symbol names))))
 
 (defn symbol? [s]
-  (or
-   (instance? Symbol s)
-   (instance? Resolved s)))
+  (instance? Symbol s))
 
-
-(defn sym [s]
+(defn symbol [x]
   (cond
-    (instance? Symbol s) s
-    (resolved? s)        (:sym s)))
+    (string? x) (symbol-cache (split-symbolic x))
+    (symbol? x) (symbol-cache (:names x))
+    true        (throw (RuntimeException.
+                        (str "Can't create symbol from " (type x))))))
 
 
 (defn elements [l]
@@ -218,11 +197,6 @@
 (ps Symbol)
 
 (defmethod pp/simple-dispatch Symbol [o]
-  (pp/write-out (clojure.core/symbol (str o))))
-
-(ps Resolved)
-
-(defmethod pp/simple-dispatch Resolved [o]
   (pp/write-out (clojure.core/symbol (str o))))
 
 ;;; Keyword
@@ -378,15 +352,6 @@
     (.write w "S[")
     (.write w (str form))
     (.write w "]\n"))
-
-  Resolved
-  (insp [{:keys [sym val]} ^Writer w level]
-    (spacer w level)
-    (.write w "R[")
-    (.write w (str sym))
-    (.write w "]\n")
-    (when (and *verbose* (not (nil? val)))
-      (insp val w (inc level))))
 
   Application
   (insp [form ^Writer w level]
