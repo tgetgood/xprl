@@ -98,6 +98,7 @@
           (debug/trace! "postponing μ" app "->" next)
           next)))))
 
+;; FIXME: `emit` doesn't need to be special. Why is it again?
 (defn emit [{kvs :tail :as app} opts]
   (assert (even? (count kvs)))
   (ast/emission (mapv (fn [[k v]] [(ast/immediate k) v]) (partition 2 kvs))))
