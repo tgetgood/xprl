@@ -91,7 +91,7 @@
       (if-let [args (env/μ-prepare args)]
         (do
           (debug/trace! "building μ" args)
-          (i/walk (apply ast/μ args) opts))
+          (apply ast/μ args))
         ;; if the names don't resolve, then there has to be a μ context
         ;; surrounding our current context.
         (let [next (update app :tail i/walk (assoc opts :freeze? true))]
@@ -100,9 +100,7 @@
 
 (defn emit [{kvs :tail :as app} opts]
   (assert (even? (count kvs)))
-  (i/walk
-    (ast/emission (mapv (fn [[k v]] [(ast/immediate k) v]) (partition 2 kvs)))
-    opts))
+  (ast/emission (mapv (fn [[k v]] [(ast/immediate k) v]) (partition 2 kvs))))
 
 (defn with-channels [{[chmap body] :tail :as app} opts]
   (if (ast/incomplete? chmap)

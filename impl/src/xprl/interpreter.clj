@@ -6,8 +6,6 @@
    [xprl.env :as env]
    [xprl.system :as sys]))
 
-(declare walk)
-
 ;;;;; Apply
 
 (def *ev (atom nil))
@@ -24,18 +22,18 @@
 
 ;;;;; Eval
 
-(deftracefn eval [{form :form :as im} _] ; eval doesn't currently use any options
+(deftracefn eval [{form :form :as im} opts]
   (cond
     (ast/symbol? form) (env/resolve im)
     ;; (I (P x y)) => (A (I x) y)
-    (ast/pair? form) (ast/application (ast/immediate (:head form)) (:tail form))
+    (ast/pair? form)   (ast/application (ast/immediate (:head form)) (:tail form))
     ;; (I (L x y ...)) => (L (I x) (I y) ...)
-    (vector? form)   (into [] (map ast/immediate) form)
+    (vector? form)     (into [] (map ast/immediate) form)
     ;; (I {x y ...}) => {(I x) (I y) ...}
     ;; FIXME: maps are a pain in the ass because records are maps...
-    (ast/map? form)  (into {} (map #(mapv ast/immediate %)) form)
+    (ast/map? form)    (into {} (map #(mapv ast/immediate %)) form)
     ;; (I V) => V. values are fixed points of eval.
-    true             form))
+    true               form))
 
 ;;;;; Walk (previously `reduce`)
 
@@ -60,8 +58,7 @@
 
     (ast/ctx? form)  (sys/with-ctx (:chs form) (update form :form walk opts))
     (ast/μ? form)    (update form :body walk (assoc opts :freeze? true))
-    (ast/pair? form) (-> form (update :head walk opts)
-                         (update :tail walk opts))
+    (ast/pair? form) (-> form (update :head walk opts) (update :tail walk opts))
     (ast/list? form) (into [] (map #(walk % opts)) form)
     (ast/map? form)  (into {} (map (fn [e] (mapv (fn [x] (walk x opts)) e))) form)
     (= :error form)  (throw (RuntimeException. "fatal error"))
@@ -72,7 +69,13 @@
 (defn interpret [form]
   (loop [form form]
     (debug/trace! "start")
-    (let [next (walk form {})]
+    ;; (walk form {:μs #{}})
+
+    (let [next (walk form {:μs #{}})]
+      ;; (println "-")
+      ;; (println form)
+      ;; (println "->")
+      ;; (println next)
       (if (= next form)
         form
         (recur next)))))
