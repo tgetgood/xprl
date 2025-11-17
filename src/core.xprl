@@ -7,6 +7,10 @@
 ;; REVIEW: This initial def cannot accept metadata like docstrings, file line &
 ;; col numbers, etc. So we'll need to use it to write a better one eventually.
 
+(def if
+  (μ x
+     ~~(nth* ~x ~(-* 3 ~(get* {false 0 true 1} ~~(nth* ~x 1))))))
+
 ;; "Wraps a μ or primitive that takes only literal values in a function that
 ;; evals its arguments."
 (def wrap
@@ -54,19 +58,11 @@
         (μ ~(nth* ~x 1) ~(nth* ~x 2) ~~(nth* ~x 3)))))
 
 (defμ cond body
-  (select ~(<* ~(count* ~body) 2)
-          ~(emit)
-          ~(select ~~(nth* ~body 1)
-                   ~~(nth* ~body 2)
-                   ~(cond . ~(rest* ~(rest* ~body))))))
-
-(def bool-ints
-  {true  1
-   false 0})
-
-(def if
-  (μ x
-     ~~(nth* ~x ~(-* 3 ~(get* ~bool-ints ~~(nth* ~x 1))))))
+  (if (<* ~(count* ~body) 2)
+    (emit)
+    (if ~(nth* ~body 1)
+      ~(nth* ~body 2)
+      (cond . ~(rest* ~(rest* ~body))))))
 
 (def let1
   (μ x
@@ -80,19 +76,20 @@
 (defμ let* x
   (let1 bindings ~(nth* ~x 1)
         ~(let1 body ~(nth* ~x 2)
-              ~(select ~(empty?* ~bindings)
-                       ~body
-                       ~(let1 ~(nth* ~bindings 1) ~(nth* ~bindings 2)
-                              ~(let* ~(rest* ~(rest* ~bindings)) ~body))))))
+               ~(if (empty?* ~bindings)
+                  body
+                  ((μ x
+                      ~(let1 ~(nth* ~bindings 1) ~(nth* ~bindings 2) ~~x))
+                   (let* ~(rest* ~(rest* ~bindings)) ~body))))))
 
 (defμ let-map x
   (let1 bindings ~(nth* ~x 1)
         ~(let1 body ~(nth* ~x 2)
-               ~(select ~(empty?* ~bindings)
-                        ~body
-                        ~(let1 kv ~(first* ~bindings)
-                               ~(let1 ~(nth* ~kv 1) ~(nth* ~kv 2)
-                                      ~(let-map ~(rest* ~bindings) ~body)))))))
+               ~(if (empty?* ~bindings)
+                  body
+                  (let1 kv ~(first* ~bindings)
+                        ~(let1 ~(nth* ~kv 1) ~(nth* ~kv 2)
+                               ~(let-map ~(rest* ~bindings) ~body)))))))
 
 (def destructure-map
   (μ mp
@@ -170,14 +167,14 @@
 
 (def !1
   (μ !1 n
-     ~~(select ~(<* ~n 2)
-              1
-              (** ~n ~(!1 . ~(-* ~n 1))))))
+     ~(if ~(<* ~n 2)
+        1
+        (** ~n ~(!1 . ~(-* ~n 1))))))
 
 (defμ !2 n
-  ~~(select ~(=* ~n 0)
-              1
-              (** ~n ~(!2 . ~(-* ~n 1)))))
+  ~(if ~(=* ~n 0)
+           1
+           (** ~n ~(!2 . ~(-* ~n 1)))))
 
 (defμ !3 n
   (if (< n 2)
