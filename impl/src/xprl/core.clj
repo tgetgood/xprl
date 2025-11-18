@@ -61,7 +61,9 @@
         (if (= :eof form)
           'EOF
           (do
-            (go! @envatom form (with-return conts #(println (i/interpret %))))
+            (let [v (go! @envatom form (with-return conts #(println (i/interpret %))))]
+              (when (and (ast/ctx? v) (not (nil? (:form v))))
+                (println (:form v))))
             (recur reader)))))))
 
 (defn reload! [fname]
