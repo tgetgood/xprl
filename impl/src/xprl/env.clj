@@ -49,7 +49,7 @@
 (defn capture [syms form]
   (sym-walk (fn [s] (push s {:capture (into #{} syms)})) form))
 
-(defn frame-lookup
+(defn frame-index
   "Looks up `s` in *stack* `env`. Returns the resolved value as well as the
   remainder of the stack (minus a preceeding capture frame if applicable)."
   [env s]
@@ -61,16 +61,24 @@
             (recur (dec n)))           ; back later
           (let [bs (:bindings frame)]
             (if (contains? bs s)
-              (get bs s)
+              n
               (recur (dec n)))))))))
 
+(defn extend [symbol extra]
+  (if-let [env (::env symbol)]
+    (assoc symbol ::env (into extra env))
+    symbol))
+
 (defn resolve [{sym :form :as im}]
-  (let [s (ast/symbol sym)
-        v (frame-lookup (::env sym) s)]
-    (if (nil? v) ; v = false is a *valid* binding.
+  (let [s   (ast/symbol sym)
+        env (::env sym)
+        n   (frame-index env s)]
+    (if (nil? n)
       (let [v (get (::ns sym) s)]
         (if (nil? v) im v))
-      v)))
+      (let [v     (get (:bindings (nth env n)) s)
+            extra (subvec env (inc n))]
+        (sym-walk #(extend % extra) v)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;; μ
@@ -84,4 +92,5 @@
 (defn bindargs
   [{:keys [name params body] :as μ} args]
   (trace! "binding" (merge {params args} (when name {name μ})) "\nin\n" body)
+  (assert (not-any? #(contains? % ::env) [name params]))
   (bind (merge {params args} (when name {name μ})) body))
