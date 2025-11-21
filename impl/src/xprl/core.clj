@@ -61,9 +61,7 @@
         (if (= :eof form)
           'EOF
           (do
-            (let [v (go! @envatom form (with-return conts #(println (i/interpret %))))]
-              (when (and (ast/ctx? v) (not (nil? (:form v))))
-                (println (:form v))))
+            (go! @envatom form (with-return conts println))
             (recur reader)))))))
 
 (defn reload! [fname]
@@ -81,7 +79,7 @@
 
 (defn test []
   (let [conts   {(ast/xkeys :env)    (env-updater the-env)
-                 (ast/xkeys :return) #(println (i/interpret %))}
+                 (ast/xkeys :return) println}
         retwrap (fn [f] (ast/pair (ast/symbol "emit")
                                   [(ast/xkeys :return) (ast/immediate f)]))]
     (loop [reader (r/file-reader testxprl)]

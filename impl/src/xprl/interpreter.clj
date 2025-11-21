@@ -37,32 +37,32 @@
 
 ;;;;; Walk (previously `reduce`)
 
-(deftracefn walk [form {:keys [freeze?] :as opts}]
-  (cond
-    (ast/immediate? form)   (if (ast/incomplete? (:form form))
-                              (let [form (update form :form walk opts)]
-                                (if (ast/incomplete? (:form form))
-                                  form
-                                  (eval form opts)))
-                              (eval form opts))
-    (ast/application? form) (if (ast/incomplete? (:head form))
-                              (let [form (update form :head walk opts)]
-                                (if (ast/incomplete? (:head form))
-                                  (update form :tail walk opts)
-                                  (apply form opts)))
-                              (apply form opts))
-    (ast/emission? form)    (let [form (update form :kvs walk opts)]
-                              (if freeze?
-                                form
-                                (sys/try-emissions! (update form :kvs walk opts))))
+(deftracefn walk [form opts]
+  (sys/with-return-ctx opts
+    (cond
+      (ast/immediate? form)   (if (ast/incomplete? (:form form))
+                                (let [form (update form :form walk opts)]
+                                  (if (ast/incomplete? (:form form))
+                                    form
+                                    (eval form opts)))
+                                (eval form opts))
+      (ast/application? form) (if (ast/incomplete? (:head form))
+                                (let [form (update form :head walk opts)]
+                                  (if (ast/incomplete? (:head form))
+                                    (update form :tail walk opts)
+                                    (apply form opts)))
+                                (apply form opts))
 
-    (ast/ctx? form)  (sys/with-ctx (:chs form) (update form :form walk opts))
-    (ast/μ? form)    (update form :body walk (assoc opts :freeze? true))
-    (ast/pair? form) (-> form (update :head walk opts) (update :tail walk opts))
-    (ast/list? form) (into [] (map #(walk % opts)) form)
-    (ast/map? form)  (into {} (map (fn [e] (mapv (fn [x] (walk x opts)) e))) form)
-    (= :error form)  (throw (RuntimeException. "fatal error"))
-    true             form))
+      (ast/emission? form) (sys/try-emissions! (update form :kvs walk opts) opts)
+      (ast/ctx? form)      (sys/walk-ctx form
+                             (update form :form walk (assoc opts :return-ctx? true)))
+
+      (ast/μ? form)    (update form :body walk (assoc opts :freeze? true))
+      (ast/pair? form) (-> form (update :head walk opts) (update :tail walk opts))
+      (ast/list? form) (into [] (map #(walk % opts)) form)
+      (ast/map? form)  (into {} (map (fn [e] (mapv (fn [x] (walk x opts)) e))) form)
+      (= :error form)  (throw (RuntimeException. "fatal error"))
+      true             form)))
 
 ;; Rewalk until fixed point. Is this really the best I can do?
 
