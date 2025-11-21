@@ -54,6 +54,8 @@
       ;; since they aren't really message passing.
       ;;
       ;; The problem is: what do we do with the *other* emissions?
+      ;; It's just easier to wait until we can safely send them before returning
+      ;; rets. So is the ~should~ above really true?
       (:freeze? opts)         em
       (contains? *ccmap* ret) (run! emit! kvs)
       true
