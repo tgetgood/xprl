@@ -8,14 +8,10 @@
 
 (def ret (ast/xkeys :return))
 
-(defmacro with-ctx [channels body]
-  `(binding [*ccmap* (merge *ccmap* ~channels)]
-     (trace! "updated ccmap" *ccmap*)
-     ~body))
-
 (defmacro walk-ctx [form body]
   {:style/indent 1}
-  `(with-ctx (:chs ~form)
+  `(binding [*ccmap* (merge *ccmap* (:chs ~form))]
+     (trace! "updated ccmap" *ccmap*)
      (if (or (ast/incomplete? (:form ~form))
              (ast/emission? (:form ~form))
              (not (contains? *ccmap* ret)))
