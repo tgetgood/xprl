@@ -69,13 +69,7 @@
 (defn interpret [form]
   (loop [form form]
     (debug/trace! "start")
-    ;; (walk form {:μs #{}})
-
     (let [next (walk form {:μs #{}})]
-      ;; (println "-")
-      ;; (println form)
-      ;; (println "->")
-      ;; (println next)
       (if (= next form)
         form
         (recur next)))))
