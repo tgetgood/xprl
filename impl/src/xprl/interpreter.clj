@@ -58,10 +58,10 @@
                              (update form :form walk (assoc opts :return-ctx? true)))
 
       (ast/μ? form)    (update form :body walk (assoc opts :freeze? true))
-      (ast/pair? form) (-> form (update :head walk opts) (update :tail walk opts))
       (ast/list? form) (into [] (map #(walk % opts)) form)
       (ast/map? form)  (into {} (map (fn [e] (mapv (fn [x] (walk x opts)) e))) form)
       (= :error form)  (throw (RuntimeException. "fatal error"))
+      ;; Pairs are data! They are not to be walked.
       true             form)))
 
 ;; Rewalk until fixed point. Is this really the best I can do?

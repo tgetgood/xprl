@@ -51,7 +51,9 @@
       ;;
       ;; The problem is: what do we do with the *other* emissions?
       ;; It's just easier to wait until we can safely send them before returning
-      ;; rets. So is the ~should~ above really true?
+      ;; rets. So the above a potential optimisation, but is it necessary?
+      ;; Put differently is there a case where the computation will stall if we
+      ;; don't?
       (:freeze? opts)         em
       (contains? *ccmap* ret) (run! emit! kvs)
       true
