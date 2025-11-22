@@ -93,4 +93,4 @@
   [{:keys [name params body] :as μ} args]
   (trace! "binding" (merge {params args} (when name {name μ})) "\nin\n" body)
   (assert (not-any? #(contains? % ::env) [name params]))
-  (bind (merge {params args} (when name {name μ})) body))
+  (bind (merge {(ast/symbol params) args} (when name {(ast/symbol name) μ})) body))

@@ -25,6 +25,11 @@
   (fn [l]
     (reset! te l)
     (let [[sym value] l]
+      ;; Ideally, we would interpret `value` *before* interning it in the
+      ;; namespace, but that can sometimes lead to infinite expansions. `Y` in
+      ;; recur.xprl, in particular expands infinitely (as it should when you
+      ;; think about it). We need special stopping heuristics to optimise code
+      ;; like that.
       (swap! env env/ns-intern sym value))))
 
 (defn with-return [ccs cb]
