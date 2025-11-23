@@ -56,13 +56,16 @@
 (defn delimiter? [s]
   (contains? delimiters s))
 
+(defn whitespace? [c]
+  (or (Character/isWhitespace c) (= c \,)))
+
 (defn buildtoken [old]
   (let [new     (read1 old)
         ^char c (:result new)]
     (cond
       (nil? new) (assoc old :result :eof)
 
-      (or (contains? delimiters c) (Character/isWhitespace c)) (unread1 new c)
+      (or (contains? delimiters c) (whitespace? c)) (unread1 new c)
 
       (and (seq (:until new)) (= c ^char (first (:until new)))) (unread1 new c)
 
@@ -84,7 +87,7 @@
     (cond
       (nil? next) (assoc current :result :eof)
 
-      (Character/isWhitespace c)
+      (whitespace? c)
       (recur (assoc next :token (str (:token current) c)))
 
       :else (setcursor (unread1 next c)))))
