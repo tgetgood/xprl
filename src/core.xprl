@@ -4,8 +4,9 @@
 (emit :env [def ~(μ x ~(emit :env [~(nth* ~x 1) ~~(nth* ~x 2)] :return ~(nth* ~x 1)))]
       :return def)
 
-;; REVIEW: This initial def cannot accept metadata like docstrings, file line &
-;; col numbers, etc. So we'll need to use it to write a better one eventually.
+;; REVIEW: This initial def cannot accept metadata like docstrings, file name,
+;; line & col numbers, etc. So we'll need to use it to write a better one
+;; eventually.
 
 (def if
   (μ x
@@ -48,6 +49,7 @@
 
 (def even? (wrap . (μ x ~(=* 0 ~(mod* ~(nth* ~x 1) 2)))))
 
+;; REVIEW: Is there any point wrapping this?
 (def odd? (wrap . (μ x ~(not* ~(even? . x)))))
 
 ;;;;; Core

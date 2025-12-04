@@ -71,7 +71,6 @@
 
     "count*" count
     "nth*"   nth* ; base 1 indexing
-
     }))
 
 ;;;;; specialish forms
@@ -108,13 +107,6 @@
     (update app :tail i/walk opts)
     (ast/ctx chmap body)))
 
-;; TODO: builtin macros needed for a working system.
-;;
-;; emit-recur
-;; pipe
-;; net
-
-
 (defn macros [m]
   (reduce (fn [acc [k f]]
             (assoc acc (ast/symbol k) (ast/extern k f))) {} m))
@@ -127,6 +119,15 @@
 
     "with-channels" with-channels
 
+    ;; TODO: builtin macros needed for a working system.
+    ;;
+    ;; emit-recur
+    ;; pipe
+    ;; net
+    ;;
+    ;; TODO: These operators will likely need to be converted from plain old
+    ;; functions.
+    ;;
     ;; "first*" first*
     ;; "rest*"  rest*
     }))
