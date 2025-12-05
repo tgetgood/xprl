@@ -40,11 +40,13 @@
 ;; now I'm sticking with it.
 (defn walk-replace [key val body]
   (cond
-    (= body key) val
     (and (ast/μ? body) (or (= (:params body) (ast/symbol key))
                            (= (:name body) (ast/symbol key))))
     body
-    true         (walk/walk (partial walk-replace key val) identity body)))
+    (= body key)    val
+    ;; Don't replace the :sym key of a Ref!!!
+    (ast/ref? body) (update body :bindings #(walk-replace key val %))
+    true            (walk/walk (partial walk-replace key val) identity body)))
 
 (defn capture [body name]
   (walk-replace name (ast/symbol name) body))
