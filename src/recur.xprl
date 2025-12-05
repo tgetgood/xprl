@@ -105,12 +105,14 @@
             1
             (** ~x ~(! . ~(-* ~x 1)))))))
 
+(! . 1)
+(! . 2)
+(! . 3)
 
-;; FIXME: Just defining this one leads to an infinite loop. No SO, just loops.
-;; Does that mean there's a cycle in the rules?
+(! . 10)
 
-;; (def !
-;;   (sc . ~(μ f ~(!! . ~(sc . f)))))
+(def !
+  (sc . ~(μ f ~(!! . ~(sc . f)))))
 
 (! . 1)
 
