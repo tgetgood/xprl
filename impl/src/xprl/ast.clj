@@ -8,6 +8,7 @@
     empty
     list
     list?
+    ref
     seq
     seq?
     map?
@@ -58,10 +59,25 @@
 (defn symbol? [s]
   (instance? Symbol s))
 
+(defrecord Ref [sym binding]
+  Object
+  (toString [_]
+    (str sym "#" (when *verbose* (str "<" binding ">")))))
+
+(defn ref? [x]
+  (instance? Ref x))
+
+(defn ref [sym local]
+  (->Ref sym local))
+
+(defn symbolic? [x]
+  (or (symbol? x) (ref? x)))
+
 (defn symbol [x]
   (cond
     (string? x) (symbol-cache (split-symbolic x))
-    (symbol? x) (symbol-cache (:names x))
+    (symbol? x) x
+    (ref? x)    (:sym x)
     true        (throw (RuntimeException.
                         (str "Can't create symbol from " (type x))))))
 
@@ -189,15 +205,20 @@
 
 ;; Boilerplate reducer.
 (defmacro ps [type]
-  `(do (defmethod print-method ~type [o# ^Writer w#]
-         (.write w# (str o#)))))
+  `(defmethod print-method ~type [o# ^Writer w#]
+     (.write w# (str o#))))
+
+(defmacro pps [type]
+  `(defmethod pp/simple-dispatch ~type [o#]
+     (pp/write-out (clojure.core/symbol (str o#)))))
 
 ;;; Symbol
 
 (ps Symbol)
+(pps Symbol)
 
-(defmethod pp/simple-dispatch Symbol [o]
-  (pp/write-out (clojure.core/symbol (str o))))
+(ps Ref)
+(pps Ref)
 
 ;;; Keyword
 
@@ -352,6 +373,14 @@
     (.write w "S[")
     (.write w (str form))
     (.write w "]\n"))
+
+  Ref
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "R*[")
+    (.write w (str (:sym form)))
+    (.write w "]")
+    (insp (:binding form) w (inc level)))
 
   Application
   (insp [form ^Writer w level]

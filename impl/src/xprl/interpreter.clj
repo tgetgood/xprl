@@ -24,16 +24,16 @@
 
 (deftracefn eval [{form :form :as im} opts]
   (cond
-    (ast/symbol? form) (env/resolve im)
+    (ast/symbolic? form) (env/resolve im)
     ;; (I (P x y)) => (A (I x) y)
-    (ast/pair? form)   (ast/application (ast/immediate (:head form)) (:tail form))
+    (ast/pair? form)     (ast/application (ast/immediate (:head form)) (:tail form))
     ;; (I (L x y ...)) => (L (I x) (I y) ...)
-    (vector? form)     (into [] (map ast/immediate) form)
+    (vector? form)       (into [] (map ast/immediate) form)
     ;; (I {x y ...}) => {(I x) (I y) ...}
     ;; FIXME: maps are a pain in the ass because records are maps...
-    (ast/map? form)    (into {} (map #(mapv ast/immediate %)) form)
+    (ast/map? form)      (into {} (map #(mapv ast/immediate %)) form)
     ;; (I V) => V. values are fixed points of eval.
-    true               form))
+    true                 form))
 
 ;;;;; Walk (previously `reduce`)
 

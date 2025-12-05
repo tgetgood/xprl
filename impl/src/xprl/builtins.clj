@@ -64,7 +64,11 @@
     "empty?*" empty?*
     "get*"    get
 
-    "symbol?*" ast/symbol?
+    ;; REVIEW: All symbols in a form are converted to Refs on read. The only
+    ;; time we get raw Symbols back is when a μ shadows a Ref with its
+    ;; parameter. So when we say `symbol?` in xprl we could mean either. But
+    ;; then should they be distinguishable in the language?
+    "symbol?*" ast/symbolic?
 
     "first*" first
     "rest*"  rest*
