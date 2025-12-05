@@ -75,6 +75,7 @@
         ~(let1 body ~(nth* ~x 2)
                ~(let1 ~(nth* ~bindings 1) ~(nth* ~bindings 2)
                       ~body))))
+
 (defμ let* x
   (let1 bindings ~(nth* ~x 1)
         ~(let1 body ~(nth* ~x 2)
@@ -97,19 +98,19 @@
      ~(emit :error "not implemented")))
 
 (defμ destructure xy
-  (let* [params ~(nth* ~xy 1)
-         args   ~(nth* ~xy 2)]
-    ~(cond
-       (symbol?* ~params) {params args}
-       (empty?* ~params)  {}
-       (empty?* ~args)    (emit :error "pattern mismatch")
-       (list?* ~params)   (merge
-                           (destructure ~(first* ~params) ~(first* ~args))
-                           (destructure ~(rest* ~params) ~(rest* ~args)))
-       (map?* ~params)    (merge
-                           (destructure-map ~(first* ~params) ~(first* ~args))
-                           (destructure ~(rest* ~params) ~(rest* ~args)))
-       true               (emit :error (str "Cannot destructure: " params ", " args)))))
+  (let1 params ~(nth* ~xy 1)
+        ~(let1 args   ~(nth* ~xy 2)
+          ~(cond
+             (symbol?* ~params) {params args}
+             (empty?* ~params)  {}
+             (empty?* ~args)    (emit :error "pattern mismatch")
+             (list?* ~params)   (merge
+                                 (destructure ~(first* ~params) ~(first* ~args))
+                                 (destructure ~(rest* ~params) ~(rest* ~args)))
+             (map?* ~params)    (merge
+                                 (destructure-map ~(first* ~params) ~(first* ~args))
+                                 (destructure ~(rest* ~params) ~(rest* ~args)))
+             true               (emit :error (str "Cannot destructure: " params ", " args))))))
 
 (def fn
   (μ x
