@@ -42,11 +42,10 @@
                 true           (assert false))]
     `(defn ~name ~args
        (let [v# (do ~@body)]
-         (binding [ast/*verbose* true]
-           (trace! "---" ~(str name) "with" ~(if (map? (second args))
-                                                (:as (second args))
-                                                (second args))
-                   "\n---\n" ~input "\n-->\n" v# "\n---"))
+         (trace! "---" ~(str name) "with" ~(if (map? (second args))
+                                             (:as (second args))
+                                             (second args))
+                 "\n---\n" ~input "\n-->\n" v# "\n---")
          v#))))
 
 ;; REVIEW: A more useful debugging tool might be to store a map of all

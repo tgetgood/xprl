@@ -62,12 +62,13 @@
 (defrecord Ref [sym binding]
   Object
   (toString [_]
-    (str sym "#" (when *verbose* (str "<" binding ">")))))
+    (str sym "*" (when *verbose* (str "<" binding ">")))))
 
 (defn ref? [x]
   (instance? Ref x))
 
 (defn ref [sym local]
+  (assert (symbol? sym))
   (->Ref sym local))
 
 (defn symbolic? [x]
@@ -148,8 +149,8 @@
 (defn μ
   ([params body] (μ nil params body))
   ([name params body]
-   (assert (or nil? name) (instance? Symbol name))
-   (assert (instance? Symbol params))
+   (assert (or nil? name) (symbol? name))
+   (assert (symbol? params))
    (->Mu name params body)))
 
 (defn μ? [x]
