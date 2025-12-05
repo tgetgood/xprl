@@ -37,8 +37,9 @@
 (let* [x 1 x 2] ~x)                  2
 (let-map {x 1 a 5} ~(+ x a))         6
 
-~(destructure a [1 2 3])                 {a [1 2 3]}
-~(destructure [a b [c d]] [1 2 [3 4]])   {a 1 b 2 c 3 d 4}
+                                   ; hackity quoting in a lang with no `quote`.
+(destructure a [1 2 3])                 ((μ x {a [1 2 3]}) 1)
+(destructure [a b [c d]] [1 2 [3 4]])   ((μ x {a 1 b 2 c 3 d 4}) 1)
 
 {(+ 1 2 3) (* 4 4)}                      {6 16}
 ((fn [x y z] (+ x (* y z))) 1 2 3)       7

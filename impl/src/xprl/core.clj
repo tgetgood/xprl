@@ -84,7 +84,7 @@
 
 (defn test []
   (let [conts   {(ast/xkeys :env)    (env-updater the-env)
-                 (ast/xkeys :return) println}
+                 (ast/xkeys :return) #(println (i/interpret %))}
         retwrap (fn [f] (ast/pair (ast/symbol "emit")
                                   [(ast/xkeys :return) (ast/immediate f)]))]
     (loop [reader (r/file-reader testxprl)]
