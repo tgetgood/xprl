@@ -62,7 +62,7 @@
 (defrecord Ref [sym binding]
   Object
   (toString [_]
-    (str sym "*" (when *verbose* (str "<" binding ">")))))
+    (str sym "^" (when *verbose* (str "<" binding ">")))))
 
 (defn ref? [x]
   (instance? Ref x))
