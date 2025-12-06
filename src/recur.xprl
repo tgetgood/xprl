@@ -156,16 +156,17 @@
 
 (! . 10)
 
-(def defrec
-  (μ x
-     ~(def ~(nth* ~x 1)
-        (rec . ~(μ ~(nth* ~x 1) ~~(nth* ~x 2))))))
+;; (def defrec
+;;   (μ x
+;;      ~(def ~(nth* ~x 1)
+;;         (rec . ~(μ ~(nth* ~x 1) ~~(nth* ~x 2))))))
 
-(defrec ! !body)
+;; (defrec ! !body)
 
-(! . 1)
+;; (! . 1)
 
-(! . 2)
-(! . 3)
+;; ;; FIXME: This now hangs forever here.
+;; (! . 2)
+;; (! . 3)
 
-(! . 10)
+;; (! . 10)

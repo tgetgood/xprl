@@ -8,10 +8,7 @@
 
 ;;;;; Apply
 
-(def *ev (atom nil))
-
 (defn apply-error [app]
-  (reset! *ev app)
   (throw (RuntimeException. (str (:head app) " is not applicable!\n" app))))
 
 (deftracefn apply [{:keys [head tail] :as form} opts]

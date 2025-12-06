@@ -36,17 +36,21 @@
 ;;;;; μ
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(declare walk-replace)
+
 ;; Replacing symbols one at a time is inefficient, but so much clearer that for
 ;; now I'm sticking with it.
-(defn walk-replace [key val body]
+(defn walk-replace* [key val body]
   (cond
     (and (ast/μ? body) (or (= (:params body) (ast/symbol key))
                            (= (:name body) (ast/symbol key))))
     body
     (= body key)    val
     ;; Don't replace the :sym key of a Ref!!!
-    (ast/ref? body) (update body :bindings #(walk-replace key val %))
+    (ast/ref? body) (update body :binding #(walk-replace key val %))
     true            (walk/walk (partial walk-replace key val) identity body)))
+
+(def walk-replace (memoize walk-replace*))
 
 (defn capture [body name]
   (walk-replace name (ast/symbol name) body))
