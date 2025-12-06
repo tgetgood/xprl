@@ -112,30 +112,30 @@
                            (destructure ~(rest* ~params) ~(rest* ~args)))
        true               (emit :error (str "Cannot destructure: " params ", " args)))))
 
-(def fn
-  (μ x
-     ~(μ args
-         ~~((μ ~(nth* ~x 1) ~(nth* ~x 2)) . ~~args))))
-
-;; (def fn2
+;; (def fn
 ;;   (μ x
 ;;      ~(μ args
-;;          ~(let1 bindings ~(destructure ~(nth* ~x 1) ~~args)
-;;                 ~(let-map ~bindings
-;;                    ~~(nth* ~x 2))))))
+;;          ~~((μ ~(nth* ~x 1) ~(nth* ~x 2)) . ~~args))))
 
-;; (def fn3
-;;   (μ x
-;;      ~(μ ~(nth* ~x 1) args
-;;          ~(let-map ~(destructure ~(nth* ~x 2) ~~args)
-;;             ~~(nth* ~x 3)))))
+(def fn2
+  (μ x
+     ~(μ args
+         ~(let1 bindings ~(destructure ~(nth* ~x 1) ~~args)
+                ~~(let-map ~bindings
+                   ~(nth* ~x 2))))))
 
-;; (def fn
-;;   (μ args
-;;      ~(cond
-;;         ;; TODO: Docstrings, metadata, etc.
-;;         (= 2 (count args)) (fn2 . ~args)
-;;         (= 3 (count args)) (fn3 . ~args))))
+(def fn3
+  (μ x
+     ~(μ ~(nth* ~x 1) args
+         ~~(let-map ~(destructure ~(nth* ~x 2) ~~args)
+            ~(nth* ~x 3)))))
+
+(def fn
+  (μ args
+     ~(cond
+        ;; TODO: Docstrings, metadata, etc.
+        (= 2 (count args)) (fn2 . ~args)
+        (= 3 (count args)) (fn3 . ~args))))
 
 ;; (def defmulti
 ;;   (μ x
