@@ -94,10 +94,11 @@
       (if-let [args (env/μ-prepare args)]
         (do
           (debug/trace! "building μ" args)
-          (apply ast/μ args))
-        ;; if the names don't resolve, then there has to be a μ context
-        ;; surrounding our current context.
-        (let [next (update app :tail i/walk (assoc opts :freeze? true))]
+          (apply ast/μ (update args (dec (count args)) i/walk opts)))
+        (let [next (update app :tail
+                           (fn [t]
+                             (conj (mapv #(i/walk % (assoc opts :freeze? true)) (butlast t))
+                                   (last t))))]
           (debug/trace! "postponing μ" app "->" next)
           next)))))
 
