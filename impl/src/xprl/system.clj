@@ -8,11 +8,16 @@
 
 (def ret (ast/xkeys :return))
 
+(defn incomplete? [x]
+  (if (vector? x)
+    (some incomplete? x)
+    (ast/incomplete? x)))
+
 (defmacro walk-ctx [form body]
   {:style/indent 1}
   `(binding [*ccmap* (merge *ccmap* (:chs ~form))]
      (trace! "updated ccmap" *ccmap*)
-     (if (or (ast/incomplete? (:form ~form))
+     (if (or (incomplete? (:form ~form))
              (ast/emission? (:form ~form))
              (not (contains? *ccmap* ret)))
        ~body
@@ -43,7 +48,7 @@
   (trace! "trying emissions" kvs)
   ;; Who says we can't emit an incomplete computation which can only be
   ;; completed in the receiving context?
-  (if (some (fn [[k v]] (or (ast/incomplete? v) (not (ast/keyword? k)))) kvs)
+  (if (some (fn [[k v]] (or (incomplete? v) (not (ast/keyword? k)))) kvs)
     em                  ; Delay emissions until they're all ready.
     (cond
       ;; TODO: Even when frozen we can and should perform non-channel returns
