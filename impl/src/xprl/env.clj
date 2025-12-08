@@ -73,13 +73,3 @@
   (trace! "binding" (merge {params args} (when name {name μ})) "\nin\n" body)
   (assert (and (ast/symbol? params) (or (nil? name) (ast/symbol? name))))
   (reduce bind body (merge {params args} (when name {name μ}))))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;; Resolution (almost trivial at this point)
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defn resolve [{sym :form :as im}]
-  (cond
-    (ast/symbol? sym) im
-    (ast/ref? sym)    (:binding sym)
-    true              (assert false "unreachable!")))

@@ -6,6 +6,8 @@
    [xprl.env :as env]
    [xprl.system :as sys]))
 
+(declare walk)
+
 ;;;;; Apply
 
 (defn apply-error [app]
@@ -14,14 +16,24 @@
 (deftracefn apply [{:keys [head tail] :as form} opts]
   (cond
     (ast/external? head) ((:fn head) form opts) ; Punt to external interpreter.
-    (ast/μ? head)        (env/bindargs head tail)
+    (ast/μ? head)        (let [tail (if (ast/incomplete? tail) (walk tail opts) tail)
+                               form (assoc form :tail tail)]
+                           (if (and (= head tail) (not (:rec? opts)))
+                             form
+                             (env/bindargs head tail)))
     true                 (apply-error form)))
 
 ;;;;; Eval
 
+(defn resolve [{sym :form :as im} opts]
+  (cond
+    (ast/symbol? sym) im
+    (ast/ref? sym)    (:binding sym)
+    true              (assert false "unreachable!")))
+
 (deftracefn eval [{form :form :as im} opts]
   (cond
-    (ast/symbolic? form) (env/resolve im)
+    (ast/symbolic? form) (resolve im opts)
     ;; (I (P x y)) => (A (I x) y)
     (ast/pair? form)     (ast/application (ast/immediate (:head form)) (:tail form))
     ;; (I (L x y ...)) => (L (I x) (I y) ...)
@@ -44,7 +56,7 @@
                                     (eval form opts)))
                                 (eval form opts))
       (ast/application? form) (if (ast/incomplete? (:head form))
-                                (let [form (update form :head walk opts)]
+                                (let [form (update form :head walk (assoc opts :rec? true))]
                                   (if (ast/incomplete? (:head form))
                                     (update form :tail walk opts)
                                     (apply form opts)))
@@ -67,7 +79,7 @@
 (defn interpret [form]
   (loop [form form]
     (debug/trace! "start")
-    (let [next (walk form {:μs #{}})]
+    (let [next (walk form {})]
       (if (= next form)
         form
         (recur next)))))
