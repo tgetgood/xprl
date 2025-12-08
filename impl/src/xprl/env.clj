@@ -25,7 +25,11 @@
   (sym-walk ns body))
 
 (defn ns-intern [ns sym val]
-  (assert (not (contains? ns (ast/symbol sym))) "Symbols cannot be redefined.")
+  ;; REVIEW: Should it be an error to redefine symbols? Old uses of the symbol
+  ;; will point to the old value, so previous code won't change. Without tooling
+  ;; that will be mighty confusing, but without tooling this language will be
+  ;; unusable.
+  ;; (assert (not (contains? ns (ast/symbol sym))) "Symbols cannot be redefined.")
   (assoc ns (ast/symbol sym) val))
 
 ;; N.B.: This is used for tooling. Don't delete it.
