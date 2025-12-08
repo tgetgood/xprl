@@ -94,10 +94,11 @@
       (if-let [args (env/μ-prepare args)]
         (do
           (debug/trace! "building μ" args)
-          (apply ast/μ (update args (dec (count args)) i/walk opts)))
+          (apply ast/μ args))
         (let [next (update app :tail
                            (fn [t]
-                             (conj (mapv #(i/walk % (assoc opts :freeze? true)) (butlast t))
+                             (conj (mapv #(i/walk % (assoc opts :freeze? true))
+                                         (butlast t))
                                    (last t))))]
           (debug/trace! "postponing μ" app "->" next)
           next)))))
