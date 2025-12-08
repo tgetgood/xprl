@@ -148,10 +148,13 @@
 
 (! . 10)
 
+;; FIXME: We have a scoping error here where the `x` in the defrecced fn gets
+;; shadowed by the value `x` passed to the inner fn. Using a gensym makes it
+;; work for now, but the bug didn't just go away.
 (def defrec
-  (μ x
-     ~(def ~(nth* ~x 1)
-        (rec . ~(μ ~(nth* ~x 1) ~~(nth* ~x 2))))))
+  (μ x#
+     ~(def ~(nth* ~x# 1)
+        (rec . ~(μ ~(nth* ~x# 1) ~~(nth* ~x# 2))))))
 
 (defrec ! !body)
 
