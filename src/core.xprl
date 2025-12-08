@@ -8,9 +8,13 @@
 ;; line & col numbers, etc. So we'll need to use it to write a better one
 ;; eventually.
 
+(def if* ; previously `select`.
+  (μ x
+     ~(nth* [~(nth* ~x 2) ~(nth* ~x 3)] ~(-* 2 ~(get* {false 0 true 1} ~(nth* ~x 1))))))
+
 (def if
   (μ x
-     ~~(nth* ~x ~(-* 3 ~(get* {false 0 true 1} ~~(nth* ~x 1))))))
+     ~~(if* ~~(nth* ~x 1) ~(nth* ~x 2) ~(nth* ~x 3))))
 
 ;; "Wraps a μ or primitive that takes only literal values in a function that
 ;; evals its arguments."
@@ -70,12 +74,6 @@
   (μ x
      ~((μ ~(nth* ~x 1) ~(nth* ~x 3)) . ~(nth* ~x 2))))
 
-(defμ let-test x
-  (let1 bindings ~(nth* ~x 1)
-        ~(let1 body ~(nth* ~x 2)
-               ~(let1 ~(nth* ~bindings 1) ~(nth* ~bindings 2)
-                      ~body))))
-
 (defμ let* x
   (let1 bindings ~(nth* ~x 1)
         ~(let1 body ~(nth* ~x 2)
@@ -87,9 +85,9 @@
 (defμ let-map x
   (let1 bindings ~(nth* ~x 1)
         ~(let1 body ~(nth* ~x 2)
-               ~(if (empty?* ~bindings)
-                  body
-                  (let1 kv ~(first* ~bindings)
+               ~(if* ~(empty?* ~bindings)
+                  ~body
+                  ~(let1 kv ~(first* ~bindings)
                         ~(let1 ~(nth* ~kv 1) ~(nth* ~kv 2)
                                ~(let-map ~(rest* ~bindings) ~body)))))))
 
@@ -121,14 +119,14 @@
   (μ x
      ~(μ args
          ~(let1 bindings ~(destructure ~(nth* ~x 1) ~~args)
-                ~~(let-map ~bindings
-                   ~(nth* ~x 2))))))
+                ~(let-map ~bindings
+                   ~~(nth* ~x 2))))))
 
 (def fn3
   (μ x
      ~(μ ~(nth* ~x 1) args
-         ~~(let-map ~(destructure ~(nth* ~x 2) ~~args)
-            ~(nth* ~x 3)))))
+         ~(let-map ~(destructure ~(nth* ~x 2) ~~args)
+            ~~(nth* ~x 3)))))
 
 (def fn
   (μ args
@@ -149,13 +147,6 @@
 ;; (defmulti fn [name params body]
 ;;   )
 
-;; This fn is not named and thus cannot call itself recursively.
-#_(def fn
-  )
-
-;; (μ x ~(wrap . ~(μ  ~(nth x 1) ~~(nth x 2)))))
-
-;; This one is named. Note it's the outer μ that bears the name.
 
 (def defn
   (μ x
@@ -197,3 +188,9 @@
   (if (< n 2)
     1
     (* n (!6 (- n 1)))))
+
+(def !7
+  (fn !7 [n]
+    (if (< n 2)
+      1
+      (* n (!7 (- n 1))))))
