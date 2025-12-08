@@ -378,10 +378,11 @@
   Ref
   (insp [form ^Writer w level]
     (spacer w level)
-    (.write w "R*[")
+    (.write w "R[")
     (.write w (str (:sym form)))
-    (.write w "]")
-    (insp (:binding form) w (inc level)))
+    (.write w "]\n")
+    (when *verbose*
+      (insp (:binding form) w (inc level))))
 
   Application
   (insp [form ^Writer w level]
