@@ -54,7 +54,7 @@
       (ast/ctx? form)      (sys/walk-ctx form
                              (update form :form walk (assoc opts :return-ctx? true)))
 
-      ;; Pairs are data! walking them can leave to evaluation out of context.
+      ;; Pairs are data! walking them can lead to evaluation out of context!
       ;; But then μs are also data, so why do we walk them? just an optimisation?
       (ast/μ? form)    (update form :body walk (assoc opts :freeze? true))
       (ast/list? form) (into [] (map #(walk % opts)) form)

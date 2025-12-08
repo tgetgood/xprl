@@ -24,12 +24,7 @@
 (defn env-updater [env]
   (fn [l]
     (reset! te l)
-    (let [[sym value] l]
-      ;; Ideally, we would interpret `value` *before* interning it in the
-      ;; namespace, but that can sometimes lead to infinite expansions. `Y` in
-      ;; recur.xprl, in particular expands infinitely (as it should when you
-      ;; think about it). We need special stopping heuristics to optimise code
-      ;; like that.
+    (let [[sym value] (i/interpret l)]
       (swap! env env/ns-intern sym value))))
 
 (defn with-return [ccs cb]
@@ -84,7 +79,7 @@
 
 (defn test []
   (let [conts   {(ast/xkeys :env)    (env-updater the-env)
-                 (ast/xkeys :return) #(println (i/interpret %))}
+                 (ast/xkeys :return) println}
         retwrap (fn [f] (ast/pair (ast/symbol "emit")
                                   [(ast/xkeys :return) (ast/immediate f)]))]
     (loop [reader (r/file-reader testxprl)]
