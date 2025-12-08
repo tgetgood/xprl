@@ -94,7 +94,7 @@
       (if-let [args (env/μ-prepare args)]
         (do
           (debug/trace! "building μ" args)
-          (apply ast/μ args))
+          (i/walk (apply ast/μ args) opts))
         (let [next (update app :tail
                            (fn [t]
                              (conj (mapv #(i/walk % (assoc opts :freeze? true))
