@@ -16,10 +16,9 @@
 (deftracefn apply [{:keys [head tail] :as form} opts]
   (cond
     (ast/external? head) ((:fn head) form opts) ; Punt to external interpreter.
-    (ast/μ? head)        (let [tail (if (ast/incomplete? tail) (walk tail opts) tail)
-                               form (assoc form :tail tail)]
+    (ast/μ? head)        (let [tail (if (ast/incomplete? tail) (walk tail opts) tail)]
                            (if (and (= head tail) (not (:rec? opts)))
-                             form
+                             (assoc form :tail tail)
                              (env/bindargs head tail)))
     true                 (apply-error form)))
 
