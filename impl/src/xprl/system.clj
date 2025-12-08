@@ -9,7 +9,7 @@
 (def ret (ast/xkeys :return))
 
 (defn incomplete? [x]
-  (if (vector? x)
+  (if (and (coll? x) (not (record? x)))
     (some incomplete? x)
     (ast/incomplete? x)))
 
