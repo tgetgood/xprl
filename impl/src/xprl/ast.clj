@@ -1,13 +1,14 @@
-(ns janus.ast
+(ns xprl.ast
   (:refer-clojure
    :exclude
    [symbol
     symbol?
     keyword
     keyword?
-    type
+    empty
     list
     list?
+    ref
     seq
     seq?
     map?
@@ -20,39 +21,9 @@
   (:import
    (java.io Writer)))
 
-;;;;; Context
-
-(defprotocol Symbolic
-  (symbols [this]))
-
-(extend-protocol Symbolic
-  nil
-  (symbols [_] #{})
-
-  clojure.lang.PersistentVector
-  (symbols [xs]
-    (into #{} (mapcat symbols) xs))
-
-  clojure.lang.PersistentArrayMap
-  (symbols [m]
-    (into #{} (mapcat symbols) m))
-
-  clojure.lang.PersistentHashMap
-  (symbols [m]
-    (into #{} (mapcat symbols) m))
-
-  clojure.lang.PersistentHashSet
-  (symbols [s]
-    (into #{} (mapcat symbols) s))
-
-  clojure.lang.MapEntry
-  (symbols [[k v]]
-    (set/union (symbols k) (symbols v)))
-
-  Object
-  (symbols [_] #{}))
-
 ;;;;; AST
+
+(def ^:dynamic *verbose* false)
 
 (defn split-symbolic [s]
   (cond
@@ -78,46 +49,38 @@
   (memoize (fn [s] (->Keyword (split-symbolic s)))))
 
 (defrecord Symbol [names]
-  Symbolic
-  (symbols [this] #{this})
   Object
   (toString [_]
     (transduce (interpose ".") str "" names)))
 
-(def symbol
-    (memoize (fn [s] (->Symbol (split-symbolic s)))))
-
-(defn unresolved? [s]
-  (instance? Symbol s))
-
-
-(defrecord Resolved [sym uuid val]
-  Symbolic
-  (symbols [_] #{sym})
-  Object
-  (toString [_]
-    (str sym "=" #_form)))
-
-(defn resolved? [x]
-  (instance? Resolved x))
-
-(defn unresolve [x]
-  (if (resolved? x)
-    (:sym x)
-    x))
-
-(defn capture [sym]
-  (if (resolved? sym)
-    (recur (unresolve sym))
-    (->Resolved sym (gensym (str sym)) nil)))
-
-(defn resolve [{:keys [sym uuid]} val]
-  (->Resolved sym uuid val))
+(def symbol-cache
+  (memoize (fn [names] (->Symbol names))))
 
 (defn symbol? [s]
-  (or
-   (instance? Symbol s)
-   (instance? Resolved s)))
+  (instance? Symbol s))
+
+(defrecord Ref [sym binding]
+  Object
+  (toString [_]
+    (str sym "^" (when *verbose* (str "<" binding ">")))))
+
+(defn ref? [x]
+  (instance? Ref x))
+
+(defn ref [sym local]
+  (assert (symbol? sym))
+  (->Ref sym local))
+
+(defn symbolic? [x]
+  (or (symbol? x) (ref? x)))
+
+(defn symbol [x]
+  (cond
+    (string? x) (symbol-cache (split-symbolic x))
+    (symbol? x) x
+    (ref? x)    (:sym x)
+    true        (throw (RuntimeException.
+                        (str "Can't create symbol from " (type x))))))
 
 
 (defn elements [l]
@@ -136,10 +99,7 @@
 (defn set? [x]
   (instance? clojure.lang.PersistentHashSet x))
 
-
 (defrecord Pair [head tail]
-  Symbolic
-  (symbols [_] (set/union (symbols head) (symbols tail)))
   Object
   (toString [_]
     (str "(" (str head) " "
@@ -155,8 +115,6 @@
   (instance? Pair x))
 
 (defrecord Immediate [form]
-  Symbolic
-  (symbols [_] (symbols form))
   Object
   (toString [_]
     (str "~" form)))
@@ -169,11 +127,12 @@
 
 
 (defrecord Application [head tail]
-  Symbolic
-  (symbols [_] (set/union (symbols head) (symbols tail)))
   Object
   (toString [_]
-    (str "#" (str (pair head tail)))))
+    (str "#" (str (pair head tail)))
+    #_(if (and (= "#F[nth*]" (str head)) (int? (last tail)))
+      (str "|" (first tail) "|_" (last tail))
+      (str "#" (str (pair head tail))))))
 
 (defn application [head tail]
   (->Application head tail))
@@ -183,17 +142,16 @@
 
 
 (defrecord Mu [name params body]
-  Symbolic
-  ;; This is unintuitive, but we only look at the body because it ~might not~
-  ;; refer to the name and formal param of the μ.
-  (symbols [_] (symbols body))
   Object
   (toString [_]
     (str "(#μ " params " " body ")")))
 
 (defn μ
   ([params body] (μ nil params body))
-  ([name params body] (->Mu name params body)))
+  ([name params body]
+   (assert (or nil? name) (symbol? name))
+   (assert (symbol? params))
+   (->Mu name params body)))
 
 (defn μ? [x]
   (instance? Mu x))
@@ -215,55 +173,22 @@
 (defn extern [name fn]
   (->Extern name fn))
 
+(defn external? [x]
+  (instance? Extern x))
 
-(defrecord Nu [params body]
-  Symbolic
-  (symbols [_] (symbols body))
+(defrecord Context [chs form]
   Object
   (toString [_]
-    (str "(#ν " params " "  body ")")))
+    (str "#Ctx" form)))
 
-(defn ν [params body]
-  (->Nu params body))
+(defn ctx [channels form]
+  (->Context channels form))
 
-(defn ν? [x]
-  (instance? Nu x))
-
-
-(defrecord Seq [elements]
-  Symbolic
-  (symbols [_] (symbols elements))
-  Object
-  (toString [_]
-    (str "#seq" elements)))
-
-(defn seq [xs]
-  (->Seq (list xs)))
-
-(defn seq? [x]
-  (instance? Seq x))
-
-
-(defrecord Conc [elements]
-  Symbolic
-  (symbols [_] (symbols elements))
-  Object
-  (toString [_]
-    (str "#conc" elements)))
-
-(defn conc [xs]
-  (->Conc (list xs)))
-
-(defn conc? [x]
-  (instance? Conc x))
-
-(defn elist? [x]
-  (or (seq? x) (conc? x)))
+(defn ctx? [x]
+  (instance? Context x))
 
 
 (defrecord Emission [kvs]
-  Symbolic
-  (symbols [_] (symbols kvs))
   Object
   (toString [_]
     (str "#E" kvs)))
@@ -281,20 +206,20 @@
 
 ;; Boilerplate reducer.
 (defmacro ps [type]
-  `(do (defmethod print-method ~type [o# ^Writer w#]
-         (.write w# (str o#)))))
+  `(defmethod print-method ~type [o# ^Writer w#]
+     (.write w# (str o#))))
+
+(defmacro pps [type]
+  `(defmethod pp/simple-dispatch ~type [o#]
+     (pp/write-out (clojure.core/symbol (str o#)))))
 
 ;;; Symbol
 
 (ps Symbol)
+(pps Symbol)
 
-(defmethod pp/simple-dispatch Symbol [o]
-  (pp/write-out (clojure.core/symbol (str o))))
-
-(ps Resolved)
-
-(defmethod pp/simple-dispatch Resolved [o]
-  (pp/write-out (clojure.core/symbol (str o))))
+(ps Ref)
+(pps Ref)
 
 ;;; Keyword
 
@@ -396,44 +321,13 @@
 
 (defmethod print-method Extern [{:keys [name]} ^Writer w]
   (.write w "#F[")
-  (.write w name)
+  (.write w (str name))
   (.write w "]"))
 
 (defmethod pp/simple-dispatch Extern [{:keys [name]}]
   (pp/pprint-logical-block
    :prefix "#F[" :suffix "]"
    (pp/write-out name)))
-
-;;; Nu
-
-(ps Nu)
-
-(defmethod pp/simple-dispatch Nu [{:keys [params body]}]
-  (pp/pprint-logical-block
-   :prefix ")" :suffix ")"
-   (pp/write-out (symbol "#ν"))
-   (format-pair (symbol "#μ") [params body])))
-
-
-;;; seq & conc
-
-(defmethod print-method Seq [{:keys [elements]} ^Writer w]
-  (.write w "#seq")
-  (print-method elements w))
-
-(defmethod pp/simple-dispatch Seq [{:keys [elements]}]
-  (pp/write-out "#seq")
-  (pp/simple-dispatch elements))
-
-
-(defmethod print-method Conc [{:keys [elements]} ^Writer w]
-  (.write w "#conc")
-  (print-method elements w))
-
-(defmethod pp/simple-dispatch Conc [{:keys [elements]}]
-  (pp/write-out "#conc")
-  (pp/simple-dispatch elements))
-
 
 ;;; Emission
 
@@ -481,13 +375,14 @@
     (.write w (str form))
     (.write w "]\n"))
 
-  Resolved
-  (insp [{:keys [sym form]} w level]
+  Ref
+  (insp [form ^Writer w level]
     (spacer w level)
     (.write w "R[")
-    (.write w (str sym))
+    (.write w (str (:sym form)))
     (.write w "]\n")
-    (insp form w (inc level)))
+    (when *verbose*
+      (insp (:binding form) w (inc level))))
 
   Application
   (insp [form ^Writer w level]
@@ -521,7 +416,7 @@
   (insp [form ^Writer w level]
     (spacer w level)
     (.write w "F[")
-    (.write w (:name form))
+    (.write w ^String (:name form))
     (.write w "]\n"))
 
   Mu
@@ -531,24 +426,17 @@
     (insp (:params form) w (inc level))
     (insp (:body form) w (inc level)))
 
-  Nu
-  (insp [form ^Writer w level]
+  Context
+  (insp [{:keys [chs form]} ^Writer w level]
     (spacer w level)
-    (.write w "ν\n")
-    (insp (:params form) w (inc level))
-    (insp (:body form) w (inc level)))
-
-  Seq
-  (insp [{:keys [elements]} ^Writer w level]
-    (spacer w level)
-    (.write w "seq\n")
-    (dorun (map #(insp % w (inc level)) elements)))
-
-  Conc
-  (insp [{:keys [elements]} ^Writer w level]
-    (spacer w level)
-    (.write w "conc\n")
-    (dorun (map #(insp % w (inc level)) elements)))
+    (.write w "Ctx")
+    (when *verbose*
+      (.write w "[")
+      (run! #(.write w (str %)) (interpose " " (sort-by :names (keys chs))))
+      (.write w "]"))
+    (.write w "\n")
+    (when form
+      (insp form w (inc level))))
 
   Emission
   (insp [form ^Writer w level]
@@ -560,36 +448,16 @@
         (insp (second kvs) w (inc level))
         (recur (drop 2 kvs))))))
 
-
 (defn inspect [x]
   (insp x *out* 0))
 
 ;;;;; Sugar
-
-(def type-table
-  {Immediate   :I
-   Pair        :P
-   Symbol      :S
-   Resolved    :S
-   Application :A
-   Extern      :F
-   Mu          :μ
-   Nu          :ν
-   Emission    :E
-   Seq         :seq
-   Conc        :conc
-
-   clojure.lang.PersistentVector   :L
-   clojure.lang.PersistentArrayMap :M
-   clojure.lang.PersistentHashMap  :M
-   clojure.lang.PersistentHashSet  :set})
-
-(defn type [x]
-  ;; There's nothing to gain in wrapping value types.
-  (get type-table (clojure.core/type x) :V))
 
 (def xkeys
   {:return  (keyword "return")
    :error   (keyword "error")
    :unbound (keyword "unbound")
    :env     (keyword "env")})
+
+(defn incomplete? [x]
+  (or (immediate? x) (application? x)))

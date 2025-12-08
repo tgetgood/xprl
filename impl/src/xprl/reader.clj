@@ -1,11 +1,11 @@
-(ns janus.reader
+(ns xprl.reader
   "This reader uses the weirdest monadish data pattern, but it seems to work."
   (:refer-clojure :exclude [read])
   (:require
    [clojure.set :as s]
    [clojure.string :as str]
-   [janus.ast :as ast]
-   [janus.debug :as debug])
+   [xprl.ast :as ast]
+   [xprl.debug :as debug])
   (:import
    (java.io File FileReader PushbackReader StringReader)))
 
@@ -56,13 +56,16 @@
 (defn delimiter? [s]
   (contains? delimiters s))
 
+(defn whitespace? [c]
+  (or (Character/isWhitespace c) (= c \,)))
+
 (defn buildtoken [old]
   (let [new     (read1 old)
         ^char c (:result new)]
     (cond
       (nil? new) (assoc old :result :eof)
 
-      (or (contains? delimiters c) (Character/isWhitespace c)) (unread1 new c)
+      (or (contains? delimiters c) (whitespace? c)) (unread1 new c)
 
       (and (seq (:until new)) (= c ^char (first (:until new)))) (unread1 new c)
 
@@ -84,7 +87,7 @@
     (cond
       (nil? next) (assoc current :result :eof)
 
-      (Character/isWhitespace c)
+      (whitespace? c)
       (recur (assoc next :token (str (:token current) c)))
 
       :else (setcursor (unread1 next c)))))
@@ -124,7 +127,9 @@
           v)))))
 
 (defn parse-symbol [{:keys [token gensyms] :as r}]
-  ;; FIXME: gensyms are unnecessary and never used. drop them.
+  ;; REVIEW: gensyms are never used at present. Will there be a future use for
+  ;; them? I suspect not, but I don't see harm in keeping them for the time
+  ;; being.
   (if (str/ends-with? token "#")
     (let [s (apply str (butlast token))]
       (if-let [sym (get @gensyms s)]

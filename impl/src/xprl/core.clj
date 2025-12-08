@@ -1,13 +1,13 @@
-(ns janus.core
+(ns xprl.core
   (:refer-clojure :exclude [test])
   (:require
-   [janus.ast :as ast]
-   [janus.builtins :as builtins]
-   [janus.debug :as debug]
-   [janus.env :as env]
-   [janus.interpreter :as i]
-   [janus.reader :as r]
-   [janus.runtime :as rt]))
+   [xprl.ast :as ast]
+   [xprl.builtins :as builtins]
+   [xprl.debug :as debug]
+   [xprl.env :as env]
+   [xprl.interpreter :as i]
+   [xprl.compiler :as c]
+   [xprl.reader :as r]))
 
 (def the-env (atom builtins/base-env))
 
@@ -19,25 +19,27 @@
 (def td (str srcpath "base-transduction.xprl"))
 (def testxprl (str srcpath "test.xprl"))
 
+(def te (atom nil))
+
 (defn env-updater [env]
   (fn [l]
-    (let [[sym value] l]
+    (reset! te l)
+    (let [[sym value] (i/interpret l)]
       (swap! env env/ns-intern sym value))))
 
+(defn with-return [ccs cb]
+  (assoc ccs (ast/xkeys :return) cb))
+
 (defn go!
-  ([env f]
-   (i/walk* env (debug/with-provenance (ast/immediate f)
-                 {:origin ::repl :predecessor f})))
-  ([env f ccs]
-   (rt/schedule (ast/list [(fn [_] (rt/connect (go! env f) ccs))]))
-   (rt/run!)))
+  ([env f] (i/interpret (ast/immediate (env/set-ns env f))))
+  ([env f conts] (i/interpret (ast/ctx conts (ast/immediate (env/set-ns env f))))))
 
 (defn evv [s]
   (go! @the-env (:form (r/read (r/string-reader s)))))
 
 (defn ev [s]
-  (let [conts {(ast/xkeys :env)   (env-updater the-env)
-               (ast/xkeys :return) println
+  (let [conts {(ast/xkeys :env)    (env-updater the-env)
+               (ast/xkeys :return) #(println (i/interpret %))
                (ast/xkeys :error)  (fn [x]
                                      (println "Error: " x))}]
     (go! @the-env (:form (r/read (r/string-reader s))) conts)))
@@ -54,11 +56,12 @@
                                      (println "Error: " x))}]
     (loop [reader (r/file-reader fname)]
       (let [reader (r/read reader)
+            env    @envatom
             form   (:form reader)]
         (if (= :eof form)
           'EOF
           (do
-            (go! @envatom form (rt/with-return conts println))
+            (go! @envatom form (with-return conts println))
             (recur reader)))))))
 
 (defn reload! [fname]
@@ -75,7 +78,10 @@
   (ast/inspect (:form (r/read (r/string-reader s) @the-env))))
 
 (defn test []
-  (let [conts {(ast/xkeys :env) (env-updater the-env)}]
+  (let [conts   {(ast/xkeys :env)    (env-updater the-env)
+                 (ast/xkeys :return) println}
+        retwrap (fn [f] (ast/pair (ast/symbol "emit")
+                                  [(ast/xkeys :return) (ast/immediate f)]))]
     (loop [reader (r/file-reader testxprl)]
       (let [reader (r/read reader)
             form1  (:form reader)
@@ -87,9 +93,10 @@
             (println "Evaluating: " form1)
             (println "---")
             (print "result: ")
-            (go! @the-env form1 (rt/with-return conts println))
+            (go! @the-env (retwrap form1) conts)
             (print "expected: " )
-            (go! @the-env form2 (rt/with-return conts println))
+            (go! @the-env (retwrap form2) conts)
+            (println )
             (recur reader)))))))
 
 (def p debug/provenance)
@@ -100,3 +107,8 @@
 
 (defmacro db [x]
   `(binding [debug/*verbose* true] ~x))
+
+(defmacro ddb [x]
+  `(binding [debug/*verbose*         true
+             debug/*sample-interval* 1000]
+     ~x))

@@ -2,19 +2,20 @@
 ;;
 ;; In fact we derive many such operators including the classic Ys.
 
-;; N.B.: I've chosen to keep the (clj) interpreter absurdly simple. That means
-;; no named μs, no destructuring, etc. which in turn makes these definitions
-;; overly verbose. But I'm starting to think that helps clarify more than it
-;; hurts.
+;; N.B.: This file goes through alternating phases of working and being a fork bomb.
 
 (emit :env [def ~(μ x ~(emit :env [~(nth* ~x 1) ~~(nth* ~x 2)] :return ~(nth* ~x 1)))]
       :return def)
 
+(def if
+  (μ x
+     ~~(nth* ~x ~(-* 3 ~(get* {false 0 true 1} ~~(nth* ~x 1))))))
+
 (def !
   (μ ! x
-     ~~(select ~(<* ~x 2)
-               1
-               (** ~x ~(! . ~(-* ~x 1))))))
+     ~(if (<* ~x 2)
+        1
+        (** ~x ~(! . ~(-* ~x 1))))))
 
 (! . 1)
 (! . 2)
@@ -31,9 +32,9 @@
 (def !
   (Y . ~(μ !
            ~(μ x
-               ~(select ~(<* ~x 2)
-                         1
-                         ~(** ~x ~(! . ~(-* ~x 1))))))))
+               ~(if (<* ~x 2)
+                  1
+                  (** ~x ~(! . ~(-* ~x 1))))))))
 
 (! . 1)
 (! . 2)
@@ -45,18 +46,18 @@
   (μ f
      ~((μ g
           ~(μ x
-              ~((f . ~(g . g)) . ~x)))
+              ~((f . ~(g . ~g)) . ~x)))
        .
        ~(μ g
            ~(μ x
-               ~((f . ~(g . g)) . ~x))))))
+               ~((f . ~(g . ~g)) . ~x))))))
 
 (def !
   (AoY . ~(μ !
-           ~(μ x
-               ~~(select ~(<* ~x 2)
-                         1
-                         ~(** ~x ~(! . ~(-* ~x 1))))))))
+             ~(μ x
+                 ~(if (<* ~x 2)
+                    1
+                    (** ~x ~(! . ~(-* ~x 1))))))))
 
 (! . 1)
 (! . 2)
@@ -69,9 +70,9 @@
 (def !
   (μ !
      ~(μ x
-         ~~(select ~(<* ~x 2)
-                   1
-                   ~(** ~x ~((~! . ~!) . ~(-* ~x 1)))))))
+         ~(if (<* ~x 2)
+            1
+            (** ~x ~((~! . ~!) . ~(-* ~x 1)))))))
 
 ((! . !) . 5)
 
@@ -83,10 +84,10 @@
 
 (def !
   (sc . ~(μ !
-             ~(μ x
-                 ~~(select ~(<* ~x 2)
-                           1
-                           ~(** ~x ~((sc . !) . ~(-* ~x 1))))))))
+            ~(μ x
+                ~(if (<* ~x 2)
+                   1
+                   (** ~x ~((sc . !) . ~(-* ~x 1))))))))
 
 (! . 1)
 (! . 2)
@@ -97,16 +98,18 @@
 (def !!
   (μ !
      ~(μ x
-         ~~(select ~(<* ~x 2)
-                   1
-                   ~(** ~x ~(! . ~(-* ~x 1)))))))
+         ~(if (<* ~x 2)
+            1
+            (** ~x ~(! . ~(-* ~x 1)))))))
 
+(! . 1)
+(! . 2)
+(! . 3)
 
-;; ;; FIXME: Just defining this one leads to an infinite loop. No SO, just loops.
-;; ;; Does that mean there's a cycle in the rules?
+(! . 10)
 
-;; (def !
-;;   (sc . ~(μ f ~(!! . ~(sc . f)))))
+(def !
+  (sc . ~(μ f ~(!! . ~(sc . f)))))
 
 (! . 1)
 
@@ -117,15 +120,15 @@
 
 (def rec
   (μ g
-    ~(sc . ~(μ f
-            ~(g . ~(sc . f))))))
+     ~(sc . ~(μ f
+                ~(g . ~(sc . f))))))
 
 (def !
   (rec . ~(μ !
              ~(μ x
-                 ~~(select ~(<* ~x 2)
-                           1
-                           ~(** ~x ~(! . ~(-* ~x 1))))))))
+                 ~(if (<* ~x 2)
+                    1
+                    (** ~x ~(! . ~(-* ~x 1))))))))
 
 (! . 1)
 
@@ -137,9 +140,9 @@
 
 (def !body
   (μ x
-     ~~(select ~(<* ~x 2)
-               1
-               ~(** ~x ~(! . ~(-* ~x 1))))))
+     ~(if (<* ~x 2)
+        1
+        (** ~x ~(! . ~(-* ~x 1))))))
 
 (def ! (rec . ~(μ ! ~!body)))
 
