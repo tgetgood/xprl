@@ -56,7 +56,15 @@
                                     (eval form opts)))
                                 (eval form opts))
       (ast/application? form) (if (ast/incomplete? (:head form))
-                                (let [form (update form :head walk (assoc opts :rec? true))]
+                                ;; FIXME: This `rec?` business is a kludge
+                                ;; because I don't have a general stopping
+                                ;; condition by which to detect when I'm in an
+                                ;; infinite regress. It's entirely possible that
+                                ;; I'm tripping on the halting problem, which is
+                                ;; just peachy, but let's verify that before we
+                                ;; panic...
+                                (let [rec? (not (ast/incomplete? (:tail form)))
+                                      form (update form :head walk (assoc opts :rec? rec?))]
                                   (if (ast/incomplete? (:head form))
                                     (update form :tail walk opts)
                                     (apply form opts)))
