@@ -48,8 +48,8 @@
   (trace! "trying emissions" kvs)
   ;; Who says we can't emit an incomplete computation which can only be
   ;; completed in the receiving context?
-  (if (some (fn [[k v]] (or (incomplete? v) (not (ast/keyword? k)))) kvs)
-    em                  ; Delay emissions until they're all ready.
+  (if (some (fn [[k v]] (not (ast/keyword? k))) kvs)
+    em                  ; Delay emissions until all channels are defined.
     (cond
       ;; TODO: Even when frozen we can and should perform non-channel returns
       ;; since they aren't really message passing.
