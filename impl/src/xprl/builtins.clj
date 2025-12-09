@@ -79,14 +79,6 @@
 
 ;;;;; specialish forms
 
-(defmacro check-tail [opts form body]
-  {:style/indent 2}
-  `(if (ast/incomplete? (:tail ~form))
-     (let [next# (update ~form :tail i/walk (assoc ~opts :freeze? true))]
-      (debug/trace! "delaying μ" ~form "->" next#)
-       next#)
-     ~body))
-
 (defn μ [{args :tail :as app} opts]
   (let [args (if (ast/incomplete? args) (i/walk args opts) args)]
     (if (ast/incomplete? args)
