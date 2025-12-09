@@ -166,7 +166,11 @@
 (defn inc [x]
   (+ 1 x))
 
-(defn ! [n]
-  (if (< n 2)
-    1
-    (* n (! (- n 1)))))
+;; FIXME: There's something wrong here with env resolution. Defining `!` here
+;; makes `((fn ! [x] (if (< x 2) 1 (* x (! (- x 1))))) 5)` explode which seems
+;; to be due to confusion between the two !s.
+
+;; (defn ! [n]
+;;   (if (< n 2)
+;;     1
+;;     (* n (! (- n 1)))))
