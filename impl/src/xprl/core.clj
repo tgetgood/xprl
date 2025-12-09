@@ -14,9 +14,10 @@
 ;;;;; UI
 
 (def srcpath "../src/")
-(def recxprl (str srcpath "recur.xprl"))
-(def core (str srcpath "core.xprl"))
-(def td (str srcpath "base-transduction.xprl"))
+(def core [(str srcpath "core.xprl")])
+(def recxprl (conj core (str srcpath "recur.xprl")))
+(def squiggol (conj core (str srcpath "base-transduction.xprl")))
+(def test-setup (conj core (str srcpath "test-setup.xprl")))
 (def testxprl (str srcpath "test.xprl"))
 
 (def te (atom nil))
@@ -49,6 +50,7 @@
   (ast/inspect (go! @the-env (:form (r/read (r/string-reader s))))))
 
 (defn loadfile [envatom fname]
+  (println "\nloading:" fname "\n")
   (let [conts {(ast/xkeys :env)    (env-updater envatom)
                (ast/xkeys :return) #(throw
                                      (RuntimeException. "return to top level!"))
@@ -62,11 +64,13 @@
           'EOF
           (do
             (go! @envatom form (with-return conts println))
-            (recur reader)))))))
+            (recur reader))))))
+  envatom)
 
-(defn reload! [fname]
+(defn reload! [fnames]
   (reset! the-env builtins/base-env)
-  (loadfile the-env fname))
+  (reduce loadfile the-env fnames)
+  :eof)
 
 (defmacro gs [n]
   `(env/lookup @the-env (ast/symbol ~(clojure.core/name n))))
@@ -78,10 +82,12 @@
   (ast/inspect (:form (r/read (r/string-reader s) @the-env))))
 
 (defn test []
+  (reload! test-setup)
   (let [conts   {(ast/xkeys :env)    (env-updater the-env)
                  (ast/xkeys :return) #(println (i/interpret %))}
         retwrap (fn [f] (ast/pair (ast/symbol "emit")
                                   [(ast/xkeys :return) (ast/immediate f)]))]
+    (println "\nStarting tests:\n")
     (loop [reader (r/file-reader testxprl)]
       (let [reader (r/read reader)
             form1  (:form reader)

@@ -115,6 +115,14 @@
 ;;      ~(μ args
 ;;          ~~((μ ~(nth* ~x 1) ~(nth* ~x 2)) . ~~args))))
 
+;; TODO: metadata on def (source file, line, col, docstring, arbitrary extras))
+
+;; TODO: Overloading: at least multiple arities. Better would be overloading by
+;; destructuring signature, but we'll need to be able to detect ambiguity and
+;; have a deterministic selection. Julia's type matching is great, but it's a
+;; sat solver under then hood which is why the compiler blows up sometimes on
+;; bigger codebases, which is a hell of a downside.
+
 (def fn2
   (μ x
      ~(μ args
