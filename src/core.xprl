@@ -110,11 +110,6 @@
                            (destructure ~(rest* ~params) ~(rest* ~args)))
        true               (emit :error (str "Cannot destructure: " params ", " args)))))
 
-;; (def fn
-;;   (μ x
-;;      ~(μ args
-;;          ~~((μ ~(nth* ~x 1) ~(nth* ~x 2)) . ~~args))))
-
 ;; TODO: metadata on def (source file, line, col, docstring, arbitrary extras))
 
 ;; TODO: Overloading: at least multiple arities. Better would be overloading by
@@ -126,9 +121,8 @@
 (def fn2
   (μ x
      ~(μ args
-         ~(let1 bindings ~(destructure ~(nth* ~x 1) ~~args)
-                ~(let-map ~bindings
-                   ~~(nth* ~x 2))))))
+         ~(let-map ~(destructure ~(nth* ~x 1) ~~args)
+             ~~(nth* ~x 2)))))
 
 (def fn3
   (μ x
@@ -143,22 +137,9 @@
         (= 2 (count args)) (fn2 . ~args)
         (= 3 (count args)) (fn3 . ~args))))
 
-;; (def defmulti
-;;   (μ x
-;;      ))
-
-;; (defmulti fn [params body]
-;;   (μ x
-;;      ~(μ args
-;;          ~((μ ~(nth* ~x 1) ~~(nth* ~x 2)) . ~~args))))
-
-;; (defmulti fn [name params body]
-;;   )
-
-
 (def defn
   (μ x
-     ~(def ~(nth* ~x 1) (fn . ~x))))
+     ~(def ~(nth* ~x 1) (fn3 . ~x))))
 
 (defμ when x
   (if ~(nth* ~x 1) ~(nth* ~x 2) (emit)))
@@ -170,7 +151,7 @@
 ;; makes `((fn ! [x] (if (< x 2) 1 (* x (! (- x 1))))) 5)` explode which seems
 ;; to be due to confusion between the two !s.
 
-;; (defn ! [n]
-;;   (if (< n 2)
-;;     1
-;;     (* n (! (- n 1)))))
+(defn ! [n]
+  (if (< n 2)
+    1
+    (* n (! (- n 1)))))

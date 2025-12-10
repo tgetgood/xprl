@@ -26,6 +26,7 @@
   (fn [l]
     (reset! te l)
     (let [[sym value] (i/interpret l)]
+      (assert (ast/symbolic? sym))
       (swap! env env/ns-intern sym value))))
 
 (defn with-return [ccs cb]
@@ -41,8 +42,9 @@
 (defn ev [s]
   (let [conts {(ast/xkeys :env)    (env-updater the-env)
                (ast/xkeys :return) #(println (i/interpret %))
-               (ast/xkeys :error)  (fn [x]
-                                     (println "Error: " x))}]
+               (ast/keyword "log")  #(println (i/interpret %))
+               (ast/xkeys :error)  #(binding [*out* *err*]
+                                      (println %))}]
     (go! @the-env (:form (r/read (r/string-reader s))) conts)))
 
 
