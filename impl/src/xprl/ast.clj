@@ -92,6 +92,7 @@
 (defn list? [x]
   (vector?  x))
 
+;; Records are IMaps which is a royal pain in the ass.
 (defn map? [x]
   (or (instance? clojure.lang.PersistentArrayMap x)
       (instance? clojure.lang.PersistentHashMap x)))

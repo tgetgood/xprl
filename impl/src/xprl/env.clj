@@ -4,7 +4,7 @@
    [clojure.set :as set]
    [clojure.walk :as walk]
    [xprl.ast :as ast]
-   [xprl.debug :refer [trace!]]))
+   [xprl.debug :refer [trace! record!]]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;; Namespaces
@@ -72,4 +72,7 @@
   [{:keys [name params body] :as μ} args]
   (trace! "binding" (merge {params args} (when name {name μ})) "\nin\n" body)
   (assert (and (ast/symbol? params) (or (nil? name) (ast/symbol? name))))
-  (reduce bind body (merge {params args} (when name {name μ}))))
+  (let [m (merge {params args} (when name {name μ}))
+        v (reduce bind body m)]
+    (record! body v {:binding m})
+    v))

@@ -1,5 +1,5 @@
 (ns xprl.debug
-  (:require [xprl.ast :refer [inspect]]))
+  (:require [xprl.ast :as ast]))
 
 (def ^:dynamic *verbose* false)
 
@@ -32,17 +32,40 @@
 ;; storage location for errors when invoking clj externals. akin to *e
 (defonce *pfn (atom nil))
 
+(def ^:dynamic *execution-trace* true)
+
+(defonce index (atom {}))
+(def ^:dynamic *index-key* :master)
+
+(defn record! [in out md]
+  (when-not (or (nil? out) (= in out))
+    (swap! index update *index-key* update out (fnil conj #{})
+           (with-meta in md))))
+
+(defn clear-index! []
+  (reset! index {}))
+
+(defmacro with-key [k body]
+  `(binding [*index-key* ~k]
+     ~body))
+
+(defn causes
+  ([form] (causes *index-key* form))
+  ([k form] (get-in @index [k form])))
+
 ;; TODO: Now if I could only reverse these before printing, it would be a lot
 ;; easier to read...
 (defmacro deftracefn [name args & body]
   (let [farg  (first args)
         input (cond
-                (symbol? farg) farg
-                (map? farg)    (get farg :as)
-                true           (assert false))]
+                (symbol? farg)  farg
+                (ast/map? farg) (get farg :as)
+                true            (assert false))]
     `(defn ~name ~args
        (let [v# (do ~@body)]
-         (trace! "---" ~(str name) "with" ~(if (map? (second args))
+         (when *execution-trace*
+           (record! ~input v# {:op ~(keyword name)}))
+         (trace! "---" ~(str name) "with" ~(if (ast/map? (second args))
                                              (:as (second args))
                                              (second args))
                  "\n---\n" ~input "\n-->\n" v# "\n---")
