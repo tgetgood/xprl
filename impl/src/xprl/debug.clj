@@ -32,7 +32,10 @@
 ;; storage location for errors when invoking clj externals. akin to *e
 (defonce *pfn (atom nil))
 
-(def ^:dynamic *execution-trace* true)
+;; This noticably slow down execution, so let's not leave in on by default for
+;; now because, frankly, it doesn't carry its own weight yet. Maybe that will
+;; change as I learn to use it.
+(def ^:dynamic *execution-trace* false)
 
 (defonce index (atom {}))
 (def ^:dynamic *index-key* :master)
@@ -46,7 +49,8 @@
   (reset! index {}))
 
 (defmacro with-key [k body]
-  `(binding [*index-key* ~k]
+  `(binding [*index-key*       ~k
+             *execution-trace* true]
      ~body))
 
 (defn causes
