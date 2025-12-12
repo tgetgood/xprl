@@ -454,11 +454,8 @@
 
 ;;;;; Sugar
 
-(def xkeys
-  {:return  (keyword "return")
-   :error   (keyword "error")
-   :unbound (keyword "unbound")
-   :env     (keyword "env")})
+(defn xkey [x]
+  (keyword (name x)))
 
 (defn incomplete? [x]
   (or (immediate? x) (application? x)))

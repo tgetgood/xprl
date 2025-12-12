@@ -30,7 +30,7 @@
       (swap! env env/ns-intern sym value))))
 
 (defn with-return [ccs cb]
-  (assoc ccs (ast/xkeys :return) cb))
+  (assoc ccs (ast/xkey :return) cb))
 
 (defn go!
   ([env f] (i/interpret (ast/immediate (env/set-ns env f))))
@@ -39,13 +39,14 @@
 (defn evv [s]
   (go! @the-env (:form (r/read (r/string-reader s)))))
 
+(def base-conts
+  {(ast/xkey :env)    (env-updater the-env)
+   (ast/xkey :return) #(println (i/interpret %))
+   (ast/xkey :log) #(println "LOG:" (i/interpret %))
+   (ast/xkey :error)  #(binding [*out* *err*]
+                          (println %))})
 (defn ev [s]
-  (let [conts {(ast/xkeys :env)    (env-updater the-env)
-               (ast/xkeys :return) #(println (i/interpret %))
-               (ast/keyword "log")  #(println (i/interpret %))
-               (ast/xkeys :error)  #(binding [*out* *err*]
-                                      (println %))}]
-    (go! @the-env (:form (r/read (r/string-reader s))) conts)))
+  (go! @the-env (:form (r/read (r/string-reader s))) base-conts))
 
 
 (defn iev [s]
@@ -53,11 +54,11 @@
 
 (defn loadfile [envatom fname]
   (println "\nloading:" fname "\n")
-  (let [conts {(ast/xkeys :env)    (env-updater envatom)
-               (ast/xkeys :return) #(throw
-                                     (RuntimeException. "return to top level!"))
-               (ast/xkeys :error)  (fn [x]
-                                     (println "Error: " x))}]
+  (let [conts (merge
+               base-conts
+               {(ast/xkey :env)    (env-updater envatom)
+                (ast/xkey :return) #(throw
+                                      (RuntimeException. "return to top level!"))})]
     (loop [reader (r/file-reader fname)]
       (let [reader (r/read reader)
             env    @envatom
@@ -86,10 +87,8 @@
 (defn test []
   (reload! test-setup)
   (binding [debug/*execution-trace* false ]
-    (let [conts   {(ast/xkeys :env)    (env-updater the-env)
-                   (ast/xkeys :return) #(println (i/interpret %))}
-          retwrap (fn [f] (ast/pair (ast/symbol "emit")
-                                    [(ast/xkeys :return) (ast/immediate f)]))]
+    (let [retwrap (fn [f] (ast/pair (ast/symbol "emit")
+                                    [(ast/xkey :return) (ast/immediate f)]))]
       (println "\nStarting tests:\n")
       (loop [reader (r/file-reader testxprl)]
         (let [reader (r/read reader)
@@ -102,9 +101,9 @@
               (println "Evaluating: " form1)
               (println "---")
               (print "result: ")
-              (go! @the-env (retwrap form1) conts)
+              (go! @the-env (retwrap form1) base-conts)
               (print "expected: " )
-              (go! @the-env (retwrap form2) conts)
+              (go! @the-env (retwrap form2) base-conts)
               (println )
               (recur reader))))))))
 

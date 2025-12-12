@@ -6,7 +6,7 @@
 
 (def ^:dynamic *ccmap* root-channels)
 
-(def ret (ast/xkeys :return))
+(def ret (ast/xkey :return))
 
 (defn incomplete? [x]
   (if (and (coll? x) (not (record? x)))
@@ -36,7 +36,7 @@
   (trace! "emitting" [k v])
   (if-let [ch (get *ccmap* k)]
     (ch v)
-    (if-let [unbound (get *ccmap* (ast/xkeys :unbound))]
+    (if-let [unbound (get *ccmap* (ast/xkey :unbound))]
       (unbound [k v])
       (binding [*out* *err*]
         (println "message sent to unbound channel: " k v)))))
