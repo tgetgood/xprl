@@ -79,21 +79,33 @@
 
 ;;;;; specialish forms
 
+(defn capture [sym body]
+  (if (and (ast/symbolic? sym) (not (::captured? (meta sym))))
+    (let [usym (ast/unique-symbol sym)]
+      [(with-meta usym {::captured? true}) (env/capture body sym usym)])
+    [sym body]))
+
+(defn walk-names [app opts]
+  (update app :tail
+          (fn [t]
+            (conj (mapv #(i/walk % (assoc opts :freeze? true))
+                        (butlast t))
+                  (last t)))))
+
 (defn μ [{args :tail :as app} opts]
   (let [args (if (ast/incomplete? args) (i/walk args opts) args)]
     (if (ast/incomplete? args)
       (assoc app :tail args)
-      (if-let [args (env/μ-prepare args)]
-        (do
-          (debug/trace! "building μ" args)
-          (i/walk (apply ast/μ args) opts))
-        (let [next (update app :tail
-                           (fn [t]
-                             (conj (mapv #(i/walk % (assoc opts :freeze? true))
-                                         (butlast t))
-                                   (last t))))]
-          (debug/trace! "postponing μ" app "->" next)
-          next)))))
+      (if (= 3 (count args))
+        (let [[name body] (capture (first args) (last args))
+              [param body] (capture (second args) body)]
+          (if (and (ast/symbolic? name) (ast/symbolic? param))
+            (i/walk (ast/μ name param body) opts)
+            (walk-names (assoc app :tail [name param body]) opts)))
+        (let [[param body] (capture (first args) (second args))]
+          (if (ast/symbolic? param)
+            (i/walk (ast/μ param body) opts)
+            (walk-names app opts)))))))
 
 ;; FIXME: `emit` doesn't need to be special. Why is it again?
 (defn emit [{kvs :tail :as app} opts]

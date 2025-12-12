@@ -82,6 +82,8 @@
     true        (throw (RuntimeException.
                         (str "Can't create symbol from " (type x))))))
 
+(defn unique-symbol [x]
+  (symbol (str (gensym (symbol x)))))
 
 (defn elements [l]
   l)

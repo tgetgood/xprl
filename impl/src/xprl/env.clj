@@ -57,13 +57,8 @@
 
 (def walk-replace (memoize walk-replace*))
 
-(defn capture [body name]
-  (walk-replace name (ast/symbol name) body))
-
-(defn μ-prepare [args]
-  (let [names (butlast args)]
-    (when (every? ast/symbolic? names)
-      (conj (mapv ast/symbol names) (reduce capture (last args) names)))))
+(defn capture [body name uname]
+  (walk-replace name uname body))
 
 (defn bind [body [k v]]
   (walk-replace k (ast/ref k v) body))
