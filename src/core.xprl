@@ -132,14 +132,12 @@
 
 (def fn
   (μ args
-     ~(cond
-        ;; TODO: Docstrings, metadata, etc.
-        (= 2 (count args)) (fn2 . ~args)
-        (= 3 (count args)) (fn3 . ~args))))
+     ~(let1 indirect ~(nth* ~[fn2 fn3] ~(-* ~(count* ~args) 1))
+            ~(indirect . ~args))))
 
 (def defn
   (μ x
-     ~(def ~(nth* ~x 1) (fn3 . ~x))))
+     ~(def ~(nth* ~x 1) (fn . ~x))))
 
 (defμ when x
   (if ~(nth* ~x 1) ~(nth* ~x 2) (emit)))
