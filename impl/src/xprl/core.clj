@@ -16,7 +16,7 @@
 (def srcpath "../src/")
 (def core [(str srcpath "core.xprl")])
 (def recxprl (conj core (str srcpath "recur.xprl")))
-(def squiggol (conj core (str srcpath "base-transduction.xprl")))
+(def squiggol (conj core (str srcpath "transduction.xprl")))
 (def test-setup (conj core (str srcpath "test-setup.xprl")))
 (def testxprl (str srcpath "test.xprl"))
 
@@ -100,7 +100,7 @@
             (do
               (println "Evaluating: " form1)
               (println "---")
-              (print "result: ")
+              (print "result:   ")
               (go! @the-env (retwrap form1) base-conts)
               (print "expected: " )
               (go! @the-env (retwrap form2) base-conts)
