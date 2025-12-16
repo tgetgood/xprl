@@ -13,8 +13,20 @@
 ;; `map`, but it's more general. It allows a μ to control the order of its
 ;; emissions with respect to an input stream.
 
+(defn map* [f xs]
+  (emit :return (f (first xs))
+        :return (map* f (rest xs))))
+
+;; REVIEW: Do I need emit-recur? This seems like it will do the same thing.
+;; N.B.: When xs is exhausted, (first xs) will die and unwind, which will unwind
+;; the emission itself (?!?) thus ending execution when the seq is exhausted
+;; without a branch.
+
 (defn map* [f xs ys]
-  (emit-recur (f (first xs) (first ys)) f (rest xs) (rest ys)))
+  (emit :return  (f (first xs) (first ys))
+        :return (map* f (rest xs) (rest ys))))
+
+;; N.B: emissions will cease when either of xs or ys is exhausted.
 
 (defn mapv* [f init xs]
   (if (empty? xs)
@@ -22,8 +34,16 @@
     (mapv* f (conj init (f (first xs))) (rest xs))))
 
 (defn map* [f xs ys . zs]
-  (emit-recur (f (first xs) (first ys) . (mapv* first [] zs))
-               f (rest xs) (rest ys) . (mapv* rest [] zs)))
+  (emit  :return (f (first xs) (first ys) . (mapv* first [] zs))
+         :return (map* f (rest xs) (rest ys) . (mapv* rest [] zs))))
+
+;; REVIEW: Why can't I just write:
+
+(defn map* [f xs ys . zs]
+  (emit :return (f (first xs) (first ys) . (map* first zs))
+        :return (map* f (rest xs) (rest ys) . (map* rest zs))))
+
+;; ? It seems perfectly well defined.
 
 (defn map [f . xss]
   (return-stream (map* f . xss)))

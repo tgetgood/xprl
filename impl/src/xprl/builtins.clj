@@ -131,7 +131,6 @@
 
     ;; TODO: builtin macros needed for a working system.
     ;;
-    ;; emit-recur
     ;; pipe
     ;; net
     ;;
