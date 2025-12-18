@@ -1,0 +1,54 @@
+(defn map [f [x . xs]]
+  (stream (f x) (map f xs)))
+
+(defn map [f xs . yss]
+  (stream (f (first xs) . (map first yss)) (map f (rest xs) . (map rest yss))))
+
+(defn filter [p [x . xs]]
+  (if (p x)
+    (stream x (filter p xs))
+    (filter p xs)))
+
+(defn filter [p [x . xs]]
+  (stream (when (p x) x) (filter p xs)))
+
+(defn filter [p xs]
+  (map (fn [x] (when (p x) x)) xs))
+
+;;;;; ^ These three versions of `filter` should be equivalent ^
+;;
+;; which will only work if the semantics of `stream` are such that *all* (0 or
+;; more) values returned by the first expression are prepended to the tail
+;; expression.
+
+(defn last [xs]
+  (let [next (rest xs)]
+    (if (empty? next)
+      (first xs)
+      (last next))))
+
+(defn reduce [rf init xs]
+  (let [next (rf init (first xs))]
+    (if (empty? (rest xs))
+      next
+      (reduce rf next (rest xs)))))
+
+(defn reduce [rf init xs]
+  (let [[st ch] (pipe init)]
+    (net
+     (with-channels {:return ch}
+       (map rf st xs))
+     (last st))))
+
+;;;;; What would be required for this last version of `reduce` to work?
+;;
+;; The outermost invocation of `map` has its return redirected, but the inner,
+;; recursive invocation is actually an argument to `stream`, so its return
+;; channel will not be effected. So it should work just fine.
+;;
+;; The first version makes fusion difficult, so let's avoid it.
+;;
+;; In fact, just having this functional `stream` construct encourages us to fall
+;; into the classic lazy-seq pattern which I'm trying to avoid. As shown above,
+;; it can be avoided, but we're likely better off without the temptation. After
+;; all what does it bring aside from familiarity?

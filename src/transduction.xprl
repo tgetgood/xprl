@@ -1,5 +1,9 @@
-;; REVIEW: This is only needed in `map` at present, so is there any point
-;; keeping it around as a macro?
+;; Before this file can be read in I need:
+;;
+;; 1) overloading by destructuring expressions.
+;;
+;; 2) an implementation of `pipe`.
+
 (def return-stream
   (μ [form]
      ~(let* [[st ch] ~(pipe)]
@@ -8,48 +12,36 @@
           st))))
 
 (defn map* [f xs]
-  (emit-recur (f (first xs)) f (rest xs)))
-;; `emit-recur` is a new old primitive. It is largely designed to implement
-;; `map`, but it's more general. It allows a μ to control the order of its
-;; emissions with respect to an input stream.
-
-(defn map* [f xs]
   (emit :return (f (first xs))
         :return (map* f (rest xs))))
 
-;; REVIEW: Do I need emit-recur? This seems like it will do the same thing.
-;; N.B.: When xs is exhausted, (first xs) will die and unwind, which will unwind
-;; the emission itself (?!?) thus ending execution when the seq is exhausted
-;; without a branch.
+(defn map [f xs] (return-stream (map* f xs)))
 
-(defn map* [f xs ys]
-  (emit :return  (f (first xs) (first ys))
-        :return (map* f (rest xs) (rest ys))))
+(defn map* [f xs . yss]
+  (emit  :return (f (first xs)  . (map first yss))
+         :return (map* f (rest xs)  . (map rest yss))))
 
-;; N.B: emissions will cease when either of xs or ys is exhausted.
+(defn map [f xs . yss] (return-stream (map* f xs . yss)))
 
-(defn mapv* [f init xs]
-  (if (empty? xs)
-    init
-    (mapv* f (conj init (f (first xs))) (rest xs))))
+;; TODO: Ensure that (map f (map g xs)) == (map (comp f g) xs)
 
-(defn map* [f xs ys . zs]
-  (emit  :return (f (first xs) (first ys) . (mapv* first [] zs))
-         :return (map* f (rest xs) (rest ys) . (mapv* rest [] zs))))
-
-;; REVIEW: Why can't I just write:
-
-(defn map* [f xs ys . zs]
-  (emit :return (f (first xs) (first ys) . (map* first zs))
-        :return (map* f (rest xs) (rest ys) . (map* rest zs))))
-
-;; ? It seems perfectly well defined.
-
-(defn map [f . xss]
-  (return-stream (map* f . xss)))
+;; TODO: Think about currying, or at least defining (map f) without xs.
+;; Ensure that ((comp (map f) (map g)) xs) == ((map g) ((map f) xs))
 
 (defn filter [p xs]
   (map (fn [x] (when (p x) x)) xs))
+
+;; Ideally we would have some sort of interrupt on channel close at which point
+;; we could get the final element without iteration. But how would that work
+;; exectly?
+;;
+;; A special builtin to track the last value sent on ch could be justified.
+;;
+;; Unless, of course, we can find some trick to compile this (very common)
+;; pattern of (net (populate ch) (last st)) into something that just keeps the
+;; most recent value in a register and eventually returns that on a signal.
+;;
+;; Wouldn't that be swell?
 
 (defn last [xs]
   (let [next (rest xs)]
@@ -63,13 +55,38 @@
      (with-channels {:return state-ch}
        (map* rf state xs))
      (last state))))
-;; So that instead of needing to emit explicitly, we just redirect return values
-;; within one subcomputation of the network?
 
-;; TODO: Ensure that (map f (map g xs)) == (map (comp f g) xs)
+;; This one doesn't really work since it would require `emit` to send some
+;; messages before receiving all of the messages to send.
+(defn reduce [rf init xs]
+  (let [[st ch] (pipe init)]
+    (net
+     (emit-all ch (map rf st xs))
+     (last st))))
 
-;; TODO: Think about currying, or at least defining (map f) without xs.
-;; Ensure that ((comp (map f) (map g)) xs) == ((map g) ((map f) xs))
+;;;;; And scan. Not sure I have a use for this, but hey.
+
+(defn scan [f init xs]
+  (let [[state state-ch] (pipe init)]
+    (map (fn [state x]
+           (let [next (f state x)]
+             (emit state-ch next :return next)))
+         state xs)))
+
+;; or (better because we only need one stream instead of two):
+
+(defn scan [rf init xs]
+  (let [[st ch] (pipe init)]
+    (net
+     (emit-all ch (map rf st xs))
+     st)))
+
+;; Which gives us the alternate `reduce`:
+
+(defn reduce [rf init xs]
+  (last (scan rf init xs)))
+
+;;;;; Moving on
 
 (defn into [to from]
   (reduce conj to from))
@@ -79,7 +96,7 @@
    (let [[state state-ch] (pipe [])]
      (net
       ;; Emit partitioned elements as you go.
-      (map* (fn [state x]
+      (map (fn [state x]
               (let [s' (conj state x)]
                 (if (= n (count s'))
                   (emit :return s' state-ch [])
@@ -90,19 +107,31 @@
         (when (not (empty? rem))
           rem))))))
 
-(defn scan [f init xs]
-  (let [[state state-ch] (pipe init)]
-    (map (fn [state x]
-           (let [next (f state x)]
-             (emit state-ch next :return next)))
-         state xs)))
+(defn repeat [x]
+  (emit :return x :return (repeat x)))
 
-;; This is simpler than the above `into` using `reduce`, but discards n
-;; return values which is wasteful. Can we make the cost small enough to
-;; disregard when we know the messages will never be read? Can we make it zero
-;; cost? We could by hand...
+(defn interleave [s1 s2]
+  (emit :return (first s1)
+        :return (first s2)
+        :return (interleave (rest s1) (rest s2))))
+
+;; REVIEW: I probably ought to make this idea of emit-all a built in part of the
+;; syntax, it comes up so often and we don't want to be forced to create
+;; sequences we don't want.
 ;;
-;; REVIEW: Is it really simpler? It just does the same things in different
-;; places with more work. Useful as an example perhaps.
-(defn into2 [to from]
-  (last (return-stream (scan conj to from))))
+;; maybe something like
+;;
+;; (emit :log "message" ^:many ch xs)
+;;
+(def emit-all
+  (μ x
+     ~(emit . ~(interleave (repeat (first x)) (nth* ~x 2)))))
+
+(def net
+  (μ conts
+     ~(emit-all :schedule ~conts)))
+
+;;;;; And if you really want it:
+
+(defμ stream xss
+  (return-stream ~(emit-all :return xss)))

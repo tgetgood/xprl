@@ -58,57 +58,69 @@
 
 ;;;;; Core
 
-(def defμ
-  (μ x
-     ~(def ~(nth* ~x 1)
-        (μ ~(nth* ~x 1) ~(nth* ~x 2) ~~(nth* ~x 3)))))
+;;; bootstrap destructuring
 
-(defμ cond body
-  (if (<* ~(count* ~body) 2)
-    (emit)
-    (if ~(nth* ~body 1)
-      ~(nth* ~body 2)
-      (cond . ~(rest* ~(rest* ~body))))))
+(def cond
+  (μ cond body
+     ~(if (<* ~(count* ~body) 2)
+        (emit)
+        (if ~(nth* ~body 1)
+          ~(nth* ~body 2)
+          (cond . ~(rest* ~(rest* ~body)))))))
 
 (def let1
   (μ x
      ~((μ ~(nth* ~x 1) ~(nth* ~x 3)) . ~(nth* ~x 2))))
 
-(defμ let* x
-  (let1 bindings ~(nth* ~x 1)
-        ~(let1 body ~(nth* ~x 2)
-               ~(if (empty?* ~bindings)
-                  body
-                  (let1 ~(nth* ~bindings 1) ~(nth* ~bindings 2)
-                        ~(let* ~(rest* ~(rest* ~bindings)) ~body))))))
+(def let*
+  (μ let* x
+     ~(let1 bindings ~(nth* ~x 1)
+            ~(let1 body ~(nth* ~x 2)
+                   ~(if (empty?* ~bindings)
+                      body
+                      (let1 ~(nth* ~bindings 1) ~(nth* ~bindings 2)
+                            ~(let* ~(rest* ~(rest* ~bindings)) ~body)))))))
 
-(defμ let-map x
-  (let1 bindings ~(nth* ~x 1)
-        ~(let1 body ~(nth* ~x 2)
-               ~(if* ~(empty?* ~bindings)
-                  ~body
-                  ~(let1 kv ~(first* ~bindings)
-                        ~(let1 ~(nth* ~kv 1) ~(nth* ~kv 2)
-                               ~(let-map ~(rest* ~bindings) ~body)))))))
+(def let-map
+  (μ let-map x
+     ~(let1 bindings ~(nth* ~x 1)
+            ~(let1 body ~(nth* ~x 2)
+                   ~(if* ~(empty?* ~bindings)
+                      ~body
+                      ~(let1 kv ~(first* ~bindings)
+                             ~(let1 ~(nth* ~kv 1) ~(nth* ~kv 2)
+                                    ~(let-map ~(rest* ~bindings) ~body))))))))
 
 (def destructure-map
   (μ mp
      ~(emit :error "not implemented")))
 
-(defμ destructure xy
-  (let* [params ~(nth* ~xy 1)
-         args   ~(nth* ~xy 2)]
-    ~(cond
-       (symbol?* ~params) {params args}
-       (empty?* ~params)  {}
-       (empty?* ~args)    (emit :error "pattern mismatch")
-       (list?* ~params)   (merge
-                           (destructure ~(first* ~params) ~(first* ~args))
-                           (destructure ~(rest* ~params) ~(rest* ~args)))
-       (map?* ~params)    (merge
-                           (destructure-map ~(first* ~params) ~(first* ~args))
-                           (destructure ~(rest* ~params) ~(rest* ~args)))
-       true               (emit :error (str "Cannot destructure: " params ", " args)))))
+(def destructure
+  (μ destructure xy
+     ~(let* [params ~(nth* ~xy 1)
+             args   ~(nth* ~xy 2)]
+        ~(cond
+           ;; TODO: Bind rest ( . ). Probably need reader support.
+           (symbol?* ~params) {params args}
+           (empty?* ~params)  {}
+           (empty?* ~args)    (emit :error "pattern mismatch")
+           (list?* ~params)   (merge
+                               (destructure ~(first* ~params) ~(first* ~args))
+                               (destructure ~(rest* ~params) ~(rest* ~args)))
+           (map?* ~params)    (merge
+                               (destructure-map ~(first* ~params) ~(first* ~args))
+                               (destructure ~(rest* ~params) ~(rest* ~args)))
+           true               (emit :error (str "Cannot destructure: " params ", " args))))))
+
+
+;;; definition constructs
+
+(def defμ
+  (μ x
+     ~(def ~(nth* ~x 1)
+        (μ ~(nth* ~x 1) args
+           ~(let-map ~(destructure ~(nth* ~x 2) ~args)
+              ~~(nth* ~x 3))))))
 
 ;; TODO: metadata on def (source file, line, col, docstring, arbitrary extras))
 
@@ -118,36 +130,28 @@
 ;; sat solver under then hood which is why the compiler blows up sometimes on
 ;; bigger codebases, which is a hell of a downside.
 
-(def fn2
-  (μ x
-     ~(μ args
-         ~(let-map ~(destructure ~(nth* ~x 1) ~~args)
-             ~~(nth* ~x 2)))))
-
-(def fn3
-  (μ x
-     ~(μ ~(nth* ~x 1) args
-         ~(let-map ~(destructure ~(nth* ~x 2) ~~args)
-            ~~(nth* ~x 3)))))
-
-(def fn
+(defμ fn2 [params body]
   (μ args
-     ~(let1 indirect ~(nth* ~[fn2 fn3] ~(-* ~(count* ~args) 1))
-            ~(indirect . ~args))))
+     ~(let-map ~(destructure ~params ~~args)
+        ~~body)))
 
-(def defn
-  (μ x
-     ~(def ~(nth* ~x 1) (fn . ~x))))
+(defμ fn3 [name params body]
+  ~(μ ~name args
+      ~(let-map ~(destructure ~params ~~args)
+         ~~body)))
 
-(defμ when x
-  (if ~(nth* ~x 1) ~(nth* ~x 2) (emit)))
+(defμ fn args
+  (let1 indirect ~(nth* ~[fn2 fn3] ~(-* ~(count* ~args) 1))
+        ~(indirect . ~args)))
+
+(defμ defn x
+  (def ~(nth* ~x 1) (fn . ~x)))
+
+(defμ when [p t]
+  (if ~p ~t (emit)))
 
 (defn inc [x]
   (+ 1 x))
-
-;; FIXME: There's something wrong here with env resolution. Defining `!` here
-;; makes `((fn ! [x] (if (< x 2) 1 (* x (! (- x 1))))) 5)` explode which seems
-;; to be due to confusion between the two !s.
 
 (defn ! [n]
   (if (< n 2)
