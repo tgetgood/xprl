@@ -60,6 +60,9 @@
 
     "list?*"  ast/list?
     "map?*"   ast/map?
+    "dot?*"    ast/dot?
+    "string?*" string?
+
     "merge*"  merge
     "empty?*" empty?*
     "get*"    get
@@ -76,7 +79,6 @@
     "count*" count
     "nth*"   nth* ; base 1 indexing
 
-    "dot?*" ast/dot?
     }))
 
 ;;;;; specialish forms

@@ -1,10 +1,22 @@
+;;;;; Stuff that doesn't belong in the bootstrap code.
+
+(defn inc [x]
+  (+ 1 x))
+
+(defn ! [n]
+  (if (< n 2)
+    1
+    (* n (! (- n 1)))))
+
+;;;;; Stuff that doesn't belong anywhere:
+
 ;; Exercises from old books to exercise the language. Wouldn't it be nice if
 ;; very simple programs produced very simple (and thus fast) machine code?
 ;; That's another problem that needs some attention.
 
 ;; How to reverse a stream without buffering it into a vector?
 (defn reverse [xs]
-  (emit (conj (capture (reverse (rest xs))) [:return (first xs)])))
+  (emit . ~(conj (capture (reverse (rest xs))) [:return (first xs)])))
 ;; will that be efficient? I doubt it... you're just using the event loop to
 ;; buffer all the messages for you now. They have to be buffered somewhere,
 ;; don't they?
@@ -38,9 +50,9 @@
 ;; This makes 3N/2 ~comparisons~, but it does a lot of other work that might
 ;; very well swamp the gains.
 
-;; You can do a streaming sort, though it only works in very limited
-;; circumstances (you have to know with certainty that nothing in the future
-;; will be smaller than what you're emitting now). Still, fun idea.
+;; you can't really stream a sort: how can you know the smallest element until
+;; you've seen them all? but you can scan and return a sequence of sorted
+;; subsequences. Is that useful? maybe.
 (defn merge-sorted [xs ys]
   (if (empty? xs)
     (emit-all :return ys)

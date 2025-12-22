@@ -3,25 +3,9 @@
 ;; 1) overloading by destructuring expressions.
 ;;
 ;; 2) an implementation of `pipe`.
-
-(def return-stream
-  (μ [form]
-     ~(let* [[st ch] ~(pipe)]
-        ~(net
-          ~(with-channels {:return ch} ~form)
-          st))))
-
-(defn map* [f xs]
-  (emit :return (f (first xs))
-        :return (map* f (rest xs))))
-
-(defn map [f xs] (return-stream (map* f xs)))
-
-(defn map* [f xs . yss]
-  (emit  :return (f (first xs)  . (map first yss))
-         :return (map* f (rest xs)  . (map rest yss))))
-
-(defn map [f xs . yss] (return-stream (map* f xs . yss)))
+;
+;; on further thought, is 1) really necessary, or just nice to have? I can hack
+;; it for bootstrapping purposes just like `fn`.
 
 ;; TODO: Ensure that (map f (map g xs)) == (map (comp f g) xs)
 
@@ -107,14 +91,6 @@
         (when (not (empty? rem))
           rem))))))
 
-(defn repeat [x]
-  (emit :return x :return (repeat x)))
-
-(defn interleave [s1 s2]
-  (emit :return (first s1)
-        :return (first s2)
-        :return (interleave (rest s1) (rest s2))))
-
 ;; REVIEW: I probably ought to make this idea of emit-all a built in part of the
 ;; syntax, it comes up so often and we don't want to be forced to create
 ;; sequences we don't want.
@@ -123,14 +99,6 @@
 ;;
 ;; (emit :log "message" ^:many ch xs)
 ;;
-(def emit-all
-  (μ x
-     ~(emit . ~(interleave (repeat (first x)) (nth* ~x 2)))))
-
-(def net
-  (μ conts
-     ~(emit-all :schedule ~conts)))
-
 ;;;;; And if you really want it:
 
 (defμ stream xss
