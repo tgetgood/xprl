@@ -167,7 +167,7 @@
              (= 1 n) (ast/pair (first res) (debug/with-provenance (ast/list [])
                                              (clean-meta r)))
 
-             (= (ast/symbol ".") (nth res (- n 2)))
+             (= ast/dot (nth res (- n 2)))
              (if (= n 3)
                (ast/pair (first res) (last res))
                (ast/pair (first res)
@@ -176,6 +176,9 @@
                             (concat (subvec res 1 (- n 2)) (last res)))
                            (debug/provenance (second res)))))
 
+             (some #(= % ast/dot) res) (throw
+                                        (RuntimeException.
+                                         "`.` must be followed by exactly one form."))
              :else (ast/pair (first res) (debug/with-provenance
                                            (ast/list (rest res))
                                            (debug/provenance (second res))))))))

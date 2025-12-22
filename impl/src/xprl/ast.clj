@@ -25,16 +25,30 @@
 
 (def ^:dynamic *verbose* false)
 
-(defn split-symbolic [s]
+(defrecord Dot []
+  Object
+  (toString [_] "."))
+
+(defonce dot (->Dot))
+
+(defn dot? [x]
+  (instance? Dot x))
+
+(defn invalid-name? [s]
+  (boolean (re-find #"^\.|\.\.|\.$" s)))
+
+(defn split-symbolic [s t]
   (cond
-    ;; REVIEW: The `.` syntax is too basic to allow it to be overridden, so `.`
-    ;; probably shouldn't be a normal symbol. I don't see any use at the moment
-    ;; for `..`, `...`, &c. as they're not good names so we might be better off
-    ;; without them.
-    (re-find #"^\.+$" s)  [s] ; `.`, `...`, &c. are valid symbols.
-    ;; TODO: check we don't have empty ns portions: `...a...b...
+    (= s ".")             dot
+    (invalid-name? s)     (assert false (str s " is not a valid name for " t))
     (str/includes? s ".") (str/split s #"\.")
     true                  [s]))
+
+(defmacro named [t s]
+  `(let [names# (split-symbolic ~s ~t)]
+     (if (= names# dot)
+       dot
+       (new ~t names#))))
 
 ;; Keywords are values, which is to say they're context free
 (defrecord Keyword [names]
@@ -46,7 +60,7 @@
   (instance? Keyword k))
 
 (def keyword
-  (memoize (fn [s] (->Keyword (split-symbolic s)))))
+  (memoize (fn [s] (named Keyword s))))
 
 (defrecord Symbol [names]
   Object
@@ -54,7 +68,7 @@
     (transduce (interpose ".") str "" names)))
 
 (def symbol-cache
-  (memoize (fn [names] (->Symbol names))))
+  (memoize (fn [s] (named Symbol s))))
 
 (defn symbol? [s]
   (instance? Symbol s))
@@ -76,7 +90,7 @@
 
 (defn symbol [x]
   (cond
-    (string? x) (symbol-cache (split-symbolic x))
+    (string? x) (symbol-cache x)
     (symbol? x) x
     (ref? x)    (:sym x)
     true        (throw (RuntimeException.
