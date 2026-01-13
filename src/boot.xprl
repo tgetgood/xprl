@@ -88,10 +88,11 @@
              (merge
               (destructure ~(first* ~params) ~(first* ~args))
               (destructure ~(rest* ~params) ~(rest* ~args))))
-           (map?* ~params)    (merge
+
+           (map?* ~params) (merge
                                (destructure-map ~(first* ~params) ~(first* ~args))
                                (destructure ~(rest* ~params) ~(rest* ~args)))
-           true               (emit :error ~(str* "Cannot destructure: " ~params ", " ~args))))))
+           true            (emit :error ~(str* "Cannot destructure: " ~params ", " ~args))))))
 
 ;;;;; definitions
 
@@ -115,6 +116,17 @@
 (defμ fn args
   (let1 indirect ~(nth* ~[fn2 fn3] ~(-* ~(count* ~args) 1))
         ~(indirect . ~args)))
+
+(def fn
+  (μ args
+     (let1 named? ~(symbol?* ~(first* ~args))
+           ~(let1 methods ~(if named? (rest* ~args) ~args)
+                  ~(let1 defs (if (map?* ~(first* ~methods))
+                                (nth* ~methods 1)
+                                {(nth* ~methods 1) (nth* ~methods 2)})
+                         ~(μ ~(when named? (first* ~args)) fn-args
+                             ~(let1 dispatch ~(match ~defs ~fn-args)
+                                    ~(dispatch . ~fn-args))))))))
 
 (defμ defn x
   (def ~(nth* ~x 1) (fn . ~x)))
