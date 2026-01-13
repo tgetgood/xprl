@@ -65,7 +65,8 @@ This is largely an aid to my own memory so bear with me.
    2) It looks weird, and I want things that don't act as expected to look
       abnormal.
 
-   μ defines pure syntax operations.
+   μ binds values to symbols, thus extending the lexical environment of its
+   body. But it doesn't *do* anything with that body; it's purely syntactic.
 
    Example:
 
@@ -77,7 +78,9 @@ This is largely an aid to my own memory so bear with me.
      ;; ⇒ (+ x y)
 
      ;; That is, the pair whose head is the symbol `+` and whose tail is the
-     ;; vector of *symbols* `[x y]`
+     ;; vector of *symbols* `[x y]`. The symbols x and y are bound to 4 and 5
+     ;; respectively, but we're still trying to add symbols, rather than their
+     ;; referrents, which is an error.
    #+END_SRC
 
    μ doesn't define a macro. A μ is first class: they can be passed and returned
