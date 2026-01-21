@@ -35,7 +35,7 @@
 
 (def when
   (μ x
-     (if ~(nth* ~x 1) ~(nth* ~x 2) (emit))))
+     ~(if ~(nth* ~x 1) ~(nth* ~x 2) (emit))))
 
 (def cond
   (μ cond body
