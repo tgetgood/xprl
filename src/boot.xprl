@@ -37,19 +37,21 @@
   (μ x
      ~(if ~(nth* ~x 1) ~(nth* ~x 2) (emit))))
 
-(def cond
-  (μ cond body
-     ~(if (<* ~(count* ~body) 2)
-        (emit)
-        (if ~(nth* ~body 1)
-           ~(nth* ~body 2)
-           (cond . ~(rest* ~(rest* ~body)))))))
-
-;;;;; destructuing
-
 (def let1
   (μ x
      ~((μ ~(nth* ~x 1) ~(nth* ~x 3)) . ~(nth* ~x 2))))
+
+(def cond
+  (μ x
+     ~(let1 cond ~(nth* ~x 1)
+            ~(let1 body ~(nth* ~x 2)
+                   ~(if (<* ~(count* ~body) 2)
+                      (emit)
+                      (if ~(nth* ~body 1)
+                        ~(nth* ~body 2)
+                        (cond . ~(rest* ~(rest* ~body)))))))))
+
+;;;;; destructuing
 
 (def let*
   (μ let* x
