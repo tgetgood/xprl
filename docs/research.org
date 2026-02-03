@@ -1,0 +1,273 @@
+#+TITLE: Research, Reading, and Random Notes
+* Reading
+  Let's collect all of my reading for this sprawl in one place.
+** general
+   In no discernable order
+   - [ ] Stream Processing Functions — W.H. Burge
+     IBM internal publication from '75.
+
+     Outlines early use of what we'd nowadays call lazy sequences (lists) as a
+     way to decouple the what from the how.
+
+     In many ways a precursor of Squiggol, though I don't know if Bird et al.
+     new about it. I can't find any reference to it in Bird or Gibbons, but
+     that's not conclusive.
+   - [ ] Naming and Synchronisation in a Decentralised Computer System
+     David Patrick Reed PhD thesis 1977
+   - [ ] Fault-tolerant Distributed Reactive Programming
+     https://drops.dagstuhl.de/opus/volltexte/2018/9206/
+
+     This is very specific, doesn't appear to apply the the issues I'm worried
+     about, and is not written in a way that holds my attention
+
+     But let's give it a second shot.
+   - [ ] Viewing Control Structures as Patterns of Passing Messages — Hewitt
+   - [ ] The Function of Function in Lisp
+   - [ ] A Natural Semantics for Lazy Evaluation
+   - [ ] Combinatory Logic — Curry & Feys
+     I've put off reading this for half a lifetime, but I ought to sooner or
+     later.
+   - [ ] Rabbit: A Compiler for Scheme — Steele 1978
+   - [ ] Konrad Zuse's Plankalkül
+     Applicable in the sense that learning more about the way things ~could~ be
+     done is the entire point.
+   - [ ] Lightweight Userspace Record and Replay
+     Not exactly relevant, but this is the kind of tooling that should be
+     considered indispensable. I want something like this.
+   - [ ] Designing Software for Ease of Extension and Contraction — Parnas
+     Investigation into building software so that effort of change is to some
+     extent proportional to extent of change.
+
+     His notion of encapsulation is so much more general than that I was taught
+     in university. At school it's become an object catechism, but Parnas is
+     talking about structural information more than data. Don't make it public
+     knowledge how many languages we support, make an interface to access by
+     language; access modules indirectly when possible so that we aren't
+     coupled directly to implementations; etc..
+   - [X] Monocopy and Associative Algorithms in an Extended Lisp
+     Write one, zero duplicate data structures and memoisation that is only ever
+     recomputed if they have to be evicted from cache but are then needed again.
+
+     That first part sounds shockingly similar to my infinite hash set scheme
+     and predates it by almost 50 years! But Goto didn't know about Bagwell
+     tries.
+
+     I'm curious about what associative retreival means in practice. It might
+     just mean what we now call hashmaps... Most of the uses mentioned have been
+     taken up by OS level caching nowadays.
+
+     The abstract is a lot more interesting than the implementations.
+
+     They try to get the best of both worlds regarding mutation and
+     immutability. Given the paper's age, that's really impressive, and they
+     make a lot of predictions about the benefits of immutability (a word they
+     don't have) that are taken for granted nowadays.
+
+     They maintain strict wall between the two worlds which looks like it will
+     kind of work, but having to copy objects over the wall is a lot of work and
+     forgetting to copy could be catastrophic.
+   - [X] Ad for Terse
+     https://www.terse.com/ddj.pdf
+     This is curious. I like what he's done with context sensitivity. It truly
+     is amazing what someone can do when they aren't crippled by knowledge of
+     what is and isn't possible.
+
+     It certainly goes out with a bang on his own drum. Good sales pitch. I
+     wonder how he did with it?
+** LOL follow on (largely forth)
+   - [ ] Thinking Forth
+     every word knows what kind of word it is and what proceedure to use to
+     invoke itself.
+
+     I think that insight is key to getting xprl down to the ground. Things to
+     which an arg can be applied know how to invoke themselves. There are also
+     only two kinds of things that can be applied: μs and external
+     interpreters. So we say that μ creates an interpreter and now they're all
+     the same.
+
+     But there's a lot more muck to wade through to get things going than with
+     a data stack and words.
+   - [X] Lively Linear Lisp, or "Look Ma, No Garbage!" — Henry Baker
+     This is a cool idea, but the initial implementations are just bonkers.
+
+     The hash consing scheme that makes it practical is a very cool technique
+     though. It seems to have some similarity to the infinite hash trie, but
+     it's also an optimisation since it lets each cpu have its own unique cache
+     of the data, which is very cool for concurrency.
+
+     But we do want some sharing, if only of context. Having to destroy and
+     rebuild everything over and over just doesn't seem right.
+   - [X] Linear Logic and Permutation Stacks --- the Forth Shall be First
+     Great reference list. A lot of the arguments seem to come down to "look
+     how neat the forth impl of this feature is!", but they are neat.
+
+     The permutation operations are kind of cool. I wonder what you could do
+     with a modern chip with 8 general registers as "top of stack" and one
+     register devoted to tracking the order. Not that I plan to implement
+     anything like this, but I can't help wondering.
+   - [X] Threading Lisp — David Nordstrom 1990
+     There are a few assumptions here that I just don't see the need for:
+
+     First off, why are there frames on the parameter stack? Just store the
+     bottom somewhere and don't bother with the stack pointer stack.
+
+     Secondly there's no immediate forth at all. The author talks about the
+     fact that we lose metaprogramming here because we lose the representation
+     of compiled λs as sexprs, but that's the case in all lisps of which I'm
+     aware: once a function is compiled it's binary, or an object, or whatever.
+
+     Macros would have to operate at the threaded compiler level. Modify the
+     tree as it goes into the dictionary.
+
+     What happens if every function (word) takes exactly one param?
+
+     How could we handle complex data structures (which we need for the first
+     point).
+
+     Can there only be one interpreter? The fact that secondary words store a
+     pointer to the inner interpreter would indicate that we could instead
+     store pointers to as many interpreters as we desire and hop about at will.
+
+     Could we use this to generate assembly and use the inner interpreter as
+     the inner loop of a compiler instead? What if we have a low level
+     interpreter called lli and it takes llvm bitcode statements as parameters?
+     We could directly execute the assembly as we go, or we could just cat it
+     all out into a single file and optimise and compile it to machine code.
+
+     That's going to be a big body of code isn't it?
+
+     Wouldn't the forth machine disappear if we did that?
+
+     Is that a problem? It's for bootstrapping after all.
+   - [X] Threaded Code — James Bell 1973
+     This is pretty cool. What he's calling threaded code is actually how I
+     think about interpreters in general. It's how I implemented falloleen and
+     those other graphics projects.
+
+     So I've been pretty deeply effected by forth subconsciously. I've
+     certainly never thought I was implementing forth in these projects.
+
+     I wonder how the tradeoffs match up today. llvm produces boatloads of
+     code. Well maybe not necessarily, but rust and julia both end up with
+     giant executables. Could they benefit from this I wonder?
+
+     I'm not looking for the fastest language. I need something fast enough,
+     but ultimately I want flexibility, maintainability, and something to
+     counter bitrot.
+
+     This really seems like the direction to go.
+** FBP follow on
+      The last few chapters of Morrison's book regarding similarities with OO
+      and other technologies of the 90s is well worth reading again. Just for
+      the breadth of survey and reference list. I've added quite a bit to my
+      reading list that isn't necessarily relevant here.
+
+   - [ ] A'UM a Stream Based Concurrent Object Oriented Language
+     This is very academic and somewhat awkward. I'm not sure what they mean by
+     saying a message is a name plus a series of directions. So tuple (send,
+     receive, send) is a message?
+
+     Maybe I'm just being slow today, but the authors seem to be referring to
+     things they haven't defined quite often. I get the impression this more a
+     draft report than a finished paper. I'll try to find another version.
+   - [ ] Cons Should not evaluate its arguments — Friedman, Wise
+   - [ ] Recursive Programming Techniques
+   - [ ] Concurrent Prolog
+     Two volumes. Some of it looks useful. But there's a lot there.
+   - [ ] Theory of Parsing, Translation, and Compilation — Aho & Ullman
+     This is a pretty old compiler book. I know so little I should start from
+     the bottom I suppose.
+
+* Assembly resources
+  - Handy summary of (32 bit) C calling convention
+    https://flint.cs.yale.edu/cs421/papers/x86-asm/asm.html
+  - 64 bit register table
+    https://stackoverflow.com/questions/18024672/what-registers-are-preserved-through-a-linux-x86-64-function-call
+  - GNU AS Syntax summary
+    https://en.wikibooks.org/wiki/X86_Assembly/GNU_assembly_syntax
+  - convert mmapped regions to read-only
+    https://unix.stackexchange.com/questions/797252/update-mmap-mapping-to-be-readonly-without-overwriting-existing-data
+  - make sure code stays where you can find it MAP_FIXED
+    https://stackoverflow.com/questions/28575893/when-would-one-use-mmap-map-fixed
+  - threads without libc
+    Nice little primer: https://nullprogram.com/blog/2015/05/15/
+  - low level bit ops
+    https://en.wikipedia.org/wiki/X86_Bit_manipulation_instruction_set
+
+    I'm going to need these for my binary encoding capers.
+  - GAS or NASM?
+    Apparently there's a long fought flame war here. Shouldn't be surprised. I
+    don't know the practical differences. All I can find are opinion rants and
+    some claims that NASM has better macro support. Do I need macro support?
+    Am I not writing something more powerful than what they call macros?
+  - [ ] Binutils AS Summary
+    https://sourceware.org/binutils/docs/as.html#Manual
+  - [ ] Programming from the Ground Up
+  - [ ] Hacker's Delight
+    I just want an excuse to finally read this.
+** Rabbit holes
+   - [ ] What Every Programmer Should Know About Memory
+     https://www.akkadia.org/drepper/cpumemory.pdf
+   - [ ] What Every Computer Scientist Should Know About Floating-Point Arithmetic
+* Notes on my cpu
+  Depending specifically on my cpu is kind of stupid, but it's five years old
+  and I'll be at this for a long time yet. If assuming newer hardware gives
+  the language an advantage, I'm okay with having to emulate features like
+  bmi2 and avx2 for older systems.
+
+  Widespread compatibility with current systems (define that) is a goal. Legacy
+  compatibility is explicitly *not* a goal. But compatibility with contemporary
+  systems in the longterm is a goal. Nice conflict eh? I guess this is to say it
+  ~should~ be possible to make this run on any system whatsoever, but I'm not
+  promising it will be efficient if we have to emulate BMI or SIMD instructions.
+
+  But that said, we need to have a query and fallback approach for generating
+  assembly which will align nicely with vulkan's capability querying if I plan
+  for it from the ground up. After all I want to be able to take advantage of
+  newer features without breaking what already works.
+
+  It would be nice to have sufficient fallbacks that we can just run anywhere
+  and compile better code in place for the features available. I don't know
+  how plausible that might be, but let's find out.
+
+  I think the approach I'll take right now is to fall back to something like a
+  forth interpreter inside the compiler where we use fancy instructions (words)
+  directly if the machine has them, otherwise we define our own words that
+  emulate them with fewer features. Eventually we should end up with emulation
+  all the way down to the naked x86 instruction set if we keep extending support
+  long enough.
+
+  This will have to be done cleverly and hierarchically with fallbacks using
+  older features that themselves have fallbacks, all the way down. But haven't I
+  always been talking about interpreters all the way down to microcode? I think
+  it'll fit nicely.
+
+  Within that scheme, how do we plan for unforseen future changes? To some
+  extent those will be predictable: more general purpose registers, more (and
+  bigger) simd registers, &c. but mostly they will not be predictable. We'll
+  have to look at the code being generated and think of better ways to do it on
+  new machines.
+
+  Ideally we wouldn't change the implementation on the old machines at all, but
+  that violates our general idea of building the machine up to the language.
+
+  I'm not sure how to rectify those two goals. Hard versioning might be the best
+  way to go about it.
+
+  These are future problems. Let's not get too bogged down.
+** capabilities
+   lm fpu fpu_exception wp vme de pse tsc msr pae mce cx8 apic sep mtrr pge
+   mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt
+   pdpe1gb rdtscp x86-64 constant_tsc rep_good nopl xtopology nonstop_tsc
+   cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16
+   sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm
+   cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw
+   ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx
+   cat_l3 cdp_l3 hw_pstate ssbd mba ibrs ibpb stibp vmmcall fsgsbase bmi1 avx2
+   smep bmi2 erms invpcid cqm rdt_a rdseed adx smap clflushopt clwb sha_ni
+   xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total
+   cqm_mbm_local user_shstk clzero irperf xsaveerptr rdpru wbnoinvd arat npt
+   lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists
+   pausefilter pfthreshold avic v_vmsave_vmload vgif v_spec_ctrl umip pku
+   ospke vaes vpclmulqdq rdpid overflow_recov succor smca fsrm debug_swap
+   cpufreq
