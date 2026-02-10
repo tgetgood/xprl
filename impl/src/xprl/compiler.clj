@@ -29,67 +29,8 @@
     (ast/application? form) (apply form state)
     :else                   form))
 
-
 (defn createμ [form env conts])
 
-
-
-;; =>
-{:return ???
- %9      [:eval %14 %11]
- %14     (+* ~x 1)
- %10     [:nth* %4 2]
- %11     [:capture :env %12]
- %12     [:compile %13 :env]
- %13     [:nth* %4 1]
- %4      [:join %5 %6]
- %5      x
- %6      ~(+* ~x 1)}
-;; =>
-{:return ???
- %9      [:apply %15 %16 %11]
- %15     ~+* ; [:immediate [:head %14]]
- %14     (+* ~x 1)
- %16     [:join %17 %18]
- %17     ~x
- %18     1
- %10     [:nth* %4 2]
- %11     [:capture :env %12]
- %12     [:compile %13 :env]
- %13     [:nth* %4 1]
- %4      [:join %5 %6]
- %5      x
- %6      ~(+* ~x 1)}
-;; =>
-{:return ???
- %9      [F+* %16 %11]
- %16     [:join %17 %18]
- %17     ~x
- %18     1
- %11     {:captures #{x}}}
-;; =>
-{:return ???
- %9      [F+** %17]
- %17     [:join %18 %19]
- %18     [:compile %17 %11]
- %19     1
- %11     {:captures #{x}}}
-;; =>
-{:return ???
- %9      [F+** %17]
- %17     [:join %18 %19]
- %18     [:resolve x {:catures #{x}}]
- %19     1}
-;; =>
-{:return %9
- %9      [F+** %17]
- %17     [:join %18 %19]
- %18     [:wait x]
- %19     1}
-;; =>
-{:return [F+** %18 %19]
- %18     [:wait x]
- %19     1}
 
 {:return [Fnth* %2 %3]
  %2      [:vec %4 %5]
@@ -98,7 +39,7 @@
  %5      [Fnth* %7 3]
  %7      :input
  %3      [-* 2 %8]
- %8      [get* %9 %10] ; this whole get can be optimised away to 1 instruction
+ %8      [get* %9 %10] ; this whole get* can be optimised away to 1 instruction
  %9      {false 0 true 1} ; data selection
  %10     [nth* %11 1]
  %11     :input}
@@ -112,3 +53,32 @@
  %9      {false 0 true 1}
  %10     [nth* %11 1]
  %11      :input}
+
+;; wrap
+{:return [:compile %1 {}]
+ :%1     ~(μ f ~(μ args ~(~f . ~~args)))}
+
+{:return [:apply %3 %4 {}]
+ :%3     ~μ
+ %4      [:join %5 %6]
+ %5      f
+ %6      ~(μ args ~(~f . ~~args))}
+
+{:return [Fμ %5 %6 {}]
+ %5      f
+ %6      ~(μ args ~(~f . ~~args))}
+
+{:return [μwrap %7 %8]
+ %7      [:compile %6 {:capture {f %8}}]
+ %8      [gensym]
+ %6      ~(μ args ~(~f . ~~args))
+ }
+
+{:return [μwrap %7 %8]
+ %7      [Fμ %9 %10 {:capture {f %8}}]
+ %9      args
+ %10     ~(~f . ~~args)
+ %8      [gensym]
+ %6      ~(μ args ~(~f . ~~args))
+
+ }
