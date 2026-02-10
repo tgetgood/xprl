@@ -6,7 +6,6 @@
    [xprl.debug :as debug]
    [xprl.env :as env]
    [xprl.interpreter :as i]
-   [xprl.compiler :as c]
    [xprl.reader :as r]))
 
 (def the-env (atom builtins/base-env))
