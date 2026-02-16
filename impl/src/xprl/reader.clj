@@ -33,7 +33,7 @@
    :line   1})
 
 (defn clean-meta [r]
-  (dissoc r :token :until :result :reader :gensyms))
+  (dissoc r :token :until :result :reader :env))
 
 (defn read1 [s]
   (let [next (.read ^PushbackReader (:reader s))]
@@ -126,18 +126,16 @@
           (recur fs)
           v)))))
 
-(defn parse-symbol [{:keys [token gensyms] :as r}]
+(defn parse-symbol [{:keys [token env] :as r}]
   ;; REVIEW: gensyms are never used at present. Will there be a future use for
   ;; them? I suspect not, but I don't see harm in keeping them for the time
   ;; being.
-  (if (str/ends-with? token "#")
-    (let [s (apply str (butlast token))]
-      (if-let [sym (get @gensyms s)]
-        sym
-        (let [sym (ast/symbol (name (gensym (str s "_"))))]
-          (swap! gensyms assoc s sym)
-          sym)))
-    (ast/symbol token)))
+  (let [s (ast/symbol token)]
+    (if (str/ends-with? token "#") ; `#` forces symbols to be local
+      s
+      (if-let [v (get env s)] ; if `s` is bound in `env`, that binding takes precedence.
+        (ast/ref s v)
+        s))))
 
 (defn interpret [r]
   (let [s (:token r)]
@@ -287,8 +285,8 @@
       (recur o)
       (update o :result debug/with-provenance m))))
 
-(defn read [reader]
-  (s/rename-keys (read* (assoc reader :gensyms (atom {}))) {:result :form}))
+(defn read [reader env]
+  (s/rename-keys (read* (assoc reader :env env)) {:result :form}))
 
 (defn read-file
   "Reads all forms from file `fname` and returns then in a vector.

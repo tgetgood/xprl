@@ -57,10 +57,10 @@
                base-conts
                {(ast/xkey :env)    (env-updater envatom)
                 (ast/xkey :return) #(throw
-                                      (RuntimeException. "return to top level!"))})]
+                                     (RuntimeException. "return to top level!"))})]
     (loop [reader (r/file-reader fname)]
-      (let [reader (r/read reader)
-            env    @envatom
+      (let [env    @envatom
+            reader (r/read reader env)
             form   (:form reader)]
         (if (= :eof form)
           'EOF
