@@ -1,8 +1,9 @@
 (ns xprl.core
-  (:refer-clojure :exclude [test])
+  (:refer-clojure :exclude [test read-string])
   (:require
    [xprl.ast :as ast]
    [xprl.builtins :as builtins]
+   [xprl.compiler :as c]
    [xprl.debug :as debug]
    [xprl.env :as env]
    [xprl.interpreter :as i]
@@ -119,3 +120,10 @@
   `(binding [debug/*verbose*         true
              debug/*sample-interval* 1000]
      ~x))
+
+(defn read-string [s]
+  (:form (r/read (r/string-reader s) @the-env)))
+
+(def wrap "~(μ f
+     ~(μ args
+         ~(~f . ~~args)))")

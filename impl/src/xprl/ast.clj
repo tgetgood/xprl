@@ -216,6 +216,23 @@
 (defn emission? [x]
   (instance? Emission x))
 
+
+;; Represents passing a message to something which can receive a message.
+;; REVIEW: Send, Emit, Receive, ...?
+(defrecord Call [inst env args]
+  Object
+  (toString [_]
+    (str [inst env args])))
+
+(defn call [inst env & msgs]
+  (->Call inst env msgs))
+
+(defn call? [x]
+  (instance? Call x))
+
+(defn call-vars [c]
+  (into [(:env c)] (:args c)))
+
 ;;;;; Pretty Printing
 ;;
 ;; This comprises so much messy logic that I'm going to dump it all here to keep
