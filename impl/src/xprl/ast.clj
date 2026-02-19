@@ -219,19 +219,28 @@
 
 ;; Represents passing a message to something which can receive a message.
 ;; REVIEW: Send, Emit, Receive, ...?
-(defrecord Call [inst env args]
+(defrecord Call [inst args]
   Object
   (toString [_]
-    (str [inst env args])))
+    (str [inst args])))
 
-(defn call [inst env & msgs]
-  (->Call inst env msgs))
+(defn call [inst msgs]
+  (->Call inst msgs))
 
 (defn call? [x]
   (instance? Call x))
 
-(defn call-vars [c]
-  (into [(:env c)] (:args c)))
+
+(defrecord LooseEnd [sym id]
+  Object
+  (toString [_]
+    (str "->|" sym "(" id ")")))
+
+(defn input? [x]
+  (instance? LooseEnd x))
+
+(defn input [sym id]
+  (->LooseEnd sym id))
 
 ;;;;; Pretty Printing
 ;;

@@ -122,8 +122,10 @@
      ~x))
 
 (defn read-string [s]
-  (:form (r/read (r/string-reader s) @the-env)))
+  (:form (r/read (r/string-reader s) c/base-env)))
 
-(def wrap "~(μ f
+(def wrap (c/init (read-string "~(μ f
      ~(μ args
-         ~(~f . ~~args)))")
+         ~(~f . ~~args)))")))
+
+(def ft (c/init (read-string "~(μ x ~(+* ~x 1))")))

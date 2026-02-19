@@ -38,7 +38,7 @@
 
 (defn tagset [x]
   (when (ast/call? x)
-    (into #{} (filter tag?) (ast/call-vars x))))
+    (into #{} (filter tag?) (:args x))))
 
 (defn sort-by-deps
   "Returns a map from tags to sets of tags. This map represents the 'depends
@@ -52,7 +52,7 @@
           {} routine))
 
 (defn value? [x]
-  (not (ast/call? x)))
+  (not (or (ast/call? x) (ast/input? x))))
 
 (defn trace-values
   "Returns a map from tags to values. If a tag is not in the map, it does not
@@ -65,7 +65,8 @@
           edge)))
 
 (defn runnable? [vmap [t inst]]
-  (every? #(contains? vmap %) (tagset inst)))
+  (and (ast/call? inst)
+       (every? #(contains? vmap %) (:args inst))))
 
 (defn lowest-runnable
   "Returns the \"first\" (i.e. closest to the edge of the dependency graph)
@@ -74,14 +75,6 @@
   susceptible to change."
   [routine valmap]
   (first (filter (partial runnable? valmap) routine)))
-
-(defn extract-args
-  "Returns the args of `inst` from `vmap` in order. Assumes that the args have
-  values and triggers an error if not."
-  [inst vmap]
-  (let [args (into [] (comp (filter tag?) (map (partial get vmap))) (ast/call-vars inst))]
-    (assert (not-any? nil? args))
-    args))
 
 (defn prune
   "Removes all nodes of routine graph on which `:return` does not (transitively)
@@ -99,15 +92,32 @@
      t       form
      e       empty-env}))
 
+
+(defn expand-primitive [{:keys [args inst]} vmap]
+  (inst args (select-keys vmap args)))
+
 ;; This method of compiling makes some progress each time you invoke it until it
 ;; doesn't. Once we reach a fixed point, that's as far as we get until we have
 ;; more information (either compiling into another unit, or calling at runtime.
 ;; The distinction is somewhat fuzzy).
-(defn compile-step [rout]
-  (let [deps       (sort-by-deps rout)
-        vmap       (trace-values rout deps)
-        [tag call] (lowest-runnable rout vmap)
-        inst       (:inst call)
-        args       (extract-args call vmap)
-        expansion  (apply inst args)]
-    (prune (merge rout (set/rename-keys expansion {:return tag})))))
+(defn compile-step [routine]
+  (let [deps       (sort-by-deps routine)
+        vmap       (trace-values routine deps)
+        [tag inst] (lowest-runnable routine vmap)]
+    (if (nil? inst)
+      routine
+      (let [expansion  (expand-primitive inst vmap)]
+        (merge routine (set/rename-keys expansion {:return tag}))))))
+
+(defn run* [routine n]
+  (loop [n n
+         r routine]
+    (if (zero? n)
+      r
+      (let [next (compile-step r)]
+        (if (= next r)
+          (with-meta r {:fixed-point true})
+          (recur (dec n) next))))))
+
+(def base-env
+  (into {} (map (fn [[k v]] [(ast/symbol #_namespace! (name k)) v])) tag/fns))
