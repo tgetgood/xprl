@@ -177,6 +177,32 @@
    - [ ] Theory of Parsing, Translation, and Compilation — Aho & Ullman
      This is a pretty old compiler book. I know so little I should start from
      the bottom I suppose.
+** Rabbit holes
+  - [ ] What Every Programmer Should Know About Memory
+    https://www.akkadia.org/drepper/cpumemory.pdf
+
+    This paper is a gold mine. More a short textbook than a paper really. I'll
+    need to read it a few times I think.
+
+    According to someone name Peter Cordes on SO the paper is still relevant
+    except that hardware prefetching and speculation are so much better now that
+    you shouldn't try to do it with software. At least if I understood him. And
+    the numbers are all bigger nowadays, but that doesn't really matter.
+
+    This paper only reinforces my notion that with avx2/512 we should try and use
+    the multiple kB of register space and avoid putting stuff in memory at all if
+    we don't need to. So much to the things you would normally push are just
+    arguments for future instructions. The real question is how well can I
+    juggle?
+
+    The sections on numa don't seem to apply directly since multi cpu systems
+    are rare nowadays, but I think the same logic can be applied when working
+    with gpus. So I'm guessing it's safe to mostly ignore his code snippets and
+    just focus on the logic of organising data.
+
+    The section on profiling is really in the weeds and I'd bet that stuff has
+    changed too much in the past 20 years to be directly applicable.
+  - [ ] What Every Computer Scientist Should Know About Floating-Point Arithmetic
 
 * Assembly resources
   - Handy summary of (32 bit) C calling convention
@@ -205,24 +231,6 @@
   - [ ] Programming from the Ground Up
   - [ ] Hacker's Delight
     I just want an excuse to finally read this.
-* Rabbit holes
- - [ ] What Every Programmer Should Know About Memory
-   https://www.akkadia.org/drepper/cpumemory.pdf
-
-   This paper is a gold mine. More a short textbook than a paper really. I'll
-   need to read it a few times I think.
-
-   According to someone name Peter Cordes on SO the paper is still relevant
-   except that hardware prefetching and speculation are so much better now that
-   you shouldn't try to do it with software. At least if I understood him. And
-   the numbers are all bigger nowadays, but that doesn't really matter.
-
-   This paper only reinforces my notion that with avx2/512 we should try and use
-   the multiple kB of register space and avoid putting stuff in memory at all if
-   we don't need to. So much to the things you would normally push are just
-   arguments for future instructions. The real question is how well can I
-   juggle?
- - [ ] What Every Computer Scientist Should Know About Floating-Point Arithmetic
 * Notes on my cpu
   Depending specifically on my cpu is kind of stupid, but it's five years old
   and I'll be at this for a long time yet. If assuming newer hardware gives

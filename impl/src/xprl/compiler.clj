@@ -95,7 +95,7 @@
 (defn init [form]
   (let [t (tag)
         e (tag)]
-    {:return (ast/call :compile e t)
+    {:return (tag/call :compile e t)
      t       form
      e       empty-env}))
 
@@ -109,5 +109,5 @@
         [tag call] (lowest-runnable rout vmap)
         inst       (:inst call)
         args       (extract-args call vmap)
-        expansion  (clojure.core/apply (tag/fns inst) args)]
+        expansion  (apply inst args)]
     (prune (merge rout (set/rename-keys expansion {:return tag})))))
