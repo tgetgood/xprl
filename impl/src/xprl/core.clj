@@ -3,7 +3,7 @@
   (:require
    [xprl.ast :as ast]
    [xprl.builtins :as builtins]
-   [xprl.compiler :as c]
+   [xprl.c2 :as c]
    [xprl.debug :as debug]
    [xprl.env :as env]
    [xprl.interpreter :as i]
@@ -122,10 +122,12 @@
      ~x))
 
 (defn read-string [s]
-  (:form (r/read (r/string-reader s) c/base-env)))
+  (:form (r/read (r/string-reader s) @the-env)))
 
-(def wrap (c/init (read-string "~(μ f
+(def wrap (read-string "~(μ f
      ~(μ args
-         ~(~f . ~~args)))")))
+         ~(~f . ~~args)))"))
 
-(def ft (c/init (read-string "~(μ x ~(+* ~x 1))")))
+(def ft (read-string "~(μ x ~(+* ~x 1))"))
+
+(def a (read-string "~(+* 1 2)"))

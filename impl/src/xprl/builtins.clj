@@ -3,6 +3,7 @@
    [xprl.ast :as ast]
    [xprl.debug :as debug]
    [xprl.env :as env]
+   [xprl.c2 :as c]
    [xprl.interpreter :as i]))
 
 ;;;;; simple primitive fns
@@ -11,20 +12,17 @@
   "given an external (clojure) function, returns an applicative wrapper to call
   it from xprl."
   [f]
-  (fn [{tail :tail :as form} opts]
-    (let [{:keys [tail] :as next} (if (or (ast/incomplete? tail) (some ast/incomplete? tail))
-                                    (update form :tail i/walk opts)
-                                    form)]
-      (if (or (ast/incomplete? tail) (some ast/incomplete? tail))
-        next
-        (try
-          (apply f tail)
-          (catch Exception e
-            (reset! debug/*pfn {:f f :args tail :e e})
-            (binding [ast/*verbose* true]
-              (ast/inspect (ast/application f tail)))
-            (println e)
-            :error))))))
+  (fn [env head tail]
+    (if (ast/incomplete? tail)
+      (ast/application env head tail)
+      (try
+        (apply f tail)
+        (catch Exception e
+          (reset! debug/*pfn {:f f :args tail :e e})
+          (binding [ast/*verbose* true]
+            (ast/inspect (ast/application f tail)))
+          (println e)
+          :error)))))
 
 (defn primitive [n f]
   (ast/extern n (call-primitive-fn f)))
@@ -96,20 +94,6 @@
                         (butlast t))
                   (last t)))))
 
-(defn μ [{args :tail :as app} opts]
-  (let [args (if (ast/incomplete? args) (i/walk args opts) args)]
-    (if (ast/incomplete? args)
-      (assoc app :tail args)
-      (if (= 3 (count args))
-        (let [[name body] (capture (first args) (last args))
-              [param body] (capture (second args) body)]
-          (if (and (ast/symbolic? name) (ast/symbolic? param))
-            (i/walk (ast/μ name param body) opts)
-            (walk-names (assoc app :tail [name param body]) opts)))
-        (let [[param body] (capture (first args) (second args))]
-          (if (ast/symbolic? param)
-            (i/walk (ast/μ param body) opts)
-            (walk-names app opts)))))))
 
 ;; FIXME: `emit` doesn't need to be special. Why is it again?
 (defn emit [{kvs :tail :as app} opts]
@@ -128,8 +112,7 @@
 (def special
   "things that would traditionally be special forms."
   (macros
-   {"μ"      μ
-    "emit"   emit
+   {"emit"   emit
 
     "with-channels" with-channels
 
@@ -152,5 +135,7 @@
 ;; built. that is to say there will be a shock in the history where we suddenly
 ;; have no past, no origin. why is bootstrapping so singular like that?
 
+(def μ {(ast/symbol "μ") c/μ})
+
 (def base-env
-  (reduce (fn [e [k v]] (env/ns-intern e k v)) env/empty-ns (merge special fns)))
+  (reduce (fn [e [k v]] (env/ns-intern e k v)) env/empty-ns (merge μ special fns)))

@@ -1,6 +1,7 @@
 (ns xprl.tag-fns
   (:refer-clojure :exclude [compile eval apply resolve])
-  (:require [xprl.ast :as ast]))
+  (:require [clojure.set :as set]
+            [xprl.ast :as ast]))
 
 (defn tag []
   (gensym "%"))
@@ -11,22 +12,33 @@
 
 (declare fns)
 
+
 (defn call [tag & args]
   (ast/call (get fns tag) args))
+
+(def compile-impls
+  {ast/immediate?   (with-tags [f f' c i e]
+                      {:return (call :eval e c)
+                       c       (call :compile e f')
+                       f'      (call :get f :form)
+                       f       (call :nth i 2)
+                       e       (call :nth i 1)
+                       i       :input})
+   ast/application? (with-tags [f h h' t t' e i]
+                      {:return (call :apply e h' t')
+                       h'      (call :compile e h)
+                       h       (call :head f)
+                       t'      (call :compile e t)
+                       t       (call :tail f)
+                       f       (call :nth i 2)
+                       e       (call :nth i 1)
+                       i       :input})})
 
 (defn compile [[e f] vmap]
   (let [form (get vmap f)]
     (cond
-      (ast/immediate? form) (with-tags [f c]
-                              {:return (call :eval e c)
-                               c       (call :compile e f)
-                               f       (:form form)})
-      (ast/application? form) (with-tags [h h' t t']
-                                {:return (call :apply e h' t')
-                                 h'      (call :compile e h)
-                                 h       (:head form)
-                                 t'      (call :compile e t)
-                                 t       (:tail form)})
+      (ast/immediate? form)
+      (ast/application? form)
       ;; TODO: emission, lists, maps, etc.
       true                    {:return form})))
 
@@ -72,28 +84,17 @@
         (assert false (str "trying to resolve unbound symbol: " sym))))))
 
 
-(defn capture [[e p id] vmap]
-  (let [env   (get vmap e)
-        param (get vmap p)
-        μid   (get vmap id)]
-    {:return (assoc-in env [:captured param] μid)}))
-
-(defn μwrap [[id p b] vmap]
-  (let [μid   (get vmap id)
-        body  (get vmap b)
-        param (get vmap p)]
-    {:return (ast/μ id p b)}))
+(defn capture [env sym id]
+  (assoc-in env [:captured sym] id))
 
 (defn createμ [[e a] vmap]
-  (let [[param body] (get vmap a)]
-    (with-tags [e' μid b b' p p']
-      {:return (call :μwrap μid p' b')
-       b'      (call :compile e' b)
-       b       body
-       p       param
-       p'      (call :compile e p)
-       μid     (gensym "μ-param-")
-       e'      (call :capture e p μid)})))
+  (let [[param body] (get vmap a)
+        env          (get vmap e)
+        b            (tag) e' (tag)
+        μid          (gensym "μ-param-")
+        cenv         (capture env param μid)
+        subr         (compile [e' b] {e' cenv b body})]
+    {:return (ast/μ μid param (assoc subr e' cenv))}))
 
 (defn await-input [[s i] vmap]
   {:return (ast/input (get vmap s) (get vmap i))})
@@ -110,6 +111,4 @@
    :apply       apply
    :await-input await-input
    :μ           createμ
-   :μwrap       μwrap
-   :capture     capture
    :+*          +*})

@@ -116,6 +116,10 @@
 (defn set? [x]
   (instance? clojure.lang.PersistentHashSet x))
 
+;; Clojure's default predicates are too inclusive for our purposes.
+(defn coll? [x]
+  (or (list? x) (map? x) (set? x)))
+
 (defrecord Pair [head tail]
   Object
   (toString [_]
@@ -143,7 +147,7 @@
   (instance? Immediate x))
 
 
-(defrecord Application [head tail]
+(defrecord Application [env head tail]
   Object
   (toString [_]
     (str "#" (str (pair head tail)))
@@ -151,8 +155,9 @@
       (str "|" (first tail) "|_" (last tail))
       (str "#" (str (pair head tail))))))
 
-(defn application [head tail]
-  (->Application head tail))
+(defn application
+  ([head tail] (application {} head tail))
+  ([env head tail] (->Application env head tail)))
 
 (defn application? [x]
   (instance? Application x))
@@ -500,4 +505,6 @@
   (keyword (name x)))
 
 (defn incomplete? [x]
-  (or (immediate? x) (application? x)))
+  (if (coll? x)
+    (some incomplete? x)
+    (or (input? x) (immediate? x) (application? x))))
