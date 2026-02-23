@@ -28,6 +28,9 @@
 (defn apply-μ [env μ args]
   (assert false "not implemented"))
 
+(defn bind [env id val]
+  (assoc-in env [:bindings id] val))
+
 (defn resolve [env form]
   (let [sym (ast/symbol form)]
     (cond
@@ -40,7 +43,7 @@
 (defn apply [env head tail]
   (cond
     (ast/external? head)   (call env head (walk env tail))
-    (ast/μ? head)          (apply-μ env head (walk env tail))
+    (ast/μ? head)          (walk (bind env (:id head) (walk env tail)) (:body head))
     ;; REVIEW: I don't like making μ this special, but I think I have to.
     (= μ head)             (μ env tail)
     (ast/incomplete? head) (ast/application env head (walk env tail))
@@ -61,7 +64,11 @@
     ;; wall and gave up. So we must assume we're operating with new information.
     ;; How do we reconcile the bundled env of the paused application with the
     ;; new evaluation env? I think stacking them like scheme is safe...
-    (ast/application? form) (apply (merge-with merge env (:env form))
-                                   (walk env (:head form)) (:tail form))
+    (ast/application? form) (do (println "env: " (merge-with merge env (:env form)))
+                                (apply (merge-with merge env (:env form))
+                                       (walk env (:head form)) (:tail form)))
+    (ast/input? form)       (if (contains? (:bindings env) (:id form))
+                              (get-in env [:bindings (:id form)])
+                              form)
     (ast/coll? form)        (into (empty form) (map (partial walk env)) form)
     true                    form))

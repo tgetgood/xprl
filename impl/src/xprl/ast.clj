@@ -163,17 +163,16 @@
   (instance? Application x))
 
 
-(defrecord Mu [name params body]
+(defrecord Mu [id params body]
   Object
   (toString [_]
     (str "(#μ " params " " body ")")))
 
 (defn μ
   ([params body] (μ nil params body))
-  ([name params body]
-   (assert (or nil? name) (symbol? name))
+  ([id params body]
    (assert (symbol? params))
-   (->Mu name params body)))
+   (->Mu id params body)))
 
 (defn μ? [x]
   (instance? Mu x))
