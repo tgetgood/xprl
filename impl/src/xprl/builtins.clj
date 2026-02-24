@@ -43,6 +43,10 @@
   (assert (boolean? x))
   (not x))
 
+(defn emit [{kvs :tail :as app} opts]
+  (assert (even? (count kvs)))
+  (ast/emission (mapv (fn [[k v]] [(ast/immediate k) v]) (partition 2 kvs))))
+
 (def fns
   (primitives
    {"+*"   +
@@ -77,43 +81,40 @@
     "count*" count
     "nth*"   nth* ; base 1 indexing
 
+    "emit"   emit
     }))
 
 ;;;;; specialish forms
-
-(defn capture [sym body]
-  (if (and (ast/symbolic? sym) (not (::captured? (meta sym))))
-    (let [usym (ast/unique-symbol sym)]
-      [(with-meta usym {::captured? true}) (env/capture body sym usym)])
-    [sym body]))
-
-(defn walk-names [app opts]
-  (update app :tail
-          (fn [t]
-            (conj (mapv #(i/walk % (assoc opts :freeze? true))
-                        (butlast t))
-                  (last t)))))
-
-
-;; FIXME: `emit` doesn't need to be special. Why is it again?
-(defn emit [{kvs :tail :as app} opts]
-  (assert (even? (count kvs)))
-  (ast/emission (mapv (fn [[k v]] [(ast/immediate k) v]) (partition 2 kvs))))
 
 (defn with-channels [{[chmap body] :tail :as app} opts]
   (if (ast/incomplete? chmap)
     (update app :tail i/walk opts)
     (ast/ctx chmap body)))
 
+(defn capture [env sym id]
+  (assoc-in env [:captured sym] id))
+
+(defn μ [env self args]
+  (let [args (if (vector? args) args (c/walk env args))]
+    (if (vector? args)
+      (let [[param body] args
+            param (c/walk env param)]
+        (if (ast/symbolic? param)
+          (let [id  (gensym "μ-param-")
+                env (capture env (ast/symbol param) id)]
+            (ast/μ env id param (c/walk env body)))
+          (ast/application env self [param body])))
+      (ast/application env self args))))
+
+
 (defn macros [m]
   (reduce (fn [acc [k f]]
-            (assoc acc (ast/symbol k) (ast/extern k f))) {} m))
+            (assoc acc (ast/symbol k) (ast/macro k f))) {} m))
 
 (def special
   "things that would traditionally be special forms."
   (macros
-   {"emit"   emit
-
+   {"μ"             μ
     "with-channels" with-channels
 
     ;; TODO: builtin macros needed for a working system.
@@ -135,7 +136,5 @@
 ;; built. that is to say there will be a shock in the history where we suddenly
 ;; have no past, no origin. why is bootstrapping so singular like that?
 
-(def μ {(ast/symbol "μ") c/μ})
-
 (def base-env
-  (reduce (fn [e [k v]] (env/ns-intern e k v)) env/empty-ns (merge μ special fns)))
+  (reduce (fn [e [k v]] (env/ns-intern e k v)) env/empty-ns (merge special fns)))

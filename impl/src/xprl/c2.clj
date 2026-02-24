@@ -6,22 +6,6 @@
 
 (declare walk)
 
-(defn capture [env sym id]
-  (assoc-in env [:captured sym] id))
-
-(defonce μ       ; HACK: function equality is identity in clojure.
-  (fn [env args] ; so DO NOT reload this, unless you reload everything
-    (let [args (if (vector? args) args (walk env args))]
-      (if (vector? args)
-        (let [[param body] args
-              param (walk env param)]
-          (if (ast/symbolic? param)
-            (let [id  (gensym "μ-param-")
-                  env (capture env (ast/symbol param) id)]
-              (ast/μ env id param (walk env body)))
-            (ast/application env μ [param body])))
-        (ast/application env μ args)))))
-
 (defn call [env f t]
   ((:fn f) env f t))
 
@@ -44,9 +28,8 @@
 (defn apply [env head tail]
   (let [env (ast/merge-local-env env head)]
     (cond
-      ;; REVIEW: I don't like making μ this special, but I think I have to.
-      (= μ head)             (μ env tail)
       (ast/μ? head)          (walk (bind env (:id head) (walk env tail)) (:body head))
+      (ast/macro? head)      (call env head tail)
       (ast/external? head)   (call env head (walk env tail))
       (ast/incomplete? head) (ast/application env head (walk env tail))
       true                   (throw (RuntimeException. (str head " is not applicable!"))))))
@@ -73,3 +56,12 @@
       (ast/μ? form)           (update form :body #(walk env %))
       (ast/coll? form)        (into (empty form) (map (partial walk env)) form)
       true                    form))) ; REVIEW: Do I need ast/merge-env?
+
+;;;;; Compiler
+
+(defn tag []
+  (gensym "%"))
+
+(defn compile [env form]
+  (cond
+    (ast/coll? form) ()))

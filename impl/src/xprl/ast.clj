@@ -218,6 +218,20 @@
       (string? s)              s
       true                     (str f))))
 
+;; Like an extern, but it coopts to walking process itself. This allows a Macro
+;; to modify the environment in which its parts are walked before those parts
+;; can be walked. There are as yet very few places this is useful.
+(defrecord Macro [name fn]
+  Object
+  (toString [_]
+    (str "#M[" name "]")))
+
+(defn macro [name fn]
+  (->Macro name fn))
+
+(defn macro? [x]
+  (instance? Macro x))
+
 
 (defrecord Extern [name fn]
   Object
@@ -389,6 +403,18 @@
    (pp/write-out (symbol "#μ"))
    (format-pair (symbol "#μ") [params body])))
 
+;;; Macros
+
+(defmethod print-method Macro [{:keys [name]} ^Writer w]
+  (.write w "#M[")
+  (.write w (str name))
+  (.write w "]"))
+
+(defmethod pp/simple-dispatch Macro [{:keys [name]}]
+  (pp/pprint-logical-block
+   :prefix "#M[" :suffix "]"
+   (pp/write-out name)))
+
 ;;; Externs
 
 (defmethod print-method Extern [{:keys [name]} ^Writer w]
@@ -483,6 +509,13 @@
     (spacer w level)
     (.write w "L\n")
     (dorun (map #(insp % w (inc level)) form)))
+
+  Macro
+ (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "M[")
+    (.write w ^String (:name form))
+    (.write w "]\n"))
 
   Extern
   (insp [form ^Writer w level]
