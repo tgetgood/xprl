@@ -1,10 +1,25 @@
-(ns xprl.c2
+(ns xprl.interpreter
   (:refer-clojure :exclude [resolve eval apply])
   (:require
    [xprl.ast :as ast]
-   [xprl.debug :as debug :refer [deftracefn]]))
+   [xprl.system :as sys]))
 
 (declare walk)
+
+(defn bind [env id val]
+  (-> env
+      (assoc-in [:bindings id] val)
+      (assoc :μ? false)))
+
+(defn resolve [env form]
+  (let [env (ast/merge-local-env env form)]
+    (cond
+      (ast/input? form)  (if (contains? (:bindings env) (:id form))
+                           (get-in env [:bindings (:id form)])
+                           (ast/immediate form))
+      (ast/ref? form)    (:binding form)
+      (ast/symbol? form) (throw (RuntimeException. (str "unbound symbol: " form)))
+      true               (assert false "unreachable!!"))))
 
 (defn call [env f t]
   ((:fn f) env f t))
@@ -17,19 +32,6 @@
       (ast/external? head)   (call env head (walk env tail))
       (ast/incomplete? head) (ast/application env head (walk env tail))
       true                   (throw (RuntimeException. (str head " is not applicable!"))))))
-
-(defn bind [env id val]
-  (assoc-in env [:bindings id] val))
-
-(defn resolve [env form]
-  (let [env (ast/merge-local-env env form)]
-    (cond
-      (ast/input? form)  (if (contains? (:bindings env) (:id form))
-                           (get-in env [:bindings (:id form)])
-                           (ast/immediate form))
-      (ast/ref? form)    (:binding form)
-      (ast/symbol? form) (throw (RuntimeException. (str "unbound symbol: " form)))
-      true               (assert false "unreachable!!"))))
 
 (defn eval [env form]
   (let [env (ast/merge-local-env env form)]

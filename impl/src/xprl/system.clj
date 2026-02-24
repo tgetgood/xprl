@@ -44,12 +44,13 @@
 (defn try-emissions!
   "Sends any messages that are ready to go, returns an emission containing the
   rest."
-  [{:keys [kvs] :as em} opts]
+  [env kvs]
   (trace! "trying emissions" kvs)
   ;; Who says we can't emit an incomplete computation which can only be
   ;; completed in the receiving context?
+  (println env)
   (if (some (fn [[k v]] (not (ast/keyword? k))) kvs)
-    em                  ; Delay emissions until all channels are defined.
+    1 #_em                  ; Delay emissions until all channels are defined.
     (cond
       ;; TODO: Even when frozen we can and should perform non-channel returns
       ;; since they aren't really message passing.
@@ -59,8 +60,8 @@
       ;; rets. So the above a potential optimisation, but is it necessary?
       ;; Put differently is there a case where the computation will stall if we
       ;; don't?
-      (:freeze? opts)         em
-      (contains? *ccmap* ret) (run! emit! kvs)
+      ;; (:freeze? opts)            em
+      (contains? (:ctx env) ret) (run! emit! kvs)
       true
       (let [rets      (filter #(= ret (first %)) kvs)
             emissions (remove #(= ret (first %)) kvs)]

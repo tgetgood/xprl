@@ -2,9 +2,9 @@
   (:require
    [xprl.ast :as ast]
    [xprl.debug :as debug]
-   [xprl.env :as env]
-   [xprl.c2 :as c]
-   [xprl.interpreter :as i]))
+   [xprl.interpreter :as i]
+   [xprl.ns :as ns]
+   [xprl.system :as sys]))
 
 ;;;;; simple primitive fns
 
@@ -43,10 +43,6 @@
   (assert (boolean? x))
   (not x))
 
-(defn emit [{kvs :tail :as app} opts]
-  (assert (even? (count kvs)))
-  (ast/emission (mapv (fn [[k v]] [(ast/immediate k) v]) (partition 2 kvs))))
-
 (def fns
   (primitives
    {"+*"   +
@@ -81,12 +77,20 @@
     "count*" count
     "nth*"   nth* ; base 1 indexing
 
-    "emit"   emit
     }))
 
 ;;;;; specialish forms
 
-(defn with-channels [{[chmap body] :tail :as app} opts]
+(defn emit [env self kvs]
+  (let [kvs (if (vector? kvs) kvs (i/walk env kvs))]
+    (if (vector? kvs)
+      (do (assert (even? (count kvs)))
+          (let [msgs (i/walk env (mapv (fn [[k v]] [(ast/immediate k) v]) (partition 2 kvs)))]
+            (println msgs)
+            (sys/try-emissions! env msgs)))
+      (ast/application env self kvs))))
+
+#_(defn with-channels [{[chmap body] :tail :as app} opts]
   (if (ast/incomplete? chmap)
     (update app :tail i/walk opts)
     (ast/ctx chmap body)))
@@ -95,14 +99,14 @@
   (assoc-in env [:captured sym] id))
 
 (defn μ [env self args]
-  (let [args (if (vector? args) args (c/walk env args))]
+  (let [args (if (vector? args) args (i/walk env args))]
     (if (vector? args)
       (let [[param body] args
-            param (c/walk env param)]
+            param (i/walk env param)]
         (if (ast/symbolic? param)
           (let [id  (gensym "μ-param-")
                 env (capture env (ast/symbol param) id)]
-            (ast/μ env id param (c/walk env body)))
+            (ast/μ env id param (i/walk env body)))
           (ast/application env self [param body])))
       (ast/application env self args))))
 
@@ -114,8 +118,9 @@
 (def special
   "things that would traditionally be special forms."
   (macros
-   {"μ"             μ
-    "with-channels" with-channels
+   {"μ"    μ
+    "emit" emit
+    ;; "with-channels" with-channels
 
     ;; TODO: builtin macros needed for a working system.
     ;;
@@ -137,4 +142,4 @@
 ;; have no past, no origin. why is bootstrapping so singular like that?
 
 (def base-env
-  (reduce (fn [e [k v]] (env/ns-intern e k v)) env/empty-ns (merge special fns)))
+  (reduce (fn [e [k v]] (ns/ns-intern e k v)) ns/empty-ns (merge special fns)))

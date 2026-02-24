@@ -3,10 +3,9 @@
   (:require
    [xprl.ast :as ast]
    [xprl.builtins :as builtins]
-   [xprl.c2 :as c]
    [xprl.debug :as debug]
-   [xprl.env :as env]
    [xprl.interpreter :as i]
+   [xprl.ns :as ns]
    [xprl.reader :as r]))
 
 (def the-env (atom builtins/base-env))
@@ -25,32 +24,32 @@
 (defn env-updater [env]
   (fn [l]
     (reset! te l)
-    (let [[sym value] (i/interpret l)]
+    (let [[sym value] l]
       (assert (ast/symbolic? sym))
-      (swap! env env/ns-intern sym value))))
+      (swap! env ns/ns-intern sym value))))
 
 (defn with-return [ccs cb]
   (assoc ccs (ast/xkey :return) cb))
 
 (defn go!
-  ([env f] (i/interpret (ast/immediate (env/set-ns env f))))
-  ([env f conts] (i/interpret (ast/ctx conts (ast/immediate (env/set-ns env f))))))
+  ([f] (i/walk {} (ast/immediate f)))
+  ([f conts] (i/walk {:ctx conts} (ast/immediate f))))
 
 (defn evv [s]
-  (go! @the-env (:form (r/read (r/string-reader s)))))
+  (go! (:form (r/read (r/string-reader s) @the-env))))
 
 (def base-conts
   {(ast/xkey :env)    (env-updater the-env)
-   (ast/xkey :return) #(println (i/interpret %))
-   (ast/xkey :log) #(println "LOG:" (i/interpret %))
+   (ast/xkey :return) println
+   (ast/xkey :log) #(println "LOG:" %)
    (ast/xkey :error)  #(binding [*out* *err*]
                           (println %))})
 (defn ev [s]
-  (go! @the-env (:form (r/read (r/string-reader s))) base-conts))
+  (go! (:form (r/read (r/string-reader s) @the-env)) base-conts))
 
 
 (defn iev [s]
-  (ast/inspect (go! @the-env (:form (r/read (r/string-reader s))))))
+  (ast/inspect (go! (:form (r/read (r/string-reader s) @the-env)))))
 
 (defn loadfile [envatom fname]
   (println "\nloading:" fname "\n")
@@ -66,7 +65,7 @@
         (if (= :eof form)
           'EOF
           (do
-            (go! @envatom form (with-return conts println))
+            (go! form (with-return conts println))
             (recur reader))))))
   envatom)
 
@@ -76,7 +75,7 @@
   :eof)
 
 (defmacro gs [n]
-  `(env/lookup @the-env (ast/symbol ~(clojure.core/name n))))
+  `(ns/lookup @the-env (ast/symbol ~(clojure.core/name n))))
 
 (defmacro inspect [n]
   `(ast/inspect (gs ~n)))
