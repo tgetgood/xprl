@@ -18,7 +18,7 @@
           (if (ast/symbolic? param)
             (let [id  (gensym "μ-param-")
                   env (capture env (ast/symbol param) id)]
-              (ast/μ id param (walk env body)))
+              (ast/μ env id param (walk env body)))
             (ast/application env μ [param body])))
         (ast/application env μ args)))))
 
@@ -32,43 +32,44 @@
   (assoc-in env [:bindings id] val))
 
 (defn resolve [env form]
-  (let [sym (ast/symbol form)]
+  (let [env (ast/merge-local-env env form)]
     (cond
-      (contains? (:captured env) sym) (ast/input sym (get-in env [:captured sym]))
-
+      (ast/input? form)  (if (contains? (:bindings env) (:id form))
+                           (get-in env [:bindings (:id form)])
+                           (ast/immediate form))
       (ast/ref? form)    (:binding form)
-      (ast/symbol? form) (ast/immediate form)
+      (ast/symbol? form) (throw (RuntimeException. (str "unbound symbol: " form)))
       true               (assert false "unreachable!!"))))
 
 (defn apply [env head tail]
-  (cond
-    (ast/external? head)   (call env head (walk env tail))
-    (ast/μ? head)          (walk (bind env (:id head) (walk env tail)) (:body head))
-    ;; REVIEW: I don't like making μ this special, but I think I have to.
-    (= μ head)             (μ env tail)
-    (ast/incomplete? head) (ast/application env head (walk env tail))
-    true                   (throw (RuntimeException. (str head " is not applicable!")))))
+  (let [env (ast/merge-local-env env head)]
+    (cond
+      ;; REVIEW: I don't like making μ this special, but I think I have to.
+      (= μ head)             (μ env tail)
+      (ast/μ? head)          (walk (bind env (:id head) (walk env tail)) (:body head))
+      (ast/external? head)   (call env head (walk env tail))
+      (ast/incomplete? head) (ast/application env head (walk env tail))
+      true                   (throw (RuntimeException. (str head " is not applicable!"))))))
 
 (defn eval [env form]
-  (cond
-    (ast/pair? form)       (apply env (walk env (ast/immediate (:head form))) (:tail form))
-    (ast/symbolic? form)   (resolve env form)
-    (ast/coll? form)       (into (empty form) (map (partial eval env)) form)
-    (ast/incomplete? form) (ast/immediate form)
-    true                   form))
+  (let [env (ast/merge-local-env env form)]
+    (cond
+      (ast/pair? form)       (apply env (walk env (ast/immediate (:head form))) (:tail form))
+      (ast/symbolic? form)   (resolve env form)
+      (ast/coll? form)       (into (empty form) (map (partial eval env)) form)
+      (ast/incomplete? form) (ast/immediate form)
+      true                   form)))
 
 (defn walk [env form]
-  (cond
-    (ast/immediate? form)   (eval env (walk env (:form form)))
-    ;; REVIEW: `walk` can only hit a raw application if a previous pass hit a
-    ;; wall and gave up. So we must assume we're operating with new information.
-    ;; How do we reconcile the bundled env of the paused application with the
-    ;; new evaluation env? I think stacking them like scheme is safe...
-    (ast/application? form) (do (println "env: " (merge-with merge env (:env form)))
-                                (apply (merge-with merge env (:env form))
-                                       (walk env (:head form)) (:tail form)))
-    (ast/input? form)       (if (contains? (:bindings env) (:id form))
-                              (get-in env [:bindings (:id form)])
-                              form)
-    (ast/coll? form)        (into (empty form) (map (partial walk env)) form)
-    true                    form))
+  (let [env (ast/merge-local-env env form)]
+    (cond
+      (ast/immediate? form)   (eval env (walk env (:form form)))
+      (ast/application? form) (apply env (walk env (:head form)) (:tail form))
+      (ast/symbolic? form)    (let [sym (ast/symbol form)]
+                                (if (contains? (:captured env) sym)
+                                  (ast/input env sym (get-in env [:captured sym]))
+                                  (ast/with-env form env)))
+      ;; REVIEW: Should we store the env in a μ? it seems a reasonable assumption.
+      (ast/μ? form)           (update form :body #(walk env %))
+      (ast/coll? form)        (into (empty form) (map (partial walk env)) form)
+      true                    form))) ; REVIEW: Do I need ast/merge-env?

@@ -130,4 +130,15 @@
 
 (def ft (read-string "~(μ x ~(+* ~x 1))"))
 
+(def wt (read-string "~((μ y
+~(((μ f
+     ~(μ args
+         ~(~f . ~~args))) . +*) . y)) 5 6)"))
+
 (def a (read-string "~(+* 1 2)"))
+
+;; pathological examples. I doubt these are essential, but I can't see any valid
+;; reason to ban them either.
+(def p1 (read-string "~~((μ x x) . 5)"))
+
+(def p2 (read-string "~(μ x ~(μ y ~(~y . ~~x)))")) ; reverse currying.

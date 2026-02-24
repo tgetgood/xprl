@@ -73,6 +73,18 @@
 (defn symbol? [s]
   (instance? Symbol s))
 
+(defprotocol Env)
+
+(defn merge-local-env [env x]
+  (if (satisfies? Env x)
+    (merge-with merge env (:env x))
+    env))
+
+(defn with-env [x env]
+  (if (satisfies? Env x)
+    (assoc x :env env)
+    x))
+
 (defrecord Ref [sym binding]
   Object
   (toString [_]
@@ -85,12 +97,28 @@
   (assert (symbol? sym))
   (->Ref sym local))
 
+
+(defrecord LooseEnd [env sym id]
+  Env
+  Object
+  (toString [_]
+    (str sym "->")))
+
+(defn input? [x]
+  (instance? LooseEnd x))
+
+(defn input
+  ([sym id] (input {} sym id))
+  ([env sym id] (->LooseEnd env sym id)))
+
+
 (defn symbolic? [x]
-  (or (symbol? x) (ref? x)))
+  (or (symbol? x) (ref? x) (input? x)))
 
 (defn symbol [x]
   (cond
     (string? x) (symbol-cache x)
+    (input? x)  x ; Don't symbolise. REVIEW: will this bite me?
     (symbol? x) x
     (ref? x)    (:sym x)
     true        (throw (RuntimeException.
@@ -120,7 +148,8 @@
 (defn coll? [x]
   (or (list? x) (map? x) (set? x)))
 
-(defrecord Pair [head tail]
+(defrecord Pair [env head tail]
+  Env
   Object
   (toString [_]
     (str "(" (str head) " "
@@ -129,8 +158,9 @@
            (str ". " (str tail)))
          ")")))
 
-(defn pair [head tail]
-  (->Pair head tail))
+(defn pair
+  ([head tail] (pair {} head tail))
+  ([env head tail] (->Pair env head tail)))
 
 (defn pair? [x]
   (instance? Pair x))
@@ -148,6 +178,7 @@
 
 
 (defrecord Application [env head tail]
+  Env
   Object
   (toString [_]
     (str "#" (str (pair head tail)))
@@ -163,16 +194,18 @@
   (instance? Application x))
 
 
-(defrecord Mu [id params body]
+(defrecord Mu [env id params body]
+  Env
   Object
   (toString [_]
     (str "(#μ " params " " body ")")))
 
 (defn μ
-  ([params body] (μ nil params body))
-  ([id params body]
+  ([params body] (μ {} nil params body))
+  ([id params body] (μ {} id params body))
+  ([env id params body]
    (assert (symbol? params))
-   (->Mu id params body)))
+   (->Mu env id params body)))
 
 (defn μ? [x]
   (instance? Mu x))
@@ -235,17 +268,6 @@
   (instance? Call x))
 
 
-(defrecord LooseEnd [sym id]
-  Object
-  (toString [_]
-    (str "->|" sym "(" id ")")))
-
-(defn input? [x]
-  (instance? LooseEnd x))
-
-(defn input [sym id]
-  (->LooseEnd sym id))
-
 ;;;;; Pretty Printing
 ;;
 ;; This comprises so much messy logic that I'm going to dump it all here to keep
@@ -267,6 +289,9 @@
 
 (ps Ref)
 (pps Ref)
+
+(ps LooseEnd)
+(pps LooseEnd)
 
 ;;; Keyword
 
