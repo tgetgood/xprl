@@ -9,8 +9,14 @@
 (defn call [env f t]
   ((:fn f) env f t))
 
-(defn apply-μ [env μ args]
-  (assert false "not implemented"))
+(defn apply [env head tail]
+  (let [env (ast/merge-local-env env head)]
+    (cond
+      (ast/μ? head)          (walk (bind env (:id head) (walk env tail)) (:body head))
+      (ast/macro? head)      (call env head tail)
+      (ast/external? head)   (call env head (walk env tail))
+      (ast/incomplete? head) (ast/application env head (walk env tail))
+      true                   (throw (RuntimeException. (str head " is not applicable!"))))))
 
 (defn bind [env id val]
   (assoc-in env [:bindings id] val))
@@ -24,15 +30,6 @@
       (ast/ref? form)    (:binding form)
       (ast/symbol? form) (throw (RuntimeException. (str "unbound symbol: " form)))
       true               (assert false "unreachable!!"))))
-
-(defn apply [env head tail]
-  (let [env (ast/merge-local-env env head)]
-    (cond
-      (ast/μ? head)          (walk (bind env (:id head) (walk env tail)) (:body head))
-      (ast/macro? head)      (call env head tail)
-      (ast/external? head)   (call env head (walk env tail))
-      (ast/incomplete? head) (ast/application env head (walk env tail))
-      true                   (throw (RuntimeException. (str head " is not applicable!"))))))
 
 (defn eval [env form]
   (let [env (ast/merge-local-env env form)]
@@ -52,16 +49,16 @@
                                 (if (contains? (:captured env) sym)
                                   (ast/input env sym (get-in env [:captured sym]))
                                   (ast/with-env form env)))
-      ;; REVIEW: Should we store the env in a μ? it seems a reasonable assumption.
       (ast/μ? form)           (update form :body #(walk env %))
       (ast/coll? form)        (into (empty form) (map (partial walk env)) form)
       true                    form))) ; REVIEW: Do I need ast/merge-env?
 
-;;;;; Compiler
 
-(defn tag []
-  (gensym "%"))
-
-(defn compile [env form]
-  (cond
-    (ast/coll? form) ()))
+;; FIXME: These are the two cases I've dropped from the previous interpreter impl:
+;;
+;; (ast/emission? form) (sys/try-emissions! (update form :kvs walk opts) opts)
+;; (ast/ctx? form)      (sys/walk-ctx form
+;;                        (update form :form walk (assoc opts :return-ctx? true)))
+;;
+;; They're not going to work without rewriting, but I'll keep them around for
+;; the reference until I get to it.

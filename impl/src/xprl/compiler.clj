@@ -8,28 +8,6 @@
 (defn tag []
   (gensym "%"))
 
-(def empty-env {:captured {}})
-
-(defn capture [env s id]
-  (assoc-in env [:captured s] id))
-
-
-;; (defn apply
-;;   ([form env] (apply (:head form) (:tail form) env))
-;;   ([head tail env]
-;;    (cond
-;;      (ast/external? head) (head form env)
-;;      (ast/μ? head)        (compile-μ-apply head tail env)
-;;      :else                (throw (Exception. (str "bad application:" head "," tail))))))
-
-;; (defn eval [form env]
-;;   (cond
-;;     (ast/symbolic? form) (resolve form env)
-;;     (ast/pair? form)     (compile (ast/immediate (:head form)) env
-;;                                   {:call :apply
-;;                                    :args (:tail env)
-;;                                    :env  env})))
-
 ;;;;; The following can all be memoised if they start to take up appreciable
 ;;;;; amounts of time.
 
@@ -85,39 +63,4 @@
 
 ;;;;; And the heart of the matter
 
-(defn init [form]
-  (let [t (tag)
-        e (tag)]
-    {:return (tag/call :compile e t)
-     t       form
-     e       empty-env}))
-
-
-(defn expand-primitive [{:keys [args inst]} vmap]
-  (inst args (select-keys vmap args)))
-
-;; This method of compiling makes some progress each time you invoke it until it
-;; doesn't. Once we reach a fixed point, that's as far as we get until we have
-;; more information (either compiling into another unit, or calling at runtime.
-;; The distinction is somewhat fuzzy).
-(defn compile-step [routine]
-  (let [deps       (sort-by-deps routine)
-        vmap       (trace-values routine deps)
-        [tag inst] (lowest-runnable routine vmap)]
-    (if (nil? inst)
-      routine
-      (let [expansion  (expand-primitive inst vmap)]
-        (merge routine (set/rename-keys expansion {:return tag}))))))
-
-(defn run* [routine n]
-  (loop [n n
-         r routine]
-    (if (zero? n)
-      r
-      (let [next (compile-step r)]
-        (if (= next r)
-          (with-meta r {:fixed-point true})
-          (recur (dec n) next))))))
-
-(def base-env
-  (into {} (map (fn [[k v]] [(ast/symbol #_namespace! (name k)) v])) tag/fns))
+(defn compile [form])
