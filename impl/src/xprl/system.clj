@@ -32,11 +32,11 @@
      (binding [*ccmap* (dissoc *ccmap* ret)]
        ~body)))
 
-(defn emit! [[k v]]
+(defn emit! [ctx [k v]]
   (trace! "emitting" [k v])
-  (if-let [ch (get *ccmap* k)]
+  (if-let [ch (get ctx k)]
     (ch v)
-    (if-let [unbound (get *ccmap* (ast/xkey :unbound))]
+    (if-let [unbound (get ctx (ast/xkey :unbound))]
       (unbound [k v])
       (binding [*out* *err*]
         (println "message sent to unbound channel: " k v)))))
@@ -48,9 +48,8 @@
   (trace! "trying emissions" kvs)
   ;; Who says we can't emit an incomplete computation which can only be
   ;; completed in the receiving context?
-  (println env)
-  (if (some (fn [[k v]] (not (ast/keyword? k))) kvs)
-    1 #_em                  ; Delay emissions until all channels are defined.
+  (if (or (:μ? env) (some (fn [[k v]] (not (ast/keyword? k))) kvs))
+    (ast/emission kvs)
     (cond
       ;; TODO: Even when frozen we can and should perform non-channel returns
       ;; since they aren't really message passing.
@@ -61,11 +60,11 @@
       ;; Put differently is there a case where the computation will stall if we
       ;; don't?
       ;; (:freeze? opts)            em
-      (contains? (:ctx env) ret) (run! emit! kvs)
+      (contains? (:ctx env) ret) (run! (partial emit! (:ctx env)) kvs)
       true
       (let [rets      (filter #(= ret (first %)) kvs)
             emissions (remove #(= ret (first %)) kvs)]
-        (run! emit! emissions)
+        (run! (partial emit! (:ctx env)) emissions)
         (when (> (count rets) 0)
           (when (> (count rets) 1)
             (println "Warning! multiple returns to non-stream location: " rets

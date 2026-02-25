@@ -17,7 +17,8 @@
     resolve])
   (:require
    [clojure.pprint :as pp]
-   [clojure.string :as str])
+   [clojure.string :as str]
+   [xprl.env :as env])
   (:import
    (java.io Writer)))
 
@@ -73,8 +74,6 @@
 (defn symbol? [s]
   (instance? Symbol s))
 
-(defprotocol Env)
-
 (defrecord Ref [sym binding]
   Object
   (toString [_]
@@ -88,18 +87,17 @@
   (->Ref sym local))
 
 
-(defrecord LooseEnd [env sym id]
-  Env
+(defrecord LooseEnd [sym id]
   Object
   (toString [_]
-    (str sym "->")))
+    (str sym "->(" id ")")))
 
 (defn input? [x]
   (instance? LooseEnd x))
 
 (defn input
-  ([sym id] (input {} sym id))
-  ([env sym id] (->LooseEnd env sym id)))
+  ([sym id] (->LooseEnd sym id))
+  ([env sym id] (env/with-env (input sym id) env)))
 
 
 (defn symbolic? [x]
@@ -108,8 +106,8 @@
 (defn symbol [x]
   (cond
     (string? x) (symbol-cache x)
-    (input? x)  x ; Don't symbolise. REVIEW: will this bite me?
     (symbol? x) x
+    (input? x)  (:sym x)
     (ref? x)    (:sym x)
     true        (throw (RuntimeException.
                         (str "Can't create symbol from " (type x))))))
@@ -138,8 +136,7 @@
 (defn coll? [x]
   (or (list? x) (map? x) (set? x)))
 
-(defrecord Pair [env head tail]
-  Env
+(defrecord Pair [head tail]
   Object
   (toString [_]
     (str "(" (str head) " "
@@ -149,8 +146,8 @@
          ")")))
 
 (defn pair
-  ([head tail] (pair {} head tail))
-  ([env head tail] (->Pair env head tail)))
+  ([head tail] (->Pair head tail))
+  ([env head tail] (env/with-env (pair head tail) env)))
 
 (defn pair? [x]
   (instance? Pair x))
@@ -167,8 +164,7 @@
   (instance? Immediate x))
 
 
-(defrecord Application [env head tail]
-  Env
+(defrecord Application [head tail]
   Object
   (toString [_]
     (str "#" (str (pair head tail)))
@@ -177,25 +173,25 @@
       (str "#" (str (pair head tail))))))
 
 (defn application
-  ([head tail] (application {} head tail))
-  ([env head tail] (->Application env head tail)))
+  ([head tail] (->Application head tail))
+  ([env head tail] (env/with-env (application head tail) env)))
 
 (defn application? [x]
   (instance? Application x))
 
 
-(defrecord Mu [env id params body]
-  Env
+(defrecord Mu [id params body]
   Object
   (toString [_]
     (str "(#μ " params " " body ")")))
 
 (defn μ
-  ([params body] (μ {} nil params body))
-  ([id params body] (μ {} id params body))
-  ([env id params body]
+  ([params body] (μ nil params body))
+  ([id params body]
    (assert (symbol? params))
-   (->Mu env id params body)))
+   (->Mu id params body))
+  ([env id params body]
+   (env/with-env (μ id params body) env)))
 
 (defn μ? [x]
   (instance? Mu x))

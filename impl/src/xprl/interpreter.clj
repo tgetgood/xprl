@@ -7,59 +7,61 @@
 
 (declare walk)
 
-(defn bind [env id val]
-  (-> env
-      (assoc-in [:bindings id] val)
-      (assoc :μ? false)))
-
 (defn resolve [env form]
-  (let [env (env/merge-local-env env form)]
+  (let [env (env/merge-local env form)]
+    (println form (:captured env) (:bindings env))
     (cond
       (ast/input? form)  (if (contains? (:bindings env) (:id form))
-                           (get-in env [:bindings (:id form)])
+                           (let [v (get-in env [:bindings (:id form)])]
+                            (env/with-local v
+                              (env/merge-local (env/poison (:sym form) (:id form)) v)))
                            (ast/immediate form))
       (ast/ref? form)    (:binding form)
-      (ast/symbol? form) (throw (RuntimeException. (str "unbound symbol: " form)))
+      (ast/symbol? form) (ast/immediate form)
       true               (assert false "unreachable!!"))))
 
 (defn call [env f t]
   ((:fn f) env f t))
 
 (defn apply [env head tail]
-  (let [env (env/merge-local-env env head)]
-    (cond
-      (ast/μ? head)          (walk (bind env (:id head) (walk env tail)) (:body head))
-      (ast/macro? head)      (call env head tail)
-      (ast/external? head)   (call env head (walk env tail))
-      (ast/incomplete? head) (ast/application env head (walk env tail))
-      true                   (throw (RuntimeException. (str head " is not applicable!"))))))
+  (cond
+    (ast/μ? head) (walk (env/bind (env/merge-local env head) (:id head) (walk env tail))
+                        (:body head))
+
+    (ast/macro? head)      (call env head tail)
+    (ast/external? head)   (call env head (walk env tail))
+    (ast/incomplete? head) (ast/application env head (walk env tail))
+    true                   (throw (RuntimeException. (str head " is not applicable!")))))
 
 (defn eval [env form]
-  (let [env (env/merge-local-env env form)]
+  (let [env (env/merge-local env form)]
+    (println "eval: " form  (env/bindings env))
     (cond
       (ast/pair? form)       (apply env (walk env (ast/immediate (:head form))) (:tail form))
       (ast/symbolic? form)   (resolve env form)
-      (ast/coll? form)       (into (empty form) (map (partial eval env)) form)
+      (ast/coll? form)       (into (empty form) #(walk env (ast/immediate %)) form)
       (ast/incomplete? form) (ast/immediate form)
       true                   form)))
 
 (defn walk [env form]
-  (let [env (env/merge-local-env env form)]
+  (let [env (env/merge-local env form)]
+    (println "walk: " form (env/bindings env))
     (cond
       (ast/immediate? form)   (eval env (walk env (:form form)))
       (ast/application? form) (apply env (walk env (:head form)) (:tail form))
+      (ast/input? form)       (env/with-local form env)
       (ast/symbolic? form)    (let [sym (ast/symbol form)]
-                                (if (contains? (:captured env) sym)
+                                (if (env/captured? env form)
                                   (ast/input env sym (get-in env [:captured sym]))
-                                  (env/with-local env form)))
+                                  form))
       (ast/μ? form)           (update form :body #(walk env %))
-      (ast/coll? form)        (into (empty form) (map (partial walk env)) form)
+      (ast/coll? form)        (into (or (empty form) []) (map (partial walk env)) form)
+      (ast/emission? form)    (sys/try-emissions! env (walk env (:kvs form)))
       true                    form))) ; REVIEW: Do I need to merge envs?
 
 
 ;; FIXME: These are the two cases I've dropped from the previous interpreter impl:
 ;;
-;; (ast/emission? form) (sys/try-emissions! (update form :kvs walk opts) opts)
 ;; (ast/ctx? form)      (sys/walk-ctx form
 ;;                        (update form :form walk (assoc opts :return-ctx? true)))
 ;;

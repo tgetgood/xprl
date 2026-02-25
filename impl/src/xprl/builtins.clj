@@ -2,6 +2,7 @@
   (:require
    [xprl.ast :as ast]
    [xprl.debug :as debug]
+   [xprl.env :as env]
    [xprl.interpreter :as i]
    [xprl.ns :as ns]
    [xprl.system :as sys]))
@@ -29,9 +30,6 @@
 
 (defn primitives [m]
   (reduce (fn [acc [k v]] (assoc acc (ast/symbol k) (primitive k v))) {} m))
-
-(defn nth* [c i]
-  (nth c (dec i)))
 
 (defn rest* [xs]
   (into [] (rest xs)))
@@ -75,9 +73,19 @@
     "rest*"  rest*
 
     "count*" count
-    "nth*"   nth* ; base 1 indexing
-
     }))
+
+;; nth can operate on a vector even if the elements of that vector cannot yet be
+;; computed. This is such an important simplification that I'm willing to stick
+;; in a kludge like this.
+(defn nth* [env self args]
+  (let [args (if (vector? args) args (i/walk env args))]
+    (if (and (vector? (first args)) (int? (second args)))
+      (nth (first args) (dec (second args))) ; base 1 indexing
+      (ast/application env self args))))
+
+(def direct-externs
+  {(ast/symbol "nth*") (ast/extern "nth*" nth*)})
 
 ;;;;; specialish forms
 
@@ -86,7 +94,6 @@
     (if (vector? kvs)
       (do (assert (even? (count kvs)))
           (let [msgs (i/walk env (mapv (fn [[k v]] [(ast/immediate k) v]) (partition 2 kvs)))]
-            (println msgs)
             (sys/try-emissions! env msgs)))
       (ast/application env self kvs))))
 
@@ -95,19 +102,17 @@
     (update app :tail i/walk opts)
     (ast/ctx chmap body)))
 
-(defn capture [env sym id]
-  (assoc-in env [:captured sym] id))
-
 (defn μ [env self args]
   (let [args (if (vector? args) args (i/walk env args))]
     (if (vector? args)
       (let [[param body] args
-            param (i/walk env param)]
+            param        (i/walk env param)]
         (if (ast/symbolic? param)
-          (let [id  (gensym "μ-param-")
-                env (capture env (ast/symbol param) id)]
+          (let [id    (gensym "μ-param-")
+                param (ast/symbol param)
+                env   (env/capture env param id)]
             (ast/μ env id param (i/walk env body)))
-          (ast/application env self [param body])))
+          (ast/application env self [param (i/walk env body)])))
       (ast/application env self args))))
 
 
@@ -142,4 +147,4 @@
 ;; have no past, no origin. why is bootstrapping so singular like that?
 
 (def base-env
-  (reduce (fn [e [k v]] (ns/ns-intern e k v)) ns/empty-ns (merge special fns)))
+  (reduce (fn [e [k v]] (ns/ns-intern e k v)) ns/empty-ns (merge direct-externs special fns)))
