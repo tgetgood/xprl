@@ -90,7 +90,7 @@
 (defrecord LooseEnd [sym id]
   Object
   (toString [_]
-    (str sym "->(" id ")")))
+    (str sym "->")))
 
 (defn input? [x]
   (instance? LooseEnd x))
