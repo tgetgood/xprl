@@ -5,6 +5,7 @@
     symbol?
     keyword
     keyword?
+    coll?
     empty
     list
     list?
@@ -16,7 +17,6 @@
     resolve])
   (:require
    [clojure.pprint :as pp]
-   [clojure.set :as set]
    [clojure.string :as str])
   (:import
    (java.io Writer)))
@@ -74,16 +74,6 @@
   (instance? Symbol s))
 
 (defprotocol Env)
-
-(defn merge-local-env [env x]
-  (if (satisfies? Env x)
-    (merge-with merge env (:env x))
-    env))
-
-(defn with-env [x env]
-  (if (satisfies? Env x)
-    (assoc x :env env)
-    x))
 
 (defrecord Ref [sym binding]
   Object

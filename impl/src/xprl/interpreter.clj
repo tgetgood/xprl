@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [resolve eval apply])
   (:require
    [xprl.ast :as ast]
+   [xprl.env :as env]
    [xprl.system :as sys]))
 
 (declare walk)
@@ -12,7 +13,7 @@
       (assoc :μ? false)))
 
 (defn resolve [env form]
-  (let [env (ast/merge-local-env env form)]
+  (let [env (env/merge-local-env env form)]
     (cond
       (ast/input? form)  (if (contains? (:bindings env) (:id form))
                            (get-in env [:bindings (:id form)])
@@ -25,7 +26,7 @@
   ((:fn f) env f t))
 
 (defn apply [env head tail]
-  (let [env (ast/merge-local-env env head)]
+  (let [env (env/merge-local-env env head)]
     (cond
       (ast/μ? head)          (walk (bind env (:id head) (walk env tail)) (:body head))
       (ast/macro? head)      (call env head tail)
@@ -34,7 +35,7 @@
       true                   (throw (RuntimeException. (str head " is not applicable!"))))))
 
 (defn eval [env form]
-  (let [env (ast/merge-local-env env form)]
+  (let [env (env/merge-local-env env form)]
     (cond
       (ast/pair? form)       (apply env (walk env (ast/immediate (:head form))) (:tail form))
       (ast/symbolic? form)   (resolve env form)
@@ -43,17 +44,17 @@
       true                   form)))
 
 (defn walk [env form]
-  (let [env (ast/merge-local-env env form)]
+  (let [env (env/merge-local-env env form)]
     (cond
       (ast/immediate? form)   (eval env (walk env (:form form)))
       (ast/application? form) (apply env (walk env (:head form)) (:tail form))
       (ast/symbolic? form)    (let [sym (ast/symbol form)]
                                 (if (contains? (:captured env) sym)
                                   (ast/input env sym (get-in env [:captured sym]))
-                                  (ast/with-env form env)))
+                                  (env/with-local env form)))
       (ast/μ? form)           (update form :body #(walk env %))
       (ast/coll? form)        (into (empty form) (map (partial walk env)) form)
-      true                    form))) ; REVIEW: Do I need ast/merge-env?
+      true                    form))) ; REVIEW: Do I need to merge envs?
 
 
 ;; FIXME: These are the two cases I've dropped from the previous interpreter impl:
