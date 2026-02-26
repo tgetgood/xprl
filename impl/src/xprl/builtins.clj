@@ -1,4 +1,4 @@
-(ns xprl.builtins
+(ns xprl.builtin
   (:require
    [xprl.ast :as ast]
    [xprl.debug :as debug]
@@ -75,23 +75,23 @@
     "count*" count
     }))
 
+;;;;; specialish forms
+;;
+;; TODO: Notice they all follow the exact same pattern. With a few macros, it's
+;; probably better to just leave the boilerplate in, but if we end up needing
+;; more I'll have to think up a DSL for these.
+
 ;; nth can operate on a vector even if the elements of that vector cannot yet be
 ;; computed. This is such an important simplification that I'm willing to stick
 ;; in a kludge like this.
 (defn nth* [env self args]
-  (let [args (if (vector? args) args (i/walk env args))]
-    (if (and (vector? (first args)) (int? (second args)))
-      (nth (first args) (dec (second args))) ; base 1 indexing
+  (let [args (if (vector? args) args (i/walk env args))
+        p (fn [args] (and (vector? (first args)) (int? (second args))))]
+    (let [[x i] (if (p args) args (i/walk env args))]
+      (if (p [x i])
+        (nth x (dec i))) ; base 1 indexing
+      (ast/application env self [x i])
       (ast/application env self args))))
-
-(def direct-externs
-  {(ast/symbol "nth*") (ast/extern "nth*" nth*)})
-
-;;;;; specialish forms
-;;
-;; TODO: Notice they all follow the exact same pattern. With 3 macros, it's
-;; probably better to just leave the boilerplate in, but if we end up needing
-;; more I'll have to think up a DSL for these.
 
 (defn emit [env self kvs]
   (let [kvs (if (vector? kvs) kvs (i/walk env kvs))]
@@ -107,7 +107,7 @@
       (let [[ctx body] (if (ast/map? (first args)) args (i/walk env args))]
         (if (ast/map? ctx)
           (i/walk (env/merge-ctx env ctx) body)
-         (ast/application env self args)))
+         (ast/application env self [ctx body])))
       (ast/application env self args))))
 
 (defn μ [env self args]
@@ -119,7 +119,7 @@
                 param (ast/symbol param)
                 env   (env/capture env param id)]
             (ast/μ env id param (i/walk env body)))
-          (ast/application env self args)))
+          (ast/application env self [param body])))
       (ast/application env self args))))
 
 
@@ -133,6 +133,7 @@
    {"μ"             μ
     "emit"          emit
     "with-channels" with-channels
+    "nth*"          nth*
 
     ;; TODO: builtin macros needed for a working system.
     ;;
@@ -154,4 +155,4 @@
 ;; have no past, no origin. why is bootstrapping so singular like that?
 
 (def base-env
-  (reduce (fn [e [k v]] (ns/ns-intern e k v)) ns/empty-ns (merge direct-externs special fns)))
+  (reduce (fn [e [k v]] (ns/ns-intern e k v)) ns/empty-ns (merge special fns)))
