@@ -90,8 +90,8 @@
     (if (vector? args)
       (let [[x i] (if (p args) args (i/walk env args))]
         (if (p [x i])
-          (nth x (dec i))) ; base 1 indexing
-        (ast/application env self [x i]))
+          (nth x (dec i)) ; base 1 indexing
+          (ast/application env self [x i])))
       (ast/application env self args))))
 
 (defn emit [env self kvs]
