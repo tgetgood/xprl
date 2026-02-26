@@ -4,6 +4,7 @@
    [xprl.ast :as ast]
    [xprl.builtins :as builtins]
    [xprl.debug :as debug]
+   [xprl.env :as env]
    [xprl.interpreter :as i]
    [xprl.ns :as ns]
    [xprl.reader :as r]))
@@ -140,4 +141,4 @@
 ;; reason to ban them either.
 (def p1 (read-string "~~((μ x x) . 5)"))
 
-(def p2 (read-string "~(μ x ~(μ y ~(~y . ~~x)))")) ; reverse currying.
+(def p2 (read-string "~~((μ x ~((μ x (+* ~x 1)) . 2)) . 7)"))

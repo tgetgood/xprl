@@ -122,7 +122,7 @@
   (into [] xs))
 
 (defn list? [x]
-  (vector?  x))
+  (vector? x))
 
 ;; Records are IMaps which is a royal pain in the ass.
 (defn map? [x]
@@ -147,7 +147,7 @@
 
 (defn pair
   ([head tail] (->Pair head tail))
-  ([env head tail] (env/with-env (pair head tail) env)))
+  ([env head tail] (env/with-transient-env (pair head tail) env)))
 
 (defn pair? [x]
   (instance? Pair x))

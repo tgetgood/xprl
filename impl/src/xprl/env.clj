@@ -2,16 +2,22 @@
   (:require [clojure.set :as set]))
 
 (defn env? [x]
-  (and
-   (instance? clojure.lang.IMeta x)
-   (not (instance? xprl.ast.Symbol x))
-   (not (instance? xprl.ast.Ref x))))
+  (instance? clojure.lang.IMeta x))
 
 (defn get-env [x]
   (::env (meta x)))
 
-(defn with-env [x env]
+(def persistent-keys
+  "Env keys which should always be persisted."
+  [:bindings :ctx :μ?])
+
+(defn with-transient-env [x env]
   (with-meta x (assoc (meta x) ::env env)))
+
+(defn with-env [x env]
+  (with-transient-env x env)
+  ;; (with-meta x (assoc (meta x) ::env (select-keys env persistent-keys)))
+  )
 
 (defn env-maps [x]
   (select-keys x [:captured :bindings :ctx]))
@@ -26,9 +32,7 @@
     env))
 
 (defn with-local [x env]
-  (if (env? x)
-    (with-env x env)
-    x))
+  (with-env x env))
 
 (defn capture [env sym id]
   (-> env

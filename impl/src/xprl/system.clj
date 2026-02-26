@@ -36,7 +36,6 @@
       ;; rets. So the above a potential optimisation, but is it necessary?
       ;; Put differently is there a case where the computation will stall if we
       ;; don't?
-      ;; (:freeze? opts)            em
       (contains? ctx ret) (run! (partial emit! ctx) kvs)
       true
       (let [rets      (filter #(= ret (first %)) kvs)

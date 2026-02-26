@@ -24,10 +24,10 @@
 
 (defn resolve [env form]
   (let [env (env/merge-local env form)]
+    ;; (println "resolve: " form (:bindings env))
     (cond
       (ast/input? form)  (if (env/bound? env form)
                            (env/binding env form)
-
                            (ast/immediate form))
       (ast/ref? form)    (:binding form)
       (ast/symbol? form) (ast/immediate form)
@@ -57,4 +57,5 @@
       (ast/μ? form)           (update form :body #(walk env %))
       (ast/coll? form)        (into (or (empty form) []) (map (partial walk env)) form)
       (ast/emission? form)    (sys/try-emissions! env (walk env (:kvs form)))
+      (ast/pair? form)        (env/with-transient-env form env)
       true                    form))) ; REVIEW: Do I need to merge envs?
