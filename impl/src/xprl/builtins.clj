@@ -105,14 +105,13 @@
 (defn μ [env self args]
   (let [args (if (vector? args) args (i/walk env args))]
     (if (vector? args)
-      (let [[param body] args
-            param        (i/walk env param)]
+      (let [[param body] (if (ast/symbolic? (first args)) args (i/walk env args))]
         (if (ast/symbolic? param)
           (let [id    (gensym "μ-param-")
                 param (ast/symbol param)
                 env   (env/capture env param id)]
             (ast/μ env id param (i/walk env body)))
-          (ast/application env self [param (i/walk env body)])))
+          (ast/application env self args)))
       (ast/application env self args))))
 
 
