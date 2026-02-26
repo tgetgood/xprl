@@ -7,20 +7,9 @@
 
 (declare walk)
 
-(defn resolve [env form]
-  (let [env (env/merge-local env form)]
-    (println form (:captured env) (:bindings env))
-    (cond
-      (ast/input? form)  (if (contains? (:bindings env) (:id form))
-                           (let [v (get-in env [:bindings (:id form)])]
-                            (env/with-local v
-                              (env/merge-local (env/poison (:sym form) (:id form)) v)))
-                           (ast/immediate form))
-      (ast/ref? form)    (:binding form)
-      (ast/symbol? form) (ast/immediate form)
-      true               (assert false "unreachable!!"))))
-
-(defn call [env f t]
+(defn call
+  "Invokes primitive `f` with args `t` in `env`."
+  [env f t]
   ((:fn f) env f t))
 
 (defn apply [env head tail]
@@ -33,9 +22,21 @@
     (ast/incomplete? head) (ast/application env head (walk env tail))
     true                   (throw (RuntimeException. (str head " is not applicable!")))))
 
+(defn resolve [env form]
+  (let [env (env/merge-local env form)]
+    (cond
+      (ast/input? form)  (if (contains? (:bindings env) (:id form))
+                           (let [v (get-in env [:bindings (:id form)])]
+                            (env/with-local v
+                              (env/merge-local (env/poison (:sym form) (:id form)) v)))
+                           (ast/immediate form))
+      (ast/ref? form)    (:binding form)
+      (ast/symbol? form) (ast/immediate form)
+      true               (assert false "unreachable!!"))))
+
 (defn eval [env form]
   (let [env (env/merge-local env form)]
-    (println "eval: " form  (env/bindings env))
+    ;; (println "eval: " form  (env/bindings env))
     (cond
       (ast/pair? form)       (apply env (walk env (ast/immediate (:head form))) (:tail form))
       (ast/symbolic? form)   (resolve env form)
@@ -45,7 +46,7 @@
 
 (defn walk [env form]
   (let [env (env/merge-local env form)]
-    (println "walk: " form (env/bindings env))
+    ;; (println "walk: " form (env/bindings env))
     (cond
       (ast/immediate? form)   (eval env (walk env (:form form)))
       (ast/application? form) (apply env (walk env (:head form)) (:tail form))
