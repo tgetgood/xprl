@@ -1,4 +1,5 @@
 (ns xprl.env
+  (:refer-clojure :exclude [bound? binding])
   (:require [clojure.set :as set]))
 
 (defn env? [x]
