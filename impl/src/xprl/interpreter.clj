@@ -25,10 +25,9 @@
 (defn resolve [env form]
   (let [env (env/merge-local env form)]
     (cond
-      (ast/input? form)  (if (contains? (:bindings env) (:id form))
-                           (let [v (get-in env [:bindings (:id form)])]
-                            (env/with-local v
-                              (env/merge-local (env/poison (:sym form) (:id form)) v)))
+      (ast/input? form)  (if (env/bound? env form)
+                           (env/binding env form)
+
                            (ast/immediate form))
       (ast/ref? form)    (:binding form)
       (ast/symbol? form) (ast/immediate form)
@@ -53,7 +52,7 @@
       (ast/input? form)       (env/with-local form env)
       (ast/symbolic? form)    (let [sym (ast/symbol form)]
                                 (if (env/captured? env form)
-                                  (ast/input env sym (get-in env [:captured sym]))
+                                  (ast/input env sym (env/cap-sym env sym))
                                   form))
       (ast/μ? form)           (update form :body #(walk env %))
       (ast/coll? form)        (into (or (empty form) []) (map (partial walk env)) form)

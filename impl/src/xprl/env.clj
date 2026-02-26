@@ -13,20 +13,12 @@
 (defn with-env [x env]
   (with-meta x (assoc (meta x) ::env env)))
 
-(defn purge [x poisoned]
-  (into {} (remove (fn [[k v]] (contains? (get poisoned k) v))) x))
-
-(defn poison [sym id]
-  {:poison {sym #{id}}})
+(defn env-maps [x]
+  (select-keys x [:captured :bindings :ctx]))
 
 (defn merge-envs [outer inner]
-  (let [cs (merge (:captured outer) (:captured inner))
-        po (merge-with set/union (:poison outer) (:poison inner))]
-    {:captured (purge cs po)
-     :bindings (merge (:bindings outer) (:bindings inner))
-     :ctx      (merge (:ctx outer) (:ctx inner))
-     :posion   po
-     :μ?       (or (:μ? outer) (:μ? inner))}))
+  (-> (merge-with merge (env-maps outer) (env-maps inner))
+      (assoc :μ? (or (:μ? outer) (:μ? inner)))))
 
 (defn merge-local [env x]
   (if (env? x)
@@ -44,13 +36,21 @@
       (assoc :μ? true)))
 
 (defn captured? [env sym]
-  (and (contains? (:captured env) sym)
-       (not (contains? (:bindings env) sym))))
+  (contains? (:captured env) sym))
+
+(defn cap-sym [env sym]
+  (get-in env [:captured sym]))
 
 (defn bind [env id val]
   (-> env
       (assoc-in [:bindings id] val)
       (assoc :μ? false)))
+
+(defn bound? [env input]
+  (contains? (:bindings env) (:id input)))
+
+(defn binding [env form]
+  (get-in env [:bindings (:id form)]))
 
 (defn bindings
   "Returns the current effective bindings of an env. For debug output."
