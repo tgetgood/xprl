@@ -2,35 +2,7 @@
   (:require [xprl.ast :as ast]
             [xprl.debug :refer [trace!]]))
 
-(def root-channels {})
-
-(def ^:dynamic *ccmap* root-channels)
-
 (def ret (ast/xkey :return))
-
-(defn incomplete? [x]
-  (if (and (coll? x) (not (record? x)))
-    (some incomplete? x)
-    (ast/incomplete? x)))
-
-(defmacro walk-ctx [form body]
-  {:style/indent 1}
-  `(binding [*ccmap* (merge *ccmap* (:chs ~form))]
-     (trace! "updated ccmap" *ccmap*)
-     (if (or (incomplete? (:form ~form))
-             (ast/emission? (:form ~form))
-             (not (contains? *ccmap* ret)))
-       ~body
-       (let [v# (:form ~form)]
-         (when-not (nil? v#) ; nil is not a message. It signifies the lack of one!
-           ((get *ccmap* ret) v#))))))
-
-(defmacro with-return-ctx [opts body]
-  `(if (:return-ctx? ~opts)
-     (let [~opts (dissoc ~opts :return-ctx?)]
-       ~body)
-     (binding [*ccmap* (dissoc *ccmap* ret)]
-       ~body)))
 
 (defn emit! [ctx [k v]]
   (trace! "emitting" [k v])
@@ -44,8 +16,13 @@
 (defn try-emissions!
   "Sends any messages that are ready to go, returns an emission containing the
   rest."
-  [env kvs]
+  [{:keys [ctx] :as env} kvs]
   (trace! "trying emissions" kvs)
+  ;; REVIEW: do we need to bundle the cc-map up with the Emission object?
+  ;; What happens when an emission object gets returned (it's just data until
+  ;; you walk it) or moved around by compiler optimisations? I haven't thought
+  ;; this through any too well.
+  ;;
   ;; Who says we can't emit an incomplete computation which can only be
   ;; completed in the receiving context?
   (if (or (:μ? env) (some (fn [[k v]] (not (ast/keyword? k))) kvs))
@@ -60,11 +37,11 @@
       ;; Put differently is there a case where the computation will stall if we
       ;; don't?
       ;; (:freeze? opts)            em
-      (contains? (:ctx env) ret) (run! (partial emit! (:ctx env)) kvs)
+      (contains? ctx ret) (run! (partial emit! ctx) kvs)
       true
       (let [rets      (filter #(= ret (first %)) kvs)
             emissions (remove #(= ret (first %)) kvs)]
-        (run! (partial emit! (:ctx env)) emissions)
+        (run! (partial emit! ctx) emissions)
         (when (> (count rets) 0)
           (when (> (count rets) 1)
             (println "Warning! multiple returns to non-stream location: " rets

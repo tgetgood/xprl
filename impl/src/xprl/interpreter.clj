@@ -58,12 +58,3 @@
       (ast/coll? form)        (into (or (empty form) []) (map (partial walk env)) form)
       (ast/emission? form)    (sys/try-emissions! env (walk env (:kvs form)))
       true                    form))) ; REVIEW: Do I need to merge envs?
-
-
-;; FIXME: These are the two cases I've dropped from the previous interpreter impl:
-;;
-;; (ast/ctx? form)      (sys/walk-ctx form
-;;                        (update form :form walk (assoc opts :return-ctx? true)))
-;;
-;; They're not going to work without rewriting, but I'll keep them around for
-;; the reference until I get to it.

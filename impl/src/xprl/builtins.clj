@@ -88,6 +88,10 @@
   {(ast/symbol "nth*") (ast/extern "nth*" nth*)})
 
 ;;;;; specialish forms
+;;
+;; TODO: Notice they all follow the exact same pattern. With 3 macros, it's
+;; probably better to just leave the boilerplate in, but if we end up needing
+;; more I'll have to think up a DSL for these.
 
 (defn emit [env self kvs]
   (let [kvs (if (vector? kvs) kvs (i/walk env kvs))]
@@ -97,10 +101,14 @@
             (sys/try-emissions! env msgs)))
       (ast/application env self kvs))))
 
-#_(defn with-channels [{[chmap body] :tail :as app} opts]
-  (if (ast/incomplete? chmap)
-    (update app :tail i/walk opts)
-    (ast/ctx chmap body)))
+(defn with-channels [env self args]
+  (let [args (if (vector? args) args (i/walk env args))]
+    (if (vector? args)
+      (let [[ctx body] (if (ast/map? (first args)) args (i/walk env args))]
+        (if (ast/map? ctx)
+          (i/walk (env/merge-ctx env ctx) body)
+         (ast/application env self args)))
+      (ast/application env self args))))
 
 (defn μ [env self args]
   (let [args (if (vector? args) args (i/walk env args))]
@@ -122,9 +130,9 @@
 (def special
   "things that would traditionally be special forms."
   (macros
-   {"μ"    μ
-    "emit" emit
-    ;; "with-channels" with-channels
+   {"μ"             μ
+    "emit"          emit
+    "with-channels" with-channels
 
     ;; TODO: builtin macros needed for a working system.
     ;;

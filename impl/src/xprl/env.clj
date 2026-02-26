@@ -52,6 +52,12 @@
 (defn binding [env form]
   (get-in env [:bindings (:id form)]))
 
+(defn merge-ctx [env ctx]
+  (update env :ctx merge ctx))
+
+(defn ctx [env]
+  (:ctx env))
+
 (defn bindings
   "Returns the current effective bindings of an env. For debug output."
   [env]
