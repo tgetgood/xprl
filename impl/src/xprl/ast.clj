@@ -17,8 +17,7 @@
     resolve])
   (:require
    [clojure.pprint :as pp]
-   [clojure.string :as str]
-   [xprl.env :as env])
+   [clojure.string :as str])
   (:import
    (java.io Writer)))
 
@@ -87,7 +86,14 @@
   (->Ref sym local))
 
 
-(defrecord LooseEnd [sym id]
+(defprotocol Env)
+
+(defn env? [x]
+  (satisfies? Env x))
+
+
+(defrecord LooseEnd [env sym id]
+  Env
   Object
   (toString [_]
     (str sym "->")))
@@ -95,9 +101,8 @@
 (defn input? [x]
   (instance? LooseEnd x))
 
-(defn input
-  ([sym id] (->LooseEnd sym id))
-  ([env sym id] (env/with-env (input sym id) env)))
+(defn input [env sym id]
+  (->LooseEnd env sym id))
 
 
 (defn symbolic? [x]
@@ -136,7 +141,9 @@
 (defn coll? [x]
   (or (list? x) (map? x) (set? x)))
 
-(defrecord Pair [head tail]
+
+(defrecord Pair [env head tail]
+  Env
   Object
   (toString [_]
     (str "(" (str head) " "
@@ -146,8 +153,8 @@
          ")")))
 
 (defn pair
-  ([head tail] (->Pair head tail))
-  ([env head tail] (env/with-transient-env (pair head tail) env)))
+  ([head tail] (pair {} head tail))
+  ([env head tail] (->Pair env head tail)))
 
 (defn pair? [x]
   (instance? Pair x))
@@ -164,7 +171,8 @@
   (instance? Immediate x))
 
 
-(defrecord Application [head tail]
+(defrecord Application [env head tail]
+  Env
   Object
   (toString [_]
     (str "#" (str (pair head tail)))
@@ -173,25 +181,22 @@
       (str "#" (str (pair head tail))))))
 
 (defn application
-  ([head tail] (->Application head tail))
-  ([env head tail] (env/with-env (application head tail) env)))
+  ([head tail] (application {} head tail))
+  ([env head tail] (->Application env head tail)))
 
 (defn application? [x]
   (instance? Application x))
 
 
-(defrecord Mu [id params body]
+(defrecord Mu [env id params body]
+  Env
   Object
   (toString [_]
     (str "(#μ " params " " body ")")))
 
-(defn μ
-  ([params body] (μ nil params body))
-  ([id params body]
-   (assert (symbol? params))
-   (->Mu id params body))
-  ([env id params body]
-   (env/with-env (μ id params body) env)))
+(defn μ [env id params body]
+  (assert (symbol? params))
+  (->Mu env id params body))
 
 (defn μ? [x]
   (instance? Mu x))

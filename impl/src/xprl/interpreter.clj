@@ -1,11 +1,16 @@
 (ns xprl.interpreter
-  (:refer-clojure :exclude [resolve eval apply])
+  (:refer-clojure :exclude [resolve eval apply empty])
   (:require
    [xprl.ast :as ast]
    [xprl.env :as env]
    [xprl.system :as sys]))
 
 (declare walk)
+
+(defn empty
+  "Wrapper for clojure.core/empty that returns `[]` given a MapEntry."
+  [x]
+  (or (clojure.core/empty x) []))
 
 (defn call
   "Invokes primitive `f` with args `t` in `env`."
@@ -45,17 +50,28 @@
 
 (defn walk [env form]
   (let [env (env/merge-local env form)]
-    ;; (println "walk: " form (env/bindings env))
+    ;; (println "walk: " form (:bindings env))
     (cond
       (ast/immediate? form)   (eval env (walk env (:form form)))
       (ast/application? form) (apply env (walk env (:head form)) (:tail form))
-      (ast/input? form)       (env/with-local form env)
-      (ast/symbolic? form)    (let [sym (ast/symbol form)]
-                                (if (env/captured? env form)
-                                  (ast/input env sym (env/cap-sym env sym))
-                                  form))
+      (ast/pair? form)        (env/with-env form env)
+      (ast/input? form)       (env/with-env form env)
       (ast/μ? form)           (update form :body #(walk env %))
-      (ast/coll? form)        (into (or (empty form) []) (map (partial walk env)) form)
+      (ast/coll? form)        (into (empty form) (map (partial walk env)) form)
       (ast/emission? form)    (sys/try-emissions! env (walk env (:kvs form)))
-      (ast/pair? form)        (env/with-transient-env form env)
       true                    form))) ; REVIEW: Do I need to merge envs?
+
+(defn capture [form sym id]
+  (cond
+    (or (ast/application? form) (ast/pair? form))
+    (-> form (update :head capture sym id) (update :tail capture sym id))
+    ;; Use {} for input env since nothing can be bound before being captured.
+    (ast/symbolic? form)  (if (= (ast/symbol form) sym)
+                            (ast/input {} sym id)
+                            form)
+    (ast/immediate? form) (update form :form capture sym id)
+    (ast/coll? form)      (into (empty form) (map #(capture % sym id)) form)
+    (ast/μ? form)         (if (= sym (:param form))
+                            form
+                            (update form :body capture sym id))
+    true                  form))

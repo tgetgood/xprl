@@ -94,6 +94,11 @@
           (ast/application env self [x i])))
       (ast/application env self args))))
 
+;; TODO: Implement something like this next time we need another macro.
+;; (defxmacro [env [x i]]
+;;   :ensure (and (vector? x) (int? i))
+;;   (nth x (dec i)))
+
 (defn emit [env self kvs]
   (let [kvs (if (vector? kvs) kvs (i/walk env kvs))]
     (if (vector? kvs)
@@ -117,9 +122,8 @@
       (let [[param body] (if (ast/symbolic? (first args)) args (i/walk env args))]
         (if (ast/symbolic? param)
           (let [id    (gensym "μ-param-")
-                param (ast/symbol param)
-                env   (env/capture env param id)]
-            (ast/μ env id param (i/walk env body)))
+                param (ast/symbol param)]
+            (ast/μ env id param (i/walk (assoc env :μ? true) (i/capture body param id))))
           (ast/application env self [param body])))
       (ast/application env self args))))
 
