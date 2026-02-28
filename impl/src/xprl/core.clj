@@ -91,21 +91,21 @@
                                     [(ast/xkey :return) (ast/immediate f)]))]
       (println "\nStarting tests:\n")
       (loop [reader (r/file-reader testxprl)]
-        (let [reader (r/read reader)
+        (let [reader (r/read reader @the-env)
               form1  (:form reader)
-              reader (r/read reader)
+              reader (r/read reader @the-env)
               form2  (:form reader)]
           (if (= :eof form1)
             'EOF
             (do
               (println "Evaluating: " form1)
-              (println "---")
-              (print "result:   ")
-              (go! @the-env (retwrap form1) base-conts)
-              (print "expected: " )
-              (go! @the-env (retwrap form2) base-conts)
-              (println )
-              (recur reader))))))))
+              (let [res (go! form1 base-conts)
+                    exp (go! form2 base-conts)]
+                (println "---")
+                (println "result:   " res)
+                (println "expected: " exp)
+                (println)
+                (recur reader)))))))))
 
 (def p debug/provenance)
 
@@ -123,22 +123,3 @@
 
 (defn read-string [s]
   (:form (r/read (r/string-reader s) @the-env)))
-
-(def wrap (read-string "~(μ f
-     ~(μ args
-         ~(~f . ~~args)))"))
-
-(def ft (read-string "~(μ x ~(+* ~x 1))"))
-
-(def wt (read-string "~((μ y
-~(((μ f
-     ~(μ args
-         ~(~f . ~~args))) . +*) . y)) 5 6)"))
-
-(def a (read-string "~(+* 1 2)"))
-
-;; pathological examples. I doubt these are essential, but I can't see any valid
-;; reason to ban them either.
-(def p1 (read-string "~~((μ x x) . 5)"))
-
-(def p2 (read-string "~~((μ x ~((μ x (+* ~x 1)) . 2)) . 7)"))

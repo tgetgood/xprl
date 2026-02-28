@@ -34,8 +34,3 @@
 
 (defn ctx [env]
   (:ctx env))
-
-(defn bindings
-  "Returns the current effective bindings of an env. For debug output."
-  [env]
-  (into {} (map (fn [[k v]] [k (get-in env [:bindings v])])) (:captured env)))

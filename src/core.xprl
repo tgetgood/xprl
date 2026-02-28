@@ -2,9 +2,6 @@
 
 (def count (wrap . count*))
 
-(def first (wrap . first*))
-(def rest (wrap . rest*))
-
 (def + (wrap . +*))
 (def - (wrap . -*))
 (def * (wrap . **))
@@ -17,7 +14,6 @@
 (def not (wrap . not*))
 
 (def symbol? (wrap . symbol?*))
-(def empty? (wrap . empty?*))
 (def map? (wrap . map?*))
 (def list? (wrap . list?*))
 
