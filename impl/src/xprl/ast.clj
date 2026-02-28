@@ -96,7 +96,7 @@
   Env
   Object
   (toString [_]
-    (str sym "->")))
+    (str sym "->" (when *verbose* (str "(" id ")")))))
 
 (defn input? [x]
   (instance? LooseEnd x))

@@ -32,7 +32,7 @@
 ;; storage location for errors when invoking clj externals. akin to *e
 (defonce *pfn (atom nil))
 
-;; This noticably slow down execution, so let's not leave in on by default for
+;; This noticably slows down execution, so let's not leave in on by default for
 ;; now because, frankly, it doesn't carry its own weight yet. Maybe that will
 ;; change as I learn to use it.
 (def ^:dynamic *execution-trace* false)
@@ -60,18 +60,13 @@
 ;; TODO: Now if I could only reverse these before printing, it would be a lot
 ;; easier to read...
 (defmacro deftracefn [name args & body]
-  (let [farg  (first args)
-        input (cond
-                (symbol? farg)  farg
-                (ast/map? farg) (get farg :as)
-                true            (assert false))]
+  (let [env   (first args)
+        input (if (= 2 (count args)) (second args) (into [] (rest args)))]
     `(defn ~name ~args
        (let [v# (do ~@body)]
          (when *execution-trace*
            (record! ~input v# {:op ~(keyword name)}))
-         (trace! "---" ~(str name) "with" ~(if (ast/map? (second args))
-                                             (:as (second args))
-                                             (second args))
+         (trace! "---" ~(str name) "in" (or (:bindings ~env) {})
                  "\n---\n" ~input "\n-->\n" v# "\n---")
          v#))))
 

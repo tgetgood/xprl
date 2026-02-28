@@ -1,12 +1,13 @@
 (ns xprl.interpreter
   (:refer-clojure :exclude [resolve eval apply])
   (:require [xprl.ast :as ast]
+            [xprl.debug :refer [deftracefn]]
             [xprl.env :as env]
             [xprl.system :as sys]))
 
 (declare walk)
 
-(defn apply [env head tail]
+(deftracefn apply [env head tail]
   (cond
     (ast/μ? head) (walk (env/bind (env/merge-local env head) (:id head) (walk env tail))
                         (:body head))
@@ -14,9 +15,8 @@
     (ast/incomplete? head) (ast/application env head (walk env tail))
     true                   (throw (RuntimeException. (str head " is not applicable!")))))
 
-(defn resolve [env form]
+(deftracefn resolve [env form]
   (let [env (env/merge-local env form)]
-    ;; (println "resolve: " form (:bindings env))
     (cond
       (ast/input? form)  (if (env/bound? env form)
                            (env/binding env form)
@@ -25,9 +25,8 @@
       (ast/symbol? form) (ast/immediate form)
       true               (assert false "unreachable!!"))))
 
-(defn eval [env form]
+(deftracefn eval [env form]
   (let [env (env/merge-local env form)]
-    ;; (println "eval: " form  (:bindings env))
     (cond
       (ast/pair? form)       (apply env (walk env (ast/immediate (:head form))) (:tail form))
       (ast/symbolic? form)   (resolve env form)
@@ -35,9 +34,8 @@
       (ast/incomplete? form) (ast/immediate form)
       true                   form)))
 
-(defn walk [env form]
+(deftracefn walk [env form]
   (let [env (env/merge-local env form)]
-    ;; (println "walk: " form (:bindings env))
     (cond
       (ast/immediate? form)   (eval env (walk env (:form form)))
       (ast/application? form) (apply env (walk env (:head form)) (:tail form))
