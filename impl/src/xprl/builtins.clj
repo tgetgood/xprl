@@ -7,23 +7,39 @@
    [xprl.ns :as ns]
    [xprl.system :as sys]))
 
+(defmacro extern [[envform argsform] & more]
+  `(fn [env# self# args#]
+     (let [args# (if (vector? args#) args# (i/walk env# args#))]
+       (if (vector? args#)
+         (let [~argsform args#
+               ~envform env#
+               ~argsform (if ~(= :ensure (first more))
+                           (if ~(second more) args# (i/walk env# args#))
+                           args#)]
+           (if (or ~(not= :ensure (first more)) ~(second more))
+             ~(last more)
+             (ast/application env# self# ~argsform)))
+         (ast/application env# self# args#)))))
+
+(defmacro defextern [mac [envform argsform] & more]
+  `(def ~mac (extern [~envform ~argsform] ~@more)))
+
 ;;;;; simple primitive fns
 
 (defn call-primitive-fn
   "given an external (clojure) function, returns an applicative wrapper to call
   it from xprl."
   [f]
-  (fn [env head tail]
-    (if (ast/incomplete? tail)
-      (ast/application env head tail)
-      (try
+  (extern [env tail]
+    :ensure (not (ast/incomplete? tail))
+    (try
         (apply f tail)
         (catch Exception e
           (reset! debug/*pfn {:f f :args tail :e e})
           (binding [ast/*verbose* true]
             (ast/inspect (ast/application f tail)))
           (println e)
-          :error)))))
+          :error))))
 
 (defn primitive [n f]
   (ast/extern n (call-primitive-fn f)))
@@ -76,61 +92,33 @@
     }))
 
 ;;;;; specialish forms
-;;
-;; TODO: Notice they all follow the exact same pattern. With a few macros, it's
-;; probably better to just leave the boilerplate in, but if we end up needing
-;; more I'll have to think up a DSL for these.
 
-;; nth can operate on a vector even if the elements of that vector cannot yet be
-;; computed. This is such an important simplification that I'm willing to stick
-;; in a kludge like this.
-(defn nth* [env self args]
-  (let [args (if (vector? args) args (i/walk env args))
-        p (fn [args] (and (vector? (first args)) (int? (second args))))]
-    (if (vector? args)
-      (let [[x i] (if (p args) args (i/walk env args))]
-        (if (p [x i])
-          (nth x (dec i)) ; base 1 indexing
-          (ast/application env self [x i])))
-      (ast/application env self args))))
+;; nth* is special because it can operate on a vector even if the elements of
+;; that vector can't yet be computed. It would be correct to wait until they
+;; were, but this prunes a lot of unecessary work and is (I think) worth the
+;; complexity.
+(defextern nth* [_ [x i]]
+  :ensure (and (vector? x) (int? i))
+  (nth x (dec i)))
 
-;; TODO: Implement something like this next time we need another macro.
-;; (defxmacro [env [x i]]
-;;   :ensure (and (vector? x) (int? i))
-;;   (nth x (dec i)))
+(defextern emit [env kvs]
+  (do (assert (even? (count kvs)))
+      (let [msgs (i/walk env (mapv (fn [[k v]] [(ast/immediate k) v]) (partition 2 kvs)))]
+        (sys/try-emissions! env msgs))))
 
-(defn emit [env self kvs]
-  (let [kvs (if (vector? kvs) kvs (i/walk env kvs))]
-    (if (vector? kvs)
-      (do (assert (even? (count kvs)))
-          (let [msgs (i/walk env (mapv (fn [[k v]] [(ast/immediate k) v]) (partition 2 kvs)))]
-            (sys/try-emissions! env msgs)))
-      (ast/application env self kvs))))
+(defextern with-channels [env [ctx body]]
+  :ensure (ast/map? ctx)
+  (i/walk (env/merge-ctx env ctx) body))
 
-(defn with-channels [env self args]
-  (let [args (if (vector? args) args (i/walk env args))]
-    (if (vector? args)
-      (let [[ctx body] (if (ast/map? (first args)) args (i/walk env args))]
-        (if (ast/map? ctx)
-          (i/walk (env/merge-ctx env ctx) body)
-         (ast/application env self [ctx body])))
-      (ast/application env self args))))
-
-(defn μ [env self args]
-  (let [args (if (vector? args) args (i/walk env args))]
-    (if (vector? args)
-      (let [[param body] (if (ast/symbolic? (first args)) args (i/walk env args))]
-        (if (ast/symbolic? param)
-          (let [id    (gensym "μ-param-")
-                param (ast/symbol param)]
-            (ast/μ env id param (i/walk (assoc env :μ? true) (i/capture body param id))))
-          (ast/application env self [param body])))
-      (ast/application env self args))))
-
+(defextern μ [env [param body]]
+  :ensure (ast/symbolic? param)
+  (let [id    (gensym "μ-param-")
+        param (ast/symbol param)]
+    (ast/μ env id param (i/walk (assoc env :μ? true) (i/capture body param id)))))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]
-            (assoc acc (ast/symbol k) (ast/macro k f))) {} m))
+            (assoc acc (ast/symbol k) (ast/extern k f))) {} m))
 
 (def special
   "things that would traditionally be special forms."

@@ -42,9 +42,9 @@
 (def base-conts
   {(ast/xkey :env)    (env-updater the-env)
    (ast/xkey :return) println
-   (ast/xkey :log) #(println "LOG:" %)
+   (ast/xkey :log)    #(println "LOG:" %)
    (ast/xkey :error)  #(binding [*out* *err*]
-                          (println %))})
+                         (println %))})
 (defn ev [s]
   (go! (:form (r/read (r/string-reader s) @the-env)) base-conts))
 

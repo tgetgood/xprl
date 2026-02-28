@@ -14,7 +14,7 @@
 
 
 (defn call [tag & args]
-  (ast/call (get fns tag) args))
+  #_(ast/call (get fns tag) args))
 
 (def compile-impls
   {ast/immediate?   (with-tags [f f' c i e]

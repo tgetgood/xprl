@@ -15,7 +15,7 @@
   (and (symbol? x) (str/starts-with? (name x) "%")))
 
 (defn tagset [x]
-  (when (ast/call? x)
+  #_(when (ast/call? x)
     (into #{} (filter tag?) (:args x))))
 
 (defn sort-by-deps
@@ -30,7 +30,7 @@
           {} routine))
 
 (defn value? [x]
-  (not (or (ast/call? x) (ast/input? x))))
+  #_(not (or (ast/call? x) (ast/input? x))))
 
 (defn trace-values
   "Returns a map from tags to values. If a tag is not in the map, it does not
@@ -43,7 +43,7 @@
           edge)))
 
 (defn runnable? [vmap [t inst]]
-  (and (ast/call? inst)
+  (and #_(ast/call? inst)
        (every? #(contains? vmap %) (:args inst))))
 
 (defn lowest-runnable

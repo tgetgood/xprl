@@ -202,28 +202,6 @@
   (instance? Mu x))
 
 
-(defn fname [f]
-  (let [s (:name (meta f))]
-    (cond
-      (clojure.core/symbol? s) (name s)
-      (string? s)              s
-      true                     (str f))))
-
-;; Like an extern, but it coopts to walking process itself. This allows a Macro
-;; to modify the environment in which its parts are walked before those parts
-;; can be walked. There are as yet very few places this is useful.
-(defrecord Macro [name fn]
-  Object
-  (toString [_]
-    (str "#M[" name "]")))
-
-(defn macro [name fn]
-  (->Macro name fn))
-
-(defn macro? [x]
-  (instance? Macro x))
-
-
 (defrecord Extern [name fn]
   Object
   (toString [_]
@@ -234,6 +212,12 @@
 
 (defn external? [x]
   (instance? Extern x))
+
+(defn call
+  "Invokes primitive `f` with args `t` in `env`."
+  [env f t]
+  ((:fn f) env f t))
+
 
 (defrecord Context [chs form]
   Object
@@ -257,20 +241,6 @@
 
 (defn emission? [x]
   (instance? Emission x))
-
-
-;; Represents passing a message to something which can receive a message.
-;; REVIEW: Send, Emit, Receive, ...?
-(defrecord Call [inst args]
-  Object
-  (toString [_]
-    (str [inst args])))
-
-(defn call [inst msgs]
-  (->Call inst msgs))
-
-(defn call? [x]
-  (instance? Call x))
 
 
 ;;;;; Pretty Printing
@@ -394,18 +364,6 @@
    (pp/write-out (symbol "#μ"))
    (format-pair (symbol "#μ") [params body])))
 
-;;; Macros
-
-(defmethod print-method Macro [{:keys [name]} ^Writer w]
-  (.write w "#M[")
-  (.write w (str name))
-  (.write w "]"))
-
-(defmethod pp/simple-dispatch Macro [{:keys [name]}]
-  (pp/pprint-logical-block
-   :prefix "#M[" :suffix "]"
-   (pp/write-out name)))
-
 ;;; Externs
 
 (defmethod print-method Extern [{:keys [name]} ^Writer w]
@@ -501,13 +459,6 @@
     (.write w "L\n")
     (dorun (map #(insp % w (inc level)) form)))
 
-  Macro
- (insp [form ^Writer w level]
-    (spacer w level)
-    (.write w "M[")
-    (.write w ^String (:name form))
-    (.write w "]\n"))
-
   Extern
   (insp [form ^Writer w level]
     (spacer w level)
@@ -556,3 +507,8 @@
   (if (coll? x)
     (some incomplete? x)
     (or (input? x) (immediate? x) (application? x))))
+
+(defn empty
+  "Wrapper for clojure.core/empty that returns `[]` given a MapEntry."
+  [x]
+  (or (clojure.core/empty x) []))
