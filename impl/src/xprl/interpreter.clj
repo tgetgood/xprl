@@ -27,11 +27,11 @@
 
 (defn eval [env form]
   (let [env (env/merge-local env form)]
-    ;; (println "eval: " form  (env/bindings env))
+    ;; (println "eval: " form  (:bindings env))
     (cond
       (ast/pair? form)       (apply env (walk env (ast/immediate (:head form))) (:tail form))
       (ast/symbolic? form)   (resolve env form)
-      (ast/coll? form)       (into (ast/empty form) #(walk env (ast/immediate %)) form)
+      (ast/coll? form)       (into (ast/empty form) (map #(walk env (ast/immediate %))) form)
       (ast/incomplete? form) (ast/immediate form)
       true                   form)))
 
