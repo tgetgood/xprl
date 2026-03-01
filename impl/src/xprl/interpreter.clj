@@ -41,10 +41,10 @@
       (ast/application? form) (apply env (walk env (:head form)) (:tail form))
       (ast/pair? form)        (env/with-env form env)
       (ast/input? form)       (env/with-env form env)
-      (ast/μ? form)           (update form :body #(walk env %))
+      (ast/μ? form)           (update form :body #(walk (env/unbind env form) %))
       (ast/coll? form)        (into (ast/empty form) (map (partial walk env)) form)
       (ast/emission? form)    (sys/try-emissions! env (walk env (:kvs form)))
-      true                    form))) ; REVIEW: Do I need to merge envs?
+      true                    form)))
 
 (defn capture [form sym id]
   (cond

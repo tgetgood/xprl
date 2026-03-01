@@ -29,6 +29,11 @@
 (defn binding [env form]
   (get-in env [:bindings (:id form)]))
 
+(defn unbind
+  "Removes parameter bindings from nested invocations of the same function."
+  [env μ]
+  (update env :bindings dissoc (:id μ)))
+
 (defn merge-ctx [env ctx]
   (update env :ctx merge ctx))
 
