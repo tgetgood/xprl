@@ -19,7 +19,10 @@
   (let [env (env/merge-local env form)]
     (cond
       (ast/input? form)  (if (env/bound? env form)
-                           (env/binding env form)
+                           ;; REVIEW: Is it necessary to remove the binding which is resolving?
+                           ;; Is it possible for a binding to refer to the param that binds it?
+                           ;; Wouldn't that be an error if it were?
+                           (walk (env/unbind env form) (env/binding env form))
                            (ast/immediate form))
       (ast/ref? form)    (:binding form)
       (ast/symbol? form) (ast/immediate form)
