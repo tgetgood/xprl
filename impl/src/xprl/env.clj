@@ -39,3 +39,18 @@
 
 (defn ctx [env]
   (:ctx env))
+
+(defn capture [form sym id]
+  (cond
+    (or (ast/application? form) (ast/pair? form))
+    (-> form (update :head capture sym id) (update :tail capture sym id))
+    ;; Use {} for input env since nothing can be bound before being captured.
+    (ast/symbolic? form)  (if (= (ast/symbol form) sym)
+                            (ast/input {} sym id)
+                            form)
+    (ast/immediate? form) (update form :form capture sym id)
+    (ast/coll? form)      (into (ast/empty form) (map #(capture % sym id)) form)
+    (ast/μ? form)         (if (= sym (:param form))
+                            form
+                            (update form :body capture sym id))
+    true                  form))
