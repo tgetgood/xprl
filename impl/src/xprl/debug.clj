@@ -66,7 +66,7 @@
        (let [v# (do ~@body)]
          (when *execution-trace*
            (record! ~input v# {:op ~(keyword name)}))
-         (trace! "---" ~(str name) "in" (or (:bindings ~env) {})
+         (trace! "---" ~(str name) "in" (select-keys ~env [:μ?]) #_(or (:bindings ~env) {})
                  "\n---\n" ~input "\n-->\n" v# "\n---")
          v#))))
 

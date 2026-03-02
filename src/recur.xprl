@@ -48,7 +48,7 @@
 
 ;; And now without Y (or are we just deriving a Y analogue?)
 
-(def !
+(def !1
   (μ !
      ~(μ x
          ~(if (<* ~x 2)

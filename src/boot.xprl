@@ -41,6 +41,25 @@
   (μ x
      ~((μ ~(nth* ~x 1) ~(nth* ~x 3)) . ~(nth* ~x 2))))
 
+;;;;; Simple recursion
+
+(def self-curry
+  (μ f
+     ~(μ x
+         ~((~f . ~~f) . ~x))))
+
+(def recur
+  (μ g
+     ~(self-curry . ~(μ f
+                ~(g . ~(self-curry . f))))))
+
+#_(def defrec
+  (μ x
+     ~(def ~(nth* ~x 1)
+        (recur . ~(μ ~(nth* ~x 1) ~~(nth* ~x 2))))))
+
+
+
 ;; (def cond
 ;;   (μ x
 ;;      ~(let1 cond ~(nth* ~x 1)
