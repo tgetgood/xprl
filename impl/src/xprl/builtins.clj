@@ -113,8 +113,9 @@
 (defextern μ [env [param body]]
   :ensure (ast/symbolic? param)
   (let [id    (gensym "μ-param-")
+        env   (assoc env :μ? true)
         param (ast/symbol param)]
-    (ast/μ env id param (i/walk (assoc env :μ? true) (i/capture body param id)))))
+    (ast/μ env id param (i/walk env (env/capture body param id)))))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]
