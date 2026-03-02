@@ -9,8 +9,12 @@
 
 (deftracefn apply [env head tail]
   (cond
-    (ast/μ? head) (walk (env/bind (env/merge-local env head) (:id head) (walk env tail))
-                        (:body head))
+    (ast/μ? head) (let [args (walk env tail)]
+                    (if (and (:μ? env) (= args head))
+                      ;; delay applying a μ to itself until it reaches the root context.
+                      (ast/application env head tail)
+                      (walk (env/bind (env/merge-local env head) (:id head) args)
+                            (:body head))))
     (ast/external? head)   (ast/call env head tail)
     (ast/incomplete? head) (ast/application env head (walk env tail))
     true                   (throw (RuntimeException. (str head " is not applicable!")))))
