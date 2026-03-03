@@ -1,12 +1,6 @@
 ;; So many ways to do the same thing. Obviously, these should all come out
 ;; equal, though some are faster than others.
 
-(def !1
-  (μ !1 n
-     ~(if ~(<* ~n 2)
-        1
-        (** ~n ~(!1 . ~(-* ~n 1))))))
-
 (defμ !2 n
   ~(if ~(=* ~n 0)
            1
@@ -22,18 +16,18 @@
     1
     (* n (!4 . ~(- n 1)))))
 
-(defn !5 [n]
-  (if (= n 0)
-    1
-    (* n (!5 (- n 1)))))
+;; (defn !5 [n]
+;;   (if (= n 0)
+;;     1
+;;     (* n (!5 (- n 1)))))
 
-(defn !6 [n]
-  (if (< n 2)
-    1
-    (* n (!6 (- n 1)))))
+;; (defn !6 [n]
+;;   (if (< n 2)
+;;     1
+;;     (* n (!6 (- n 1)))))
 
-(def !7
-  (fn !7 [n]
-    (if (< n 2)
-      1
-      (* n (!7 (- n 1))))))
+;; (def !7
+;;   (fn !7 [n]
+;;     (if (< n 2)
+;;       1
+;;       (* n (!7 (- n 1))))))

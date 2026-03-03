@@ -60,97 +60,96 @@
          1
          (** ~(nth* ~x 1) ~(! ~(-* ~(nth* ~x 1) 1))))))
 
-;; (def cond
-;;   (μ x
-;;      ~(let1 cond ~(nth* ~x 1)
-;;             ~(let1 body ~(nth* ~x 2)
-;;                    ~(if (<* ~(count* ~body) 2)
-;;                       (emit)
-;;                       (if ~(nth* ~body 1)
-;;                         ~(nth* ~body 2)
-;;                         (cond . ~(rest* ~(rest* ~body)))))))))
+(defrec cond
+  (μ body
+     ~(if (<* ~(count* ~body) 2)
+         (emit)
+         (if ~(nth* ~body 1)
+           ~(nth* ~body 2)
+           (cond . ~(rest* ~(rest* ~body)))))))
 
 ;; ;;;;; destructuing
 
-;; (def let*
-;;   (μ let* x
-;;      ~(let1 bindings ~(nth* ~x 1)
-;;             ~(let1 body ~(nth* ~x 2)
-;;                    ~(if (empty?* ~bindings)
-;;                       body
-;;                       (let1 ~(nth* ~bindings 1) ~(nth* ~bindings 2)
-;;                             ~(let* ~(rest* ~(rest* ~bindings)) ~body)))))))
+(defrec let*
+  (μ x
+     ~(let1 bindings ~(nth* ~x 1)
+            ~(let1 body ~(nth* ~x 2)
+                   ~(if (empty?* ~bindings)
+                      body
+                      (let1 ~(nth* ~bindings 1) ~(nth* ~bindings 2)
+                            ~(let* ~(rest* ~(rest* ~bindings)) ~body)))))))
 
-;; (def let-map
-;;   (μ let-map x
-;;      ~(let1 bindings ~(nth* ~x 1)
-;;             ~(let1 body ~(nth* ~x 2)
-;;                    ~(if* ~(empty?* ~bindings)
-;;                       ~body
-;;                       ~(let1 kv ~(first* ~bindings)
-;;                              ~(let1 ~(nth* ~kv 1) ~(nth* ~kv 2)
-;;                                     ~(let-map ~(rest* ~bindings) ~body))))))))
+(defrec let-map
+  (μ x
+     ~(let1 bindings ~(nth* ~x 1)
+            ~(let1 body ~(nth* ~x 2)
+                   ~(if* ~(empty?* ~bindings)
+                      ~body
+                      ~(let1 kv ~(first* ~bindings)
+                             ~(let1 ~(nth* ~kv 1) ~(nth* ~kv 2)
+                                    ~(let-map ~(rest* ~bindings) ~body))))))))
 
-;; (def destructure-map
-;;   (μ mp
-;;      ~(emit :error "not implemented")))
+(def destructure-map
+  (μ mp
+     ~(emit :error "not implemented")))
 
-;; (def destructure
-;;   (μ destructure xy
-;;      ~(let* [params ~(nth* ~xy 1)
-;;              args   ~(nth* ~xy 2)]
-;;         ~(cond
-;;            (symbol?* ~params) {params args}
-;;            (empty?* ~params)  {}
-;;            (empty?* ~args)    (emit :error "pattern mismatch")
-;;            (list?* ~params)
-;;            (if (dot?* ~(first* ~params))
-;;              (destructure ~(first* ~(rest* ~params)) ~args)
-;;              (merge
-;;               (destructure ~(first* ~params) ~(first* ~args))
-;;               (destructure ~(rest* ~params) ~(rest* ~args))))
+(defrec destructure
+  (μ xy
+     ~(let* [params ~(nth* ~xy 1)
+             args   ~(nth* ~xy 2)]
+        ~(cond
+           (symbol?* ~params) {params args}
+           (empty?* ~params)  {}
+           (empty?* ~args)    (emit :error "pattern mismatch")
+           (list?* ~params)
+           (if (dot?* ~(first* ~params))
+             (destructure ~(first* ~(rest* ~params)) ~args)
+             (merge
+              (destructure ~(first* ~params) ~(first* ~args))
+              (destructure ~(rest* ~params) ~(rest* ~args))))
 
-;;            (map?* ~params) (merge
-;;                                (destructure-map ~(first* ~params) ~(first* ~args))
-;;                                (destructure ~(rest* ~params) ~(rest* ~args)))
-;;            true            (emit :error ~(str* "Cannot destructure: " ~params ", " ~args))))))
+           (map?* ~params) (merge
+                            (destructure-map ~(first* ~params) ~(first* ~args))
+                            (destructure ~(rest* ~params) ~(rest* ~args)))
 
-;; ;;;;; definitions
+           true (emit :error ~(str* "Cannot destructure: " ~params ", " ~args))))))
 
-;; (def defμ
-;;   (μ x
-;;      ~(def ~(nth* ~x 1)
-;;         (μ ~(nth* ~x 1) args
-;;            ~(let-map ~(destructure ~(nth* ~x 2) ~args)
-;;               ~~(nth* ~x 3))))))
+;;;;; definitions
 
-;; (defμ fn2 [params body]
-;;   (μ args
-;;      ~(let-map ~(destructure ~params ~~args)
-;;         ~~body)))
+(def defμ
+  (μ x
+     ~(def ~(nth* ~x 1)
+        (μ args
+           ~(let-map ~(destructure ~(nth* ~x 2) ~args)
+              ~~(nth* ~x 3))))))
 
-;; (defμ fn3 [name params body]
-;;   ~(μ ~name args
-;;       ~(let-map ~(destructure ~params ~~args)
-;;          ~~body)))
+#_(defμ fn2 [params body]
+  (μ args
+     ~(let-map ~(destructure ~params ~~args)
+        ~~body)))
 
-;; (defμ fn args
-;;   (let1 indirect ~(nth* ~[fn2 fn3] ~(-* ~(count* ~args) 1))
-;;         ~(indirect . ~args)))
+#_(defμ fn3 [name params body]
+  ~(μ ~name args
+      ~(let-map ~(destructure ~params ~~args)
+         ~~body)))
 
-;; (def fn
-;;   (μ args
-;;      (let1 named? ~(symbol?* ~(first* ~args))
-;;            ~(let1 methods ~(if named? (rest* ~args) ~args)
-;;                   ~(let1 defs (if (map?* ~(first* ~methods))
-;;                                 (nth* ~methods 1)
-;;                                 {(nth* ~methods 1) (nth* ~methods 2)})
-;;                          ~(μ ~(when named? (first* ~args)) fn-args
-;;                              ~(let1 dispatch ~(match ~defs ~fn-args)
-;;                                     ~(dispatch . ~fn-args))))))))
+#_(defμ fn args
+  (let1 indirect ~(nth* ~[fn2 fn3] ~(-* ~(count* ~args) 1))
+        ~(indirect . ~args)))
 
-;; (defμ defn x
-;;   (def ~(nth* ~x 1) (fn . ~x)))
+#_(def fn
+  (μ args
+     (let1 named? ~(symbol?* ~(first* ~args))
+           ~(let1 methods ~(if named? (rest* ~args) ~args)
+                  ~(let1 defs (if (map?* ~(first* ~methods))
+                                (nth* ~methods 1)
+                                {(nth* ~methods 1) (nth* ~methods 2)})
+                         ~(μ ~(when named? (first* ~args)) fn-args
+                             ~(let1 dispatch ~(match ~defs ~fn-args)
+                                    ~(dispatch . ~fn-args))))))))
+
+#_(defμ defn x
+  (def ~(nth* ~x 1) (fn . ~x)))
 
 ;; ;;;;; streams
 
