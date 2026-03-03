@@ -43,22 +43,22 @@
 
 ;;;;; Simple recursion
 
-(def self-curry
+(def Y
   (μ f
-     ~(μ x
-         ~((~f . ~~f) . ~x))))
+     ~((μ x ~(f . ~(x . ~x)))
+       .
+       ~(μ x ~(f . ~(x . ~x))))))
 
-(def recur
-  (μ g
-     ~(self-curry . ~(μ f
-                ~(g . ~(self-curry . f))))))
-
-#_(def defrec
+(def defrec
   (μ x
      ~(def ~(nth* ~x 1)
-        (recur . ~(μ ~(nth* ~x 1) ~~(nth* ~x 2))))))
+        (Y . ~(μ ~(nth* ~x 1) ~~(nth* ~x 2))))))
 
-
+(defrec !
+  (μ x
+     ~(if (<* ~(nth* ~x 1) 2)
+         1
+         (** ~(nth* ~x 1) ~(! ~(-* ~(nth* ~x 1) 1))))))
 
 ;; (def cond
 ;;   (μ x
