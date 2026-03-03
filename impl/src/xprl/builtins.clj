@@ -48,7 +48,7 @@
   (reduce (fn [acc [k v]] (assoc acc (ast/symbol k) (primitive k v))) {} m))
 
 (defn rest* [xs]
-  (into [] (rest xs)))
+  (into [] (rest xs))) ; no linked lists!
 
 (defn empty?* [x]
   (boolean (empty? x)))
