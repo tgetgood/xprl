@@ -7,45 +7,49 @@
 
 (declare walk)
 
-(deftracefn apply [env head tail]
+(deftracefn apply [s e head tail]
   (cond
-    (ast/μ? head) (let [args (walk env tail)]
-                    (if (and (:μ? env) (= args head))
+    (ast/μ? head) (let [args (walk s e tail)]
+                    (if (and (:μ? s) (= args head))
                       ;; delay applying a μ to itself until it reaches the root context.
-                      (ast/application env head tail)
-                      (walk (env/bind (env/merge-local env head) (:id head) args)
+                      (ast/application e head tail)
+                      (walk s (env/bind (env/merge-local e head) (:id head) args)
                             (:body head))))
-    (ast/external? head)   (ast/call env head tail)
-    (ast/incomplete? head) (ast/application env head (walk env tail))
-    true                   (throw (RuntimeException. (str head " is not applicable!")))))
 
-(deftracefn resolve [env form]
-  (let [env (env/merge-local env form)]
-    (cond
-      (ast/input? form)  (if (env/bound? env form)
-                           (walk (env/unbind env form) (env/binding env form))
-                           (ast/immediate form))
-      (ast/ref? form)    (:binding form)
-      (ast/symbol? form) (ast/immediate form)
-      true               (assert false "unreachable!!"))))
+    (ast/external? head)   (ast/call s e head tail)
+    (ast/incomplete? head) (ast/application e head (walk s e tail))
 
-(deftracefn eval [env form]
-  (let [env (env/merge-local env form)]
-    (cond
-      (ast/pair? form)       (apply env (walk env (ast/immediate (:head form))) (:tail form))
-      (ast/symbolic? form)   (resolve env form)
-      (ast/coll? form)       (into (ast/empty form) (map #(walk env (ast/immediate %))) form)
-      (ast/incomplete? form) (ast/immediate form)
-      true                   form)))
+    true (throw (RuntimeException. (str head " is not applicable!")))))
 
-(deftracefn walk [env form]
-  (let [env (env/merge-local env form)]
+(deftracefn resolve [s e f]
+  (let [e (env/merge-local e f)]
     (cond
-      (ast/immediate? form)   (eval env (walk env (:form form)))
-      (ast/application? form) (apply env (walk env (:head form)) (:tail form))
-      (ast/pair? form)        (env/with-env form env)
-      (ast/input? form)       (env/with-env form env)
-      (ast/μ? form)           (update form :body #(walk (env/unbind env form) %))
-      (ast/coll? form)        (into (ast/empty form) (map (partial walk env)) form)
-      (ast/emission? form)    (sys/try-emissions! env (walk env (:kvs form)))
-      true                    form)))
+      (ast/input? f)  (if (env/bound? e f)
+                        (walk s (env/unbind e f) (env/binding e f))
+                        (ast/immediate f))
+      (ast/ref? f)    (:binding f)
+      (ast/symbol? f) (ast/immediate f)
+      true            (assert false "unreachable!!"))))
+
+(deftracefn eval [s e f]
+  (let [e (env/merge-local e f)]
+    (cond
+      (ast/coll? f) (into (ast/empty f) (map #(walk s e (ast/immediate %))) f)
+      (ast/pair? f) (apply s e (walk s e (ast/immediate (:head f))) (:tail f))
+
+      (ast/symbolic? f)   (resolve s e f)
+      (ast/incomplete? f) (ast/immediate f)
+      true                f)))
+
+(deftracefn walk [s e f]
+  (let [env (env/merge-local e f)]
+    (cond
+      (ast/immediate? f)   (eval s e (walk s e (:form f)))
+      (ast/application? f) (apply s e (walk s e (:head f)) (:tail f))
+      (ast/pair? f)        (env/with-env f env)
+      (ast/input? f)       (env/with-env f env)
+      (ast/coll? f)        (into (ast/empty f) (map (partial walk s e)) f)
+      (ast/emission? f)    (sys/try-emissions! s e (walk s e (:kvs f)))
+
+      (ast/μ? f) (update f :body #(walk {:μ? true} (env/unbind e f) %))
+      true       f)))

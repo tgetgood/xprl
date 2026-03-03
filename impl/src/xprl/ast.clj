@@ -215,8 +215,8 @@
 
 (defn call
   "Invokes primitive `f` with args `t` in `env`."
-  [env f t]
-  ((:fn f) env f t))
+  [state env f t]
+  ((:fn f) state env f t))
 
 
 (defrecord Context [chs form]

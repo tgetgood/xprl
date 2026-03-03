@@ -16,20 +16,16 @@
 (defn try-emissions!
   "Sends any messages that are ready to go, returns an emission containing the
   rest."
-  [{:keys [ctx] :as env} kvs]
+  [{:keys [μ?]} {:keys [ctx] :as env} kvs]
   (trace! "trying emissions" kvs)
-  ;; REVIEW: do we need to bundle the cc-map up with the Emission object?
-  ;; What happens when an emission object gets returned (it's just data until
-  ;; you walk it) or moved around by compiler optimisations? I haven't thought
-  ;; this through any too well.
+  ;; REVIEW: Should the emission context be part of the env or the state?
   ;;
-  ;; Who says we can't emit an incomplete computation which can only be
-  ;; completed in the receiving context?
-  (if (or (:μ? env) (some (fn [[k v]] (not (ast/keyword? k))) kvs))
+  ;; I think I have it wrong here...
+  (if (or μ? (some (fn [[k v]] (not (ast/keyword? k))) kvs))
     (ast/emission kvs)
     (cond
-      ;; TODO: Even when frozen we can and should perform non-channel returns
-      ;; since they aren't really message passing.
+      ;; TODO: Even when frozen (μ > 0) we can and should perform
+      ;; non-channel returns since they aren't really message passing.
       ;;
       ;; The problem is: what do we do with the *other* emissions?
       ;; It's just easier to wait until we can safely send them before returning

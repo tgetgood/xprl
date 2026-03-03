@@ -10,8 +10,7 @@
   (select-keys x [:bindings :ctx]))
 
 (defn merge-envs [outer inner]
-  (-> (merge-with merge (env-maps outer) (env-maps inner))
-      (assoc :μ? (or (:μ? outer) (:μ? inner)))))
+  (merge-with merge (env-maps outer) (env-maps inner)))
 
 (defn merge-local [env x]
   (if (ast/env? x)
@@ -20,8 +19,7 @@
 
 (defn bind [env id val]
   (-> env
-      (assoc-in [:bindings id] val)
-      (assoc :μ? false)))
+      (assoc-in [:bindings id] val)))
 
 (defn bound? [env input]
   (contains? (:bindings env) (:id input)))

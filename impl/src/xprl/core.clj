@@ -33,15 +33,15 @@
   (assoc ccs (ast/xkey :return) cb))
 
 (defn go!
-  ([f] (i/walk {} (ast/immediate f)))
-  ([f conts] (i/walk {:ctx conts} (ast/immediate f))))
+  ([f] (i/walk {} {} (ast/immediate f)))
+  ([f conts] (i/walk {} {:ctx conts} (ast/immediate f))))
 
 (defn evv [s]
   (go! (:form (r/read (r/string-reader s) @the-env))))
 
 (def base-conts
   {(ast/xkey :env)    (env-updater the-env)
-   (ast/xkey :return) println
+   (ast/xkey :return) (fn [v] (when (not (nil? v)) (println v)))
    (ast/xkey :log)    #(println "LOG:" %)
    (ast/xkey :error)  #(binding [*out* *err*]
                          (println %))})
@@ -54,11 +54,7 @@
 
 (defn loadfile [envatom fname]
   (println "\nloading:" fname "\n")
-  (let [conts (merge
-               base-conts
-               {(ast/xkey :env)    (env-updater envatom)
-                (ast/xkey :return) #(throw
-                                     (RuntimeException. "return to top level!"))})]
+  (let [conts (merge base-conts {(ast/xkey :env) (env-updater envatom)})]
     (loop [reader (r/file-reader fname)]
       (let [env    @envatom
             reader (r/read reader env)
@@ -66,7 +62,7 @@
         (if (= :eof form)
           'EOF
           (do
-            (go! form (with-return conts println))
+            (go! (ast/emission [[(ast/xkey :return) (ast/immediate form)]]) conts)
             (recur reader))))))
   envatom)
 
