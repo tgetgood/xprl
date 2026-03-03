@@ -10,18 +10,18 @@
        .
        ~(μ x ~(f . ~(x . ~x))))))
 
-(def !
+(def !1
   (Y . ~(μ !
            ~(μ x
                ~(if (<* ~x 2)
                   1
                   (** ~x ~(! . ~(-* ~x 1))))))))
 
-(! . 1)
-(! . 2)
-(! . 3)
+(!1 . 1)
+(!1 . 2)
+(!1 . 3)
 
-(! . 10)
+(!1 . 10)
 
 (def AoY
   (μ f
@@ -33,29 +33,29 @@
            ~(μ x
                ~((f . ~(g . ~g)) . ~x))))))
 
-(def !
+(def !2
   (AoY . ~(μ !
              ~(μ x
                  ~(if (<* ~x 2)
                     1
                     (** ~x ~(! . ~(-* ~x 1))))))))
 
-(! . 1)
-(! . 2)
-(! . 3)
+(!2 . 1)
+(!2 . 2)
+(!2 . 3)
 
-(! . 10)
+(!2 . 10)
 
 ;; And now without Y (or are we just deriving a Y analogue?)
 
-(def !1
+(def !3
   (μ !
      ~(μ x
          ~(if (<* ~x 2)
             1
             (** ~x ~((~! . ~!) . ~(-* ~x 1)))))))
 
-((! . !) . 5)
+((!3 . !3) . 5)
 
 ;; curry with self as first arg. Weird thought, but Curry was original.
 (def sc
@@ -63,18 +63,19 @@
      ~(μ x
          ~((~f . ~~f) . ~x))))
 
-(def !
+(def !4
   (sc . ~(μ !
             ~(μ x
                 ~(if (<* ~x 2)
                    1
                    (** ~x ~((sc . !) . ~(-* ~x 1))))))))
 
-(! . 1)
-(! . 2)
-(! . 3)
+(!4 . 1)
+;; FIXME: These blow the stack. Figure out why.
+;; (!4 . 2)
+;; (!4 . 3)
 
-(! . 10)
+;; (!4 . 10)
 
 (def !!
   (μ !
@@ -84,34 +85,36 @@
             (** ~x ~(! . ~(-* ~x 1)))))))
 
 
-(def !
+;; FIXME: Every ! variant below this point gets stuck and returns an incomplete
+;; application. And I have no idea why...
+(def !5
   (sc . ~(μ f ~(!! . ~(sc . f)))))
 
-(! . 1)
+(!5 . 1)
 
-(! . 2)
-(! . 3)
+(!5 . 2)
+(!5 . 3)
 
-(! . 10)
+(!5 . 10)
 
 (def rec
   (μ g
      ~(sc . ~(μ f
                 ~(g . ~(sc . f))))))
 
-(def !
+(def !6
   (rec . ~(μ !
              ~(μ x
                  ~(if (<* ~x 2)
                     1
                     (** ~x ~(! . ~(-* ~x 1))))))))
 
-(! . 1)
+(!6 . 1)
 
-(! . 2)
-(! . 3)
+(!6 . 2)
+(!6 . 3)
 
-(! . 10)
+(!6 . 10)
 
 
 (def !body
@@ -120,14 +123,14 @@
         1
         (** ~x ~(! . ~(-* ~x 1))))))
 
-(def ! (rec . ~(μ ! ~!body)))
+(def !7 (rec . ~(μ ! ~!body)))
 
-(! . 1)
+(!7 . 1)
 
-(! . 2)
-(! . 3)
+(!7 . 2)
+(!7 . 3)
 
-(! . 10)
+(!7 . 10)
 
 ;; FIXME: We have a scoping error here where the `x` in the defrecced fn gets
 ;; shadowed by the value `x` passed to the inner fn. Using a gensym makes it
@@ -137,11 +140,11 @@
      ~(def ~(nth* ~x# 1)
         (rec . ~(μ ~(nth* ~x# 1) ~~(nth* ~x# 2))))))
 
-(defrec ! !body)
+(defrec !8 !body)
 
-(! . 1)
+(!8 . 1)
 
-(! . 2)
-(! . 3)
+(!8 . 2)
+(!8 . 3)
 
-(! . 10)
+(!8 . 10)
