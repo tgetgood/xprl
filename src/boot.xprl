@@ -98,8 +98,8 @@
      ~(let* [params ~(nth* ~xy 1)
              args   ~(nth* ~xy 2)]
         ~(cond
-           (symbol?* ~params) {params args}
            (empty?* ~params)  {}
+           (symbol?* ~params) {params args}
            (empty?* ~args)    (emit :error "pattern mismatch")
            (list?* ~params)
            (if (dot?* ~(first* ~params))

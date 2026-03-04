@@ -26,11 +26,18 @@
 ;; REVIEW: Is there any point wrapping this?
 (def odd? (wrap . (μ x ~(not* ~(even? . x)))))
 
-;;;;; Core
-
-;;; bootstrap destructuring
+;;;;; tests
 
 
+(defrec pow
+  (μ x
+     ~(let* [n ~(nth* ~x 1)
+             a ~(nth* ~x 2)
+             k ~(nth* ~x 3)]
+       ~(cond
+          (=* 0 ~k)   a
+          (even? ~k) (pow ~a ~(** ~n ~n) ~(/* ~k 2))
+          (odd? ~k)  (pow ~a ~(** ~n ~a) ~(-* ~k 1))))))
 
 ;;; definition constructs
 
