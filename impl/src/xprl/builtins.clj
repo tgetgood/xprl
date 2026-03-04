@@ -7,8 +7,6 @@
    [xprl.ns :as ns]
    [xprl.system :as sys]))
 
-;; TODO: add an :assert or :contract clause so that we can error out when an
-;; extern is unrunable.
 (defmacro extern [[stateform envform argsform] & more]
   `(fn [state# env# self# args#]
      (let [args# (if (vector? args#) args# (i/walk state# env# args#))]
@@ -21,7 +19,20 @@
                            args#)]
            (if (or ~(not= :ensure (first more)) ~(second more))
              ~(last more)
-             (ast/application env# self# ~argsform)))
+             (if (ast/incomplete? ~argsform)
+               (ast/application env# self# ~argsform)
+               (throw (RuntimeException.
+                       (str "Invalid args passed to " (:name self#)
+                            ".\nExpected: "
+                            ~(str (second more)) "\nReceived: "
+                            ~(cond
+                              (symbol? argsform) {(name argsform) `~argsform}
+                              (vector? argsform)
+                              (apply hash-map
+                                     (interleave
+                                      (map (comp ast/symbol name) argsform)
+                                      `~argsform))
+                              true (str argsform " : " `~argsform))))))))
          (ast/application env# self# args#)))))
 
 (defmacro defextern [mac args & more]
