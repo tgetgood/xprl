@@ -259,6 +259,9 @@
 
 ;;; Symbol
 
+(ps Dot)
+(pps Dot)
+
 (ps Symbol)
 (pps Symbol)
 
@@ -511,4 +514,6 @@
 (defn empty
   "Wrapper for clojure.core/empty that returns `[]` given a MapEntry."
   [x]
-  (or (clojure.core/empty x) []))
+  (if (map-entry? x)
+    []
+    (clojure.core/empty x)))

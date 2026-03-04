@@ -111,7 +111,8 @@
 
 (defmacro db [x]
   `(binding [debug/*verbose* true
-             ast/*verbose*   true] ~x))
+             ast/*verbose*   true]
+     ~x))
 
 (defmacro ddb [x]
   `(binding [debug/*verbose*         true

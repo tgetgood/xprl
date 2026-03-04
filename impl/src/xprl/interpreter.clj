@@ -34,9 +34,8 @@
 (deftracefn eval [s e f]
   (let [e (env/merge-local e f)]
     (cond
-      (ast/coll? f) (into (ast/empty f) (map #(walk s e (ast/immediate %))) f)
-      (ast/pair? f) (apply s e (walk s e (ast/immediate (:head f))) (:tail f))
-
+      (ast/coll? f)       (into (ast/empty f) (map #(walk s e (ast/immediate %))) f)
+      (ast/pair? f)       (apply s e (walk s e (ast/immediate (:head f))) (:tail f))
       (ast/symbolic? f)   (resolve s e f)
       (ast/incomplete? f) (ast/immediate f)
       true                f)))
@@ -50,6 +49,5 @@
       (ast/input? f)       (env/with-env f env)
       (ast/coll? f)        (into (ast/empty f) (map (partial walk s e)) f)
       (ast/emission? f)    (sys/try-emissions! s e (walk s e (:kvs f)))
-
-      (ast/μ? f) (update f :body #(walk {:μ? true} (env/unbind e f) %))
-      true       f)))
+      (ast/μ? f)           (update f :body #(walk {:μ? true} (env/unbind e f) %))
+      true                 f)))
