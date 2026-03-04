@@ -83,9 +83,9 @@
   (μ x
      ~(let1 bindings ~(nth* ~x 1)
             ~(let1 body ~(nth* ~x 2)
-                   ~(if* ~(empty?* ~bindings)
-                      ~body
-                      ~(let1 kv ~(first* ~bindings)
+                   ~(if (empty?* ~bindings)
+                      body
+                      (let1 kv ~(first* ~bindings)
                              ~(let1 ~(nth* ~kv 1) ~(nth* ~kv 2)
                                     ~(let-map ~(rest* ~bindings) ~body))))))))
 
