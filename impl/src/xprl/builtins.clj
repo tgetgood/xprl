@@ -7,6 +7,8 @@
    [xprl.ns :as ns]
    [xprl.system :as sys]))
 
+;; TODO: add an :assert or :contract clause so that we can error out when an
+;; extern is unrunable.
 (defmacro extern [[stateform envform argsform] & more]
   `(fn [state# env# self# args#]
      (let [args# (if (vector? args#) args# (i/walk state# env# args#))]
@@ -48,9 +50,6 @@
 (defn primitives [m]
   (reduce (fn [acc [k v]] (assoc acc (ast/symbol k) (primitive k v))) {} m))
 
-(defn rest* [xs]
-  (into [] (rest xs))) ; no linked lists!
-
 (defn empty?* [x]
   (boolean (empty? x)))
 
@@ -71,8 +70,8 @@
     "not*" not*
     "str*" str
 
-    "list?*"  ast/list?
-    "map?*"   ast/map?
+    "list?*"   ast/list?
+    "map?*"    ast/map?
     "dot?*"    ast/dot?
     "string?*" string?
 
@@ -85,22 +84,29 @@
     ;; parameter. So when we say `symbol?` in xprl we could mean either. But
     ;; then should they be distinguishable in the language?
     "symbol?*" ast/symbolic?
-
-    "first*" first
-    "rest*"  rest*
-
-    "count*" count
     }))
 
 ;;;;; specialish forms
 
-;; nth* is special because it can operate on a vector even if the elements of
-;; that vector can't yet be computed. It would be correct to wait until they
+;; These are special because they can operate on a vector even if the elements
+;; of that vector can't yet be computed. It would be correct to wait until they
 ;; were, but this prunes a lot of unecessary work and is (I think) worth the
 ;; complexity.
 (defextern nth* [_ _ [x i]]
   :ensure (and (vector? x) (int? i))
   (nth x (dec i)))
+
+(defextern first* [_ _ [x]]
+  :ensure (ast/coll? x)
+  (first x))
+
+(defextern rest* [_ _ [x]]
+  :ensure (ast/coll? x)
+  (into [] (rest x)))
+
+(defextern count* [_ _ [x]]
+  :ensure (ast/coll? x)
+  (count x))
 
 (defextern emit [state env kvs]
   (do (assert (even? (count kvs)))
@@ -131,17 +137,13 @@
     "emit"          emit
     "with-channels" with-channels
     "nth*"          nth*
-
+    "first*"        first*
+    "rest*"         rest*
+    "count*"        count*
     ;; TODO: builtin macros needed for a working system.
     ;;
     ;; pipe
     ;; net
-    ;;
-    ;; TODO: These operators will likely need to be converted from plain old
-    ;; functions.
-    ;;
-    ;; "first*" first*
-    ;; "rest*"  rest*
     }))
 
 ;;;;; The Ur context from which all programs derive.
