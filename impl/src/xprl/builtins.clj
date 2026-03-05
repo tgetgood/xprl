@@ -87,7 +87,6 @@
     "string?*" string?
 
     "merge*"  merge
-    "empty?*" empty?*
     "get*"    get
 
     ;; REVIEW: All symbols in a form are converted to Refs on read. The only
@@ -119,6 +118,10 @@
   :ensure (ast/coll? x)
   (count x))
 
+(defextern empty?* [_ _ [x]]
+  :ensure (ast/coll? x)
+  (boolean (empty? x)))
+
 (defextern emit [state env kvs]
   (do (assert (even? (count kvs)))
       (->> kvs
@@ -134,8 +137,9 @@
 (defextern μ [s e [param body]]
   :ensure (ast/symbolic? param)
   (let [id    (gensym "μ-param-")
-        param (ast/symbol param)]
-    (ast/μ e id param (i/walk {:μ? true} e (env/capture body param id)))))
+        param (ast/symbol param)
+        s' (-> s (assoc :μ? true) (env/capture param id))]
+    (ast/μ e id param (i/walk s' e body))))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]
@@ -151,6 +155,7 @@
     "first*"        first*
     "rest*"         rest*
     "count*"        count*
+    "empty?*"       empty?*
     ;; TODO: builtin macros needed for a working system.
     ;;
     ;; pipe
