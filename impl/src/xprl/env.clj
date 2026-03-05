@@ -3,8 +3,10 @@
   (:require [clojure.set :as set]
             [xprl.ast :as ast]))
 
-(defn with-env [x env]
-  (assoc x :env env))
+(defn with-env [env x]
+  (if (ast/env? x)
+    (assoc x :env env)
+    x))
 
 (defn merge-envs [outer inner]
   (merge-with merge outer inner))
@@ -29,31 +31,20 @@
   [env μ]
   (update env :bindings dissoc (:id μ)))
 
+(defn capture [s sym id]
+  (update s :captured assoc sym id))
+
+(defn captured? [s sym]
+  (contains? (:captured s) sym))
+
+(defn capid [s sym]
+  (get-in s [:captured sym]))
+
+(defn uncapture [s sym]
+  (update s :captured dissoc sym))
+
 (defn merge-ctx [env ctx]
   (update env :ctx merge ctx))
 
 (defn ctx [env]
   (:ctx env))
-
-(declare capture)
-
-(defn capture* [form sym id]
-  (cond
-    (or (ast/application? form) (ast/pair? form))
-    (-> form (update :head capture sym id) (update :tail capture sym id)
-        (update-in [:env :bindings] capture sym id))
-    ;; Use {} for input env since nothing can be bound before being captured.
-    (ast/symbolic? form)  (if (= (ast/symbol form) sym)
-                            (ast/input {} sym id)
-                            form)
-    (ast/input? form)     (update-in form [:env :binding] capture sym id)
-    (ast/immediate? form) (update form :form capture sym id)
-    (ast/coll? form)      (into (ast/empty form) (map #(capture % sym id)) form)
-    (ast/μ? form)         (if (= sym (:param form))
-                            form
-                            (-> form
-                                (update :body capture sym id)
-                                (update-in [:env :bindings] capture sym id)))
-    true                  form))
-
-(def capture (memoize capture*))

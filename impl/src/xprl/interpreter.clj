@@ -12,8 +12,9 @@
     (ast/μ? head) (let [args (walk s e tail)]
                     (if (and (:μ? s) (= args head))
                       ;; delay applying a μ to itself until it reaches the root context.
-                      (ast/application e head tail)
-                      (walk s (env/bind (env/merge-local e head) (:id head) args)
+                      (ast/application e head args)
+                      (walk (env/uncapture s (:param head))
+                            (env/bind (env/merge-local e head) (:id head) args)
                             (:body head))))
 
     (ast/external? head)   (ast/call s e head tail)
@@ -23,13 +24,15 @@
 
 (deftracefn resolve [s e f]
   (let [e (env/merge-local e f)]
-    (cond
-      (ast/input? f)  (if (env/bound? e f)
-                        (walk s (env/unbind e f) (env/binding e f))
-                        (ast/immediate f))
-      (ast/ref? f)    (:binding f)
-      (ast/symbol? f) (ast/immediate f)
-      true            (assert false "unreachable!!"))))
+    (if (:inhibit? s)
+      (ast/immediate f)
+      (cond
+        (ast/input? f)  (if (env/bound? e f)
+                          (walk s e (env/binding e f))
+                          (ast/immediate f))
+        (ast/ref? f)    (:binding f)
+        (ast/symbol? f) (ast/immediate f)
+        true            (assert false "unreachable!!")))))
 
 (deftracefn eval [s e f]
   (let [e (env/merge-local e f)]
@@ -45,9 +48,17 @@
     (cond
       (ast/immediate? f)   (eval s e (walk s e (:form f)))
       (ast/application? f) (apply s e (walk s e (:head f)) (:tail f))
-      (ast/pair? f)        (env/with-env f env)
-      (ast/input? f)       (env/with-env f env)
+      (ast/pair? f)        (env/with-env env
+                             (let [s (-> s (assoc :μ? true) (assoc :inhibit? true))]
+                               (-> f
+                                   (update :head #(walk s {} %))
+                                   (update :tail #(walk s {} %)))))
+      (ast/symbolic? f)    (let [sym (ast/symbol f)]
+                             (if (env/captured? s sym)
+                               (ast/input {} sym (env/capid s sym))
+                               (env/with-env env f)))
       (ast/coll? f)        (into (ast/empty f) (map (partial walk s e)) f)
       (ast/emission? f)    (sys/try-emissions! s e (walk s e (:kvs f)))
-      (ast/μ? f)           (update f :body #(walk {:μ? true} (env/unbind e f) %))
+      (ast/μ? f)           (let [s (-> s (env/uncapture (:param f)) (assoc :μ? true))]
+                             (update f :body #(walk s (env/unbind e f) %)))
       true                 f)))
