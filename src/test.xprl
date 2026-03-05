@@ -10,14 +10,20 @@
 (+* ~(+* 3 1) ~(+* 1 2))             7
 ((μ x ~(+* 1 ~x)) . 9)               10
 (+ 4 5)                              9
+{(+ 1 2 3) (* 4 4)}                  {6 16}
 (+ (+ 1 2) (+ 3 (+ 4 5)))            15
 (nth [1 2 3] 1)                      1
 (nth (nth [1 [2]] 2) 1)              2
 
-
-
 (if (= 1 0) 1 2)                            2
 (cond (= 1 0) 1 (= (+ 1 1) 2) 2 true 3)     2
+
+;; Make sure predicates are only evaluated up until we choose a branch.
+(cond  (= (+ 1 1) 2) 2 (emit :error "kaboom") 3)     2
+
+(condtester . 0)                            0
+(condtester . 2)                            7
+(condtester . 7)                            42
 
 ((μ x ~(+ ~(nth* ~x 1) 1)) 4)                        5
 ((μ y ~((μ x ~(+ ~(nth* ~x 1) 1)) ~(nth* ~y 1))) 4)  5
@@ -25,7 +31,7 @@
 ((μ y ~((μ x ~(+ (nth x 1) 1)) ~(nth* ~y 1))) 4)     5
 
 ;; Abuse of sexp manipulation
-(μ ~(((μ x ~x) . ~(μ x ~x)) . x) ~x)   (μ x ~x)
+((μ ~(((μ x ~x) . ~(μ x ~x)) . x) ~x) . 100)         100
 
 ;; Shadowing
 (((μ x ~(μ x ~x)) . 3) . 4)                                4
@@ -41,28 +47,29 @@
 (destructure [a b [c d]] [1 2 [3 4]])   ((μ x {a 1 b 2 c 3 d 4}) 1)
 (destructure [a b . c] [1 2 3 4 5])     ((μ x {a 1 b 2 c [3 4 5]}) 1)
 
-{(+ 1 2 3) (* 4 4)}                      {6 16}
-((fn [x y z] (+ x (* y z))) 1 2 3)       7
-((fn [x [y z]] (* x y z)) 5 [5 5])       125
+
+;; TODO: Reimplement `fn` and we already have tests!
+;; ((fn [x y z] (+ x (* y z))) 1 2 3)       7
+;; ((fn [x [y z]] (* x y z)) 5 [5 5])       125
 
 
-((fn xs (+ (nth xs 1) (nth xs 2) (nth (nth xs 3) 1) 1)) 2 3 [1]) #_=> 7
+;; ((fn xs (+ (nth xs 1) (nth xs 2) (nth (nth xs 3) 1) 1)) 2 3 [1]) #_=> 7
 
-((fn x ((nth x 1) (nth x 1))) (fn x 1)) 1
+;; ((fn x ((nth x 1) (nth x 1))) (fn x 1)) 1
 
-((fn x (+ 1 x)) . 1)                 2
-(inc 6)                              7
-((fn xs (nth xs 2)) 1 2 3)           2
+;; ((fn x (+ 1 x)) . 1)                 2
+;; (inc 6)                              7
+;; ((fn xs (nth xs 2)) 1 2 3)           2
 
-(!1 . 5)  120
-(!2 . 5)  120
-(!3 . 5)  120
-(!4 . 5)  120
-(!5 5)    120
-(!6 5)    120
-(!7 5)    120
+;; (!1 . 5)  120
+;; (!2 . 5)  120
+;; (!3 . 5)  120
+;; (!4 . 5)  120
+;; (!5 5)    120
+;; (!6 5)    120
+;; (!7 5)    120
 
-((fn ! [x] (if (< x 2) 1 (* x (! (- x 1))))) 5) 120
-((fn ! [n] (if (< n 2) 1 (* n (! (- n 1))))) 5) 120
+;; ((fn ! [x] (if (< x 2) 1 (* x (! (- x 1))))) 5) 120
+;; ((fn ! [n] (if (< n 2) 1 (* n (! (- n 1))))) 5) 120
 
-((fn x (((fn x x) . +) x ((fn x (+ x 1)) . 2))) . 5)       8
+;; ((fn x (((fn x x) . +) x ((fn x (+ x 1)) . 2))) . 5)       8

@@ -32,12 +32,12 @@
 (defrec pow
   (μ x
      ~(let* [n ~(nth* ~x 1)
-             a ~(nth* ~x 2)
-             k ~(nth* ~x 3)]
+             k ~(nth* ~x 2)]
        ~(cond
-          (=* 0 ~k)   a
-          (even? ~k) (pow ~a ~(** ~n ~n) ~(/* ~k 2))
-          (odd? ~k)  (pow ~a ~(** ~n ~a) ~(-* ~k 1))))))
+          (=* 0 ~k)  1
+          (=* 1 ~k)  n
+          (even? ~k) (pow ~(** ~n ~n) ~(/* ~k 2))
+          (odd? ~k)  (** ~n ~(pow ~n ~(-* ~k 1)))))))
 
 ;;; definition constructs
 

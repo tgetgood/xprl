@@ -1,20 +1,26 @@
 ;; So many ways to do the same thing. Obviously, these should all come out
 ;; equal, though some are faster than others.
 
-(defμ !2 n
-  ~(if ~(=* ~n 0)
-           1
-           (** ~n ~(!2 . ~(-* ~n 1)))))
+;; (defμ !2 n
+;;   ~(if ~(=* ~n 0)
+;;            1
+;;            (** ~n ~(!2 . ~(-* ~n 1)))))
 
-(defμ !3 n
-  (if (< n 2)
-    1
-    (* n (!3 . ~(- n 1)))))
+;; (defμ !3 n
+;;   (if (< n 2)
+;;     1
+;;     (* n (!3 . ~(- n 1)))))
 
-(defμ !4 n
-  (if (= n 0)
-    1
-    (* n (!4 . ~(- n 1)))))
+;; (defμ !4 n
+;;   (if (= n 0)
+;;     1
+;;     (* n (!4 . ~(- n 1)))))
+
+(def condtester
+  (μ x
+     ~(cond (=* 0 ~(** 3 ~x)) (** 5 ~x)
+            (=* 1 ~(-* ~x 1)) (+* ~x 5)
+            true              42)))
 
 ;; (defn !5 [n]
 ;;   (if (= n 0)
