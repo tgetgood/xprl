@@ -188,15 +188,15 @@
   (instance? Application x))
 
 
-(defrecord Mu [env id params body]
+(defrecord Mu [env id param body]
   Env
   Object
   (toString [_]
-    (str "(#μ " params " " body ")")))
+    (str "(#μ " param " " body ")")))
 
-(defn μ [env id params body]
-  (assert (symbol? params))
-  (->Mu env id params body))
+(defn μ [env id param body]
+  (assert (symbol? param))
+  (->Mu env id param body))
 
 (defn μ? [x]
   (instance? Mu x))
@@ -361,11 +361,11 @@
 
 (ps Mu)
 
-(defmethod pp/simple-dispatch Mu [{:keys [params body]}]
+(defmethod pp/simple-dispatch Mu [{:keys [param body]}]
   (pp/pprint-logical-block
    :prefix "(" :suffix ")"
    (pp/write-out (symbol "#μ"))
-   (format-pair (symbol "#μ") [params body])))
+   (format-pair (symbol "#μ") [param body])))
 
 ;;; Externs
 
@@ -473,7 +473,7 @@
   (insp [form ^Writer w level]
     (spacer w level)
     (.write w "μ\n")
-    (insp (:params form) w (inc level))
+    (insp (:param form) w (inc level))
     (insp (:body form) w (inc level)))
 
   Context
