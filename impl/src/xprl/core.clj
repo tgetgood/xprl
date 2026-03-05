@@ -27,7 +27,7 @@
     (reset! te l)
     (let [[sym value] l]
       (assert (ast/symbolic? sym))
-      (swap! env ns/ns-intern sym value))))
+      (swap! env ns/ns-intern (ast/symbol sym) value))))
 
 (defn with-return [ccs cb]
   (assoc ccs (ast/xkey :return) cb))
@@ -40,10 +40,11 @@
   (go! (:form (r/read (r/string-reader s) @the-env))))
 
 (def base-conts
-  {(ast/xkey :env)    (env-updater the-env)
-   (ast/xkey :return) (fn [v] (when (not (nil? v)) (println v)))
-   (ast/xkey :log)    #(println "LOG:" %)
-   (ast/xkey :error)  #(binding [*out* *err*]
+  {(ast/xkey :env)     (env-updater the-env)
+   (ast/xkey :return)  (fn [v] (when (not (nil? v)) (println v)))
+   (ast/xkey :unbound) #(println "WARNING message on unbound channel:" %)
+   (ast/xkey :log)     #(println "LOG:" %)
+   (ast/xkey :error)   #(binding [*out* *err*]
                          (println %))})
 (defn ev [s]
   (go! (:form (r/read (r/string-reader s) @the-env)) base-conts))
@@ -98,6 +99,9 @@
               (let [res (go! form1 base-conts)
                     exp (go! form2 base-conts)]
                 (println "---")
+                (when (not= res exp)
+                  ;; TODO: colour.
+                  (println "!!!!!!!!!!!!!!!FAILURE!!!!!!!!!!!!\n---"))
                 (println "result:   " res)
                 (println "expected: " exp)
                 (println)

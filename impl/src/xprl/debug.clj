@@ -62,7 +62,7 @@
 (defmacro deftracefn [name args & body]
   (let [state (first args)
         env   (second args)
-        input (if (= 3 (count args)) (first (rest args)) (into [] (rest (rest args))))]
+        input (if (= 3 (count args)) (first (rest (rest args))) (into [] (rest (rest args))))]
     `(defn ~name ~args
        (let [v# (do ~@body)]
          (when *execution-trace*
