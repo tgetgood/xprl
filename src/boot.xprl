@@ -33,6 +33,16 @@
   (μ x
      ~~(if* ~~(nth* ~x 1) ~(nth* ~x 2) ~(nth* ~x 3))))
 
+(def boolfn
+  (μ x
+     ~(get* {true ~(μ x ~~(nth* ~x 1)) false ~(μ x ~~(nth* ~x 2))} ~x)))
+
+;; smalltalk (or lambda calculus) style `if`.
+;; nothing like two impls of `if` to test against each other!
+(def sif
+  (μ x
+     ~((boolfn . ~~(nth* ~x 1)) ~(nth* ~x 2) ~(nth* ~x 3))))
+
 (def when
   (μ x
      ~(if ~(nth* ~x 1) ~(nth* ~x 2) (emit))))
@@ -63,7 +73,7 @@
            ~(nth* ~body 2)
            (cond . ~(rest* ~(rest* ~body)))))))
 
-;; ;;;;; destructuing
+;;;;; destructuring
 
 (def let1
   (μ x
@@ -73,7 +83,7 @@
   (μ x
      ~(let1 bindings ~(nth* ~x 1)
             ~(let1 body ~(nth* ~x 2)
-                   ~~(if* ~(empty?* ~bindings)
+                   ~(if (empty?* ~bindings)
                       body
                       (let1 ~(nth* ~bindings 1) ~(nth* ~bindings 2)
                             ~(let* ~(rest* ~(rest* ~bindings)) ~body)))))))
@@ -92,7 +102,104 @@
   (μ mp
      ~(emit :error "not implemented")))
 
+;; works
+#_(defrec destructure
+  (μ xy
+     ~(if (symbol?* ~(nth* ~xy 1))
+        {(nth* ~xy 1) (nth* ~xy 2)}
+        (if (empty?* ~(nth* ~xy 1))
+          {}
+          (if (list?* ~(nth* ~xy 1))
+            (merge
+             (destructure ~(first* ~(nth* ~xy 1)) ~(first* ~(nth* ~xy 2)))
+             (destructure ~(rest* ~(nth* ~xy 1)) ~(rest* ~(nth* ~xy 2))))
+            (emit :error "kaboom"))))))
+
+;; works
+#_(defrec destructure
+  (μ xy
+     ~(if (symbol?* ~(nth* ~xy 1))
+         {(nth* ~xy 1) (nth* ~xy 2)}
+         (if (empty?* ~(nth* ~xy 1))
+           {}
+           (if (empty?* ~(nth* ~xy 2))
+             (emit :error "pattern mismatch")
+             (if (list?* ~(nth* ~xy 1))
+               (if (dot?* ~(first* ~(nth* ~xy 1)))
+                 (destructure ~(first* ~(rest* ~(nth* ~xy 1))) ~(nth* ~xy 2))
+                 (merge
+                  (destructure ~(first* ~(nth* ~xy 1)) ~(first* ~(nth* ~xy 2)))
+                  (destructure ~(rest* ~(nth* ~xy 1)) ~(rest* ~(nth* ~xy 2)))))
+               (if (map?* ~(nth* ~xy 1))
+                 (merge
+                  (destructure-map ~(first* ~(nth* ~xy 1)) ~(first* ~(nth* ~xy 2)))
+                  (destructure ~(rest* ~(nth* ~xy 1)) ~(rest* ~(nth* ~xy 2))))
+                 (emit :error ~(str* "Cannot destructure: " ~(nth* ~xy 1) ", " ~(nth* ~xy 2))))))))))
+
+;; looses capture of "destructure". How on earth does that happen?
+#_(defrec destructure
+  (μ xy
+     ~(cond
+        (symbol?* ~(nth* ~xy 1)) {(nth* ~xy 1) (nth* ~xy 2)}
+        (empty?* ~(nth* ~xy 1))  {}
+        (empty?* ~(nth* ~xy 2))    (emit :error "pattern mismatch")
+
+        (dot?* ~(first* ~(nth* ~xy 1)))
+        (destructure ~(first* ~(rest* ~(nth* ~xy 1))) ~(nth* ~xy 2))
+
+        (list?* ~(nth* ~xy 1))
+        (merge
+         (destructure ~(first* ~(nth* ~xy 1)) ~(first* ~(nth* ~xy 2)))
+         (destructure ~(rest* ~(nth* ~xy 1)) ~(rest* ~(nth* ~xy 2))))
+
+        (map?* ~(nth* ~xy 1)) (merge
+                         (destructure-map ~(first* ~(nth* ~xy 1)) ~(first* ~(nth* ~xy 2)))
+                         (destructure ~(rest* ~(nth* ~xy 1)) ~(rest* ~(nth* ~xy 2))))
+
+        true (emit :error ~(str* "Cannot destructure: " ~(nth* ~xy 1) ", " ~(nth* ~xy 2))))))
+
+;; minimal reproduction of the previous (destructure [a] [1])
+#_(defrec destructure
+  (μ xy
+     ~(cond
+        (symbol?* ~(nth* ~xy 1)) {(nth* ~xy 1) (nth* ~xy 2)}
+        (empty?* ~(nth* ~xy 1))  {}
+        (list?* ~(nth* ~xy 1))
+        (destructure ~(first* ~(nth* ~xy 1)) ~(first* ~(nth* ~xy 2))))))
+
+;; This one works as well.
+#_(defrec destructure
+  (μ xy
+     ~(let1 params ~(nth* ~xy 1)
+            ~(let1 args   ~(nth* ~xy 2)
+                   ~(if (symbol?* ~params)
+                      {params args}
+                      (if (empty?* ~params)
+                        {}
+                        (if (dot?* ~(first* ~params))
+                          (destructure ~(first* ~(rest* ~params)) ~args)
+                          (if (list?* ~params)
+                            (merge
+                             (destructure ~(first* ~params) ~(first* ~args))
+                             (destructure ~(rest* ~params) ~(rest* ~args)))
+                            (emit :error "kaboom")))))))))
 (defrec destructure
+  (μ xy
+     ~(let* [params ~(nth* ~xy 1)
+             args   ~(nth* ~xy 2)]
+            ~(if (symbol?* ~params)
+               {params args}
+               (if (empty?* ~params)
+                 {}
+                 (if (dot?* ~(first* ~params))
+                   (destructure ~(first* ~(rest* ~params)) ~args)
+                   (if (list?* ~params)
+                     (merge
+                      (destructure ~(first* ~params) ~(first* ~args))
+                      (destructure ~(rest* ~params) ~(rest* ~args)))
+                     (emit :error "kaboom"))))))))
+;; original
+#_(defrec destructure
   (μ xy
      ~(let* [params ~(nth* ~xy 1)
              args   ~(nth* ~xy 2)]
