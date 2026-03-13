@@ -63,4 +63,5 @@
 
 ;;;;; And the heart of the matter
 
-(defn compile [form])
+(defn weave [state form]
+  )

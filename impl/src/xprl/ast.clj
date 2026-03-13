@@ -213,10 +213,14 @@
 (defn external? [x]
   (instance? Extern x))
 
+(defrecord Call [name args comptime runtime]
+  Object
+  (toString [_]
+    (str "#(" args "-> " name ")")))
+
 (defn call
-  "Invokes primitive `f` with args `t` in `env`."
-  [state env f t]
-  ((:fn f) state env f t))
+  [f t x y]
+  (->Call f t x y))
 
 
 (defrecord Context [chs form]
@@ -356,6 +360,11 @@
 (defmethod pp/simple-dispatch Application [{:keys [head tail]}]
   (.write ^Writer *out* "#")
   (pp/simple-dispatch (pair head tail)))
+
+;;; Call
+
+(ps Call)
+(pps Call)
 
 ;;; μ
 

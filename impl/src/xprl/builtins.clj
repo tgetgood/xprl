@@ -8,32 +8,39 @@
    [xprl.system :as sys]))
 
 (defmacro extern [[stateform envform argsform] & more]
-  `(fn [state# env# self# args#]
-     (let [args# (if (vector? args#) args# (i/walk state# env# args#))]
-       (if (vector? args#)
-         (let [~argsform args#
-               ~stateform state#
-               ~envform env#
-               ~argsform (if ~(= :ensure (first more))
-                           (if ~(second more) args# (i/walk state# env# args#))
-                           args#)]
-           (if (or ~(not= :ensure (first more)) ~(second more))
-             ~(last more)
-             (if (ast/incomplete? ~argsform)
-               (ast/application env# self# ~argsform)
-               (throw (RuntimeException.
-                       (str "Invalid args passed to " (:name self#)
-                            ".\nExpected: "
-                            ~(str (second more)) "\nReceived: "
-                            ~(cond
-                              (symbol? argsform) {(name argsform) `~argsform}
-                              (vector? argsform)
-                              (apply hash-map
-                                     (interleave
-                                      (map (comp ast/symbol name) argsform)
-                                      `~argsform))
-                              true (str argsform " : " `~argsform))))))))
-         (ast/application env# self# args#)))))
+  (let [more (apply hash-map more)]
+    `(fn [state# env# self# args#]
+       (let [args# (if (or ~(:force-walk? more) (not (vector? args#)))
+                     (i/walk state# env# args#)
+                     args#)]
+         (if (vector? args#)
+           (let [~argsform args#
+                 ~stateform state#
+                 ~envform env#
+                 ~argsform (if ~(contains? more :ensure)
+                             (if ~(:ensure more) args# (i/walk state# env# args#))
+                             args#)]
+             (if (or ~(not (contains? more :ensure)) ~(:ensure more))
+               (ast/call (:name self#) ~argsform
+                         (fn [~argsform] ~(:clj more))
+                         ;; REVIEW: the xprl impl is going to be very different.
+                         ;; I might not want to stick it here...
+                         (fn [~argsform] ~(:xprl more)))
+               (if (ast/incomplete? ~argsform)
+                 (ast/application env# self# ~argsform)
+                 (throw (RuntimeException.
+                         (str "Invalid args passed to " (:name self#)
+                              ".\nExpected: "
+                              ~(str (:ensure more)) "\nReceived: "
+                              ~(cond
+                                 (symbol? argsform) {(name argsform) `~argsform}
+                                 (vector? argsform)
+                                 (apply hash-map
+                                        (interleave
+                                         (map (comp ast/symbol name) argsform)
+                                         `~argsform))
+                                 true (str argsform " : " `~argsform))))))))
+           (ast/application env# self# args#))))))
 
 (defmacro defextern [mac args & more]
   `(def ~mac (extern ~args ~@more)))
@@ -46,14 +53,15 @@
   [f]
   (extern [_ env tail]
     :ensure (not (ast/incomplete? tail))
-    (try
-        (apply f tail)
-        (catch Exception e
-          (reset! debug/*pfn {:f f :args tail :e e})
-          (binding [ast/*verbose* true]
-            (ast/inspect (ast/application f tail)))
-          (println e)
-          :error))))
+    ;; (ast/call f tail)
+    :clj (try
+           (apply f tail)
+           (catch Exception e
+             (reset! debug/*pfn {:f f :args tail :e e})
+             (binding [ast/*verbose* true]
+               (ast/inspect (ast/application f tail)))
+             (println e)
+             :error))))
 
 (defn primitive [n f]
   (ast/extern n (call-primitive-fn f)))
@@ -104,42 +112,49 @@
 ;; complexity.
 (defextern nth* [_ _ [x i]]
   :ensure (and (vector? x) (int? i))
-  (nth x (dec i)))
+  :clj (nth x (dec i)))
 
 (defextern first* [_ _ [x]]
   :ensure (ast/coll? x)
-  (first x))
+  :clj (first x))
 
 (defextern rest* [_ _ [x]]
   :ensure (ast/coll? x)
-  (into [] (rest x)))
+  :clj (into [] (rest x)))
 
 (defextern count* [_ _ [x]]
   :ensure (ast/coll? x)
-  (count x))
+  :clj (count x))
 
 (defextern empty?* [_ _ [x]]
   :ensure (ast/coll? x)
-  (boolean (empty? x)))
+  :clj (boolean (empty? x)))
 
-(defextern emit [state env kvs]
-  (do (assert (even? (count kvs)))
-      (->> kvs
-           (partition 2)
-           (mapv (fn [[k v]] [(ast/immediate k) v]))
-           (i/walk state env)
-           (sys/try-emissions! state env))))
+(defextern emit* [state env kvs]
+  :ensure (every? ast/keyword? (map first kvs))
+  :force-walk? true
+  :clj (sys/try-emissions! state env kvs))
+
+;; High level emit that can be implemented in xprl later.
+#_(defextern emit [state env kvs]
+  :ensure (not (ast/incomplete? kvs))
+  :clj (do (assert (even? (count kvs)))
+           (->> kvs
+                (partition 2)
+                (mapv (fn [[k v]] [(ast/immediate k) v]))
+                (i/walk state env)
+                (sys/try-emissions! state env))))
 
 (defextern with-channels [state env [ctx body]]
   :ensure (ast/map? ctx)
-  (i/walk state (env/merge-ctx env ctx) body))
+  :clj (i/walk state (env/merge-ctx env ctx) body))
 
 (defextern μ [s e [param body]]
   :ensure (ast/symbolic? param)
-  (let [id    (gensym "μ-param-")
-        param (ast/symbol param)
-        s' (-> s (assoc :μ? true) (env/capture param id))]
-    (ast/μ e id param (i/walk s' e body))))
+  :clj (let [id    (gensym "μ-param-")
+             param (ast/symbol param)
+             s' (-> s (assoc :μ? true) (env/capture param id))]
+         (ast/μ e id param (i/walk s' e body))))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]
@@ -149,7 +164,7 @@
   "things that would traditionally be special forms."
   (macros
    {"μ"             μ
-    "emit"          emit
+    "emit"          emit*
     "with-channels" with-channels
     "nth*"          nth*
     "first*"        first*

@@ -162,7 +162,7 @@
       the breadth of survey and reference list. I've added quite a bit to my
       reading list that isn't necessarily relevant here.
 
-   - [ ] A'UM a Stream Based Concurrent Object Oriented Language
+   - [X] A'UM a Stream Based Concurrent Object Oriented Language
      This is very academic and somewhat awkward. I'm not sure what they mean by
      saying a message is a name plus a series of directions. So tuple (send,
      receive, send) is a message?
@@ -203,7 +203,6 @@
     The section on profiling is really in the weeds and I'd bet that stuff has
     changed too much in the past 20 years to be directly applicable.
   - [ ] What Every Computer Scientist Should Know About Floating-Point Arithmetic
-
 * Assembly resources
   - Handy summary of (32 bit) C calling convention
     https://flint.cs.yale.edu/cs421/papers/x86-asm/asm.html
@@ -226,11 +225,14 @@
     don't know the practical differences. All I can find are opinion rants and
     some claims that NASM has better macro support. Do I need macro support?
     Am I not writing something more powerful than what they call macros?
+  - Interrupts
+    https://baponkar.github.io/Osdev-Notes/02_Architecture/05_InterruptHandling.html
   - [ ] Binutils AS Summary
     https://sourceware.org/binutils/docs/as.html#Manual
   - [ ] Programming from the Ground Up
   - [ ] Hacker's Delight
-    I just want an excuse to finally read this.
+    Not really about assembly per se. I just want an excuse to finally read
+    this.
 * Notes on my cpu
   Depending specifically on my cpu is kind of stupid, but it's five years old
   and I'll be at this for a long time yet. If assuming newer hardware gives
