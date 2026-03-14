@@ -64,4 +64,6 @@
 ;;;;; And the heart of the matter
 
 (defn weave [state form]
-  )
+  (cond
+    (ast/call? form) (call state form)
+    s))

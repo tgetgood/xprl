@@ -222,6 +222,9 @@
   [f t x y]
   (->Call f t x y))
 
+(defn call? [x]
+  (instance? Call x))
+
 
 (defrecord Context [chs form]
   Object
@@ -434,6 +437,12 @@
     (.write w (str form))
     (.write w "]\n"))
 
+  LooseEnd
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w (str form))
+    (.write w "->\n"))
+
   Ref
   (insp [form ^Writer w level]
     (spacer w level)
@@ -484,6 +493,14 @@
     (.write w "μ\n")
     (insp (:param form) w (inc level))
     (insp (:body form) w (inc level)))
+
+  Call
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "Call: ")
+    (.write w (:name form))
+    (.write w "\n")
+    (insp (:args form) w (inc level)))
 
   Context
   (insp [{:keys [chs form]} ^Writer w level]

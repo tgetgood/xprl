@@ -130,10 +130,6 @@
   :ensure (ast/coll? x)
   :clj (boolean (empty? x)))
 
-(defextern emit* [state env kvs]
-  :ensure (every? ast/keyword? (map first kvs))
-  :force-walk? true
-  :clj (sys/try-emissions! state env kvs))
 
 ;; High level emit that can be implemented in xprl later.
 #_(defextern emit [state env kvs]
@@ -145,16 +141,26 @@
                 (i/walk state env)
                 (sys/try-emissions! state env))))
 
-(defextern with-channels [state env [ctx body]]
-  :ensure (ast/map? ctx)
-  :clj (i/walk state (env/merge-ctx env ctx) body))
-
 (defextern μ [s e [param body]]
   :ensure (ast/symbolic? param)
   :clj (let [id    (gensym "μ-param-")
              param (ast/symbol param)
              s' (-> s (assoc :μ? true) (env/capture param id))]
          (ast/μ e id param (i/walk s' e body))))
+
+;; These last two shouldn't be able to run on the compiler host, only the
+;; runtime host. They do things that just don't make sense at compile time.
+;; Mostly.
+;;
+;; Of course the line is extremely blurred, so I don't know where to start here.
+(defextern emit* [state env kvs]
+  :ensure (every? ast/keyword? (map first kvs))
+  :force-walk? true
+  :clj (sys/try-emissions! state env kvs))
+
+(defextern with-channels [state env [ctx body]]
+  :ensure (ast/map? ctx)
+  :clj (i/walk state (env/merge-ctx env ctx) body))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]
