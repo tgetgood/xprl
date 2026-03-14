@@ -63,7 +63,12 @@
 
 ;;;;; And the heart of the matter
 
+(defn call [state form]
+  )
+
 (defn weave [state form]
   (cond
-    (ast/call? form) (call state form)
-    s))
+    (ast/call? form) (call state (weave state form))
+    (ast/coll? form) (into (empty form) (map partial weave state) form)
+
+))
