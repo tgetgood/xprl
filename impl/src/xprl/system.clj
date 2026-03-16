@@ -23,22 +23,24 @@
   ;; I think I have it wrong here...
   (if (or μ? (some (fn [[k v]] (not (ast/keyword? k))) kvs))
     (ast/emission kvs)
-    (cond
-      ;; TODO: Even when frozen (μ > 0) we can and should perform
-      ;; non-channel returns since they aren't really message passing.
-      ;;
-      ;; The problem is: what do we do with the *other* emissions?
-      ;; It's just easier to wait until we can safely send them before returning
-      ;; rets. So the above a potential optimisation, but is it necessary?
-      ;; Put differently is there a case where the computation will stall if we
-      ;; don't?
-      (contains? ctx ret) (run! (partial emit! ctx) kvs)
-      true
-      (let [rets      (filter #(= ret (first %)) kvs)
-            emissions (remove #(= ret (first %)) kvs)]
-        (run! (partial emit! ctx) emissions)
-        (when (> (count rets) 0)
-          (when (> (count rets) 1)
-            (println "Warning! multiple returns to non-stream location: " rets
-                     "all but the first will be lost!"))
-          (second (first rets)))))))
+    (do
+      (cond
+        ;; TODO: Even when frozen (μ > 0) we can and should perform
+        ;; non-channel returns since they aren't really message passing.
+        ;;
+        ;; The problem is: what do we do with the *other* emissions?
+        ;; It's just easier to wait until we can safely send them before returning
+        ;; rets. So the above a potential optimisation, but is it necessary?
+        ;; Put differently is there a case where the computation will stall if we
+        ;; don't?
+        (contains? ctx ret) (run! (partial emit! ctx) kvs)
+        true
+        (let [rets      (filter #(= ret (first %)) kvs)
+              emissions (remove #(= ret (first %)) kvs)]
+          (run! (partial emit! ctx) emissions)
+          (when (> (count rets) 0)
+            (when (> (count rets) 1)
+              (println "Warning! multiple returns to non-stream location: " rets
+                       "all but the first will be lost!"))
+            (second (first rets)))))
+      ::not-a-value)))

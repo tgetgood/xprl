@@ -21,11 +21,7 @@
                              (if ~(:ensure more) args# (i/walk state# env# args#))
                              args#)]
              (if (or ~(not (contains? more :ensure)) ~(:ensure more))
-               (ast/call (:name self#) ~argsform
-                         (fn [~argsform] ~(:clj more))
-                         ;; REVIEW: the xprl impl is going to be very different.
-                         ;; I might not want to stick it here...
-                         (fn [~argsform] ~(:xprl more)))
+               ~(:clj more)
                (if (ast/incomplete? ~argsform)
                  (ast/application env# self# ~argsform)
                  (throw (RuntimeException.
@@ -53,7 +49,6 @@
   [f]
   (extern [_ env tail]
     :ensure (not (ast/incomplete? tail))
-    ;; (ast/call f tail)
     :clj (try
            (apply f tail)
            (catch Exception e

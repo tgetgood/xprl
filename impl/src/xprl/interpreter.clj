@@ -9,7 +9,7 @@
 
 (deftracefn apply [s e head tail]
   (cond
-    (ast/μ? head)          (ast/call head (walk s e tail))
+    (ast/μ? head)          (walk s e (ast/call head (walk s e tail)))
     (ast/external? head)   ((:fn head) s e head tail)
     (ast/incomplete? head) (ast/application e head (walk s e tail))
 
@@ -53,4 +53,13 @@
       (ast/coll? f)        (into (ast/empty f) (map (partial walk s e)) f)
       (ast/μ? f)           (let [s (-> s (env/uncapture (:param f)) (assoc :μ? true))]
                              (update f :body #(walk s (env/unbind e f) %)))
+      (ast/emission? f)    (sys/try-emissions! s e (walk s e (:kvs f)))
+      ;; Tell me I don't need to rewrite the entire thing in cps... not that
+      ;; it's that much.
+      (ast/call? f)        (if (:μ? s)
+                             f
+                             (walk (env/uncapture s (:param (:μ f)))
+                                   (env/bind (env/merge-local e (:μ f))
+                                             (:id (:μ f)) (:args f))
+                                   (:body (:μ f))))
       true                 f)))

@@ -213,14 +213,14 @@
 (defn external? [x]
   (instance? Extern x))
 
-(defrecord Call [name args comptime runtime]
+(defrecord Call [μ args]
   Object
   (toString [_]
-    (str "#(" args "-> " name ")")))
+    (str "#(" args "-> " μ ")")))
 
 (defn call
-  [f t x y]
-  (->Call f t x y))
+  [f t]
+  (->Call f t))
 
 (defn call? [x]
   (instance? Call x))
@@ -440,8 +440,7 @@
   LooseEnd
   (insp [form ^Writer w level]
     (spacer w level)
-    (.write w (str form))
-    (.write w "->\n"))
+    (.write w (str "->" form "\n")))
 
   Ref
   (insp [form ^Writer w level]
@@ -497,9 +496,8 @@
   Call
   (insp [form ^Writer w level]
     (spacer w level)
-    (.write w "Call: ")
-    (.write w (:name form))
-    (.write w "\n")
+    (.write w "Call\n")
+    (insp (:μ form) w (inc level))
     (insp (:args form) w (inc level)))
 
   Context
@@ -535,7 +533,7 @@
 (defn incomplete? [x]
   (if (coll? x)
     (some incomplete? x)
-    (or (input? x) (immediate? x) (application? x))))
+    (or (input? x) (immediate? x) (application? x) (call? x))))
 
 (defn empty
   "Wrapper for clojure.core/empty that returns `[]` given a MapEntry."

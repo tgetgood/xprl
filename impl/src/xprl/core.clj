@@ -83,8 +83,9 @@
 (defn test []
   (reload! test-setup)
   (binding [debug/*execution-trace* false ]
-    (let [retwrap (fn [f] (ast/pair (ast/symbol "emit")
-                                    [(ast/xkey :return) (ast/immediate f)]))]
+    (let [retwrap (fn [f]
+                    (ast/pair (ast/symbol "emit")
+                              [(ast/xkey :return) (ast/immediate f)]))]
       (println "\nStarting tests:\n")
       (loop [reader (r/file-reader testxprl)]
         (let [reader (r/read reader @the-env)
