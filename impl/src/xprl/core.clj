@@ -6,10 +6,11 @@
    [xprl.debug :as debug]
    [xprl.env :as env]
    [xprl.interpreter :as i]
+   [xprl.net :as net]
    [xprl.ns :as ns]
    [xprl.reader :as r]))
 
-(def the-env (atom builtins/base-env))
+(def the-env (atom net/base-env))
 
 ;;;;; UI
 
@@ -32,16 +33,15 @@
 (defn with-return [ccs cb]
   (assoc ccs (ast/xkey :return) cb))
 
-(defn go!
-  ([f] (i/walk {} {} (ast/immediate f)))
-  ([f conts] (i/walk {} {:ctx conts} (ast/immediate f))))
+(defn go! [f conts]
+  (net/entry (ast/immediate f) conts))
 
 (defn evv [s]
   (go! (:form (r/read (r/string-reader s) @the-env))))
 
 (def base-conts
   {(ast/xkey :env)     (env-updater the-env)
-   (ast/xkey :return)  (fn [v] (when (not (nil? v)) (println v)))
+   (ast/xkey :return)  (fn [v] (when (not (nil? v)) (println "=>> " v)))
    (ast/xkey :unbound) #(println "WARNING message on unbound channel:" %)
    (ast/xkey :log)     #(println "LOG:" %)
    (ast/xkey :error)   #(binding [*out* *err*]
@@ -62,12 +62,12 @@
         (if (= :eof form)
           'EOF
           (do
-            (go! (ast/emission [[(ast/xkey :return) (ast/immediate form)]]) conts)
+            (net/entry (ast/immediate form) conts)
             (recur reader))))))
   envatom)
 
 (defn reload! [fnames]
-  (reset! the-env builtins/base-env)
+  (reset! the-env net/base-env)
   (reduce loadfile the-env fnames)
   :eof)
 

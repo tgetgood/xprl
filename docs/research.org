@@ -178,7 +178,7 @@
      This is a pretty old compiler book. I know so little I should start from
      the bottom I suppose.
 ** Rabbit holes
-  - [ ] What Every Programmer Should Know About Memory
+  - [X] What Every Programmer Should Know About Memory
     https://www.akkadia.org/drepper/cpumemory.pdf
 
     This paper is a gold mine. More a short textbook than a paper really. I'll
@@ -202,6 +202,10 @@
 
     The section on profiling is really in the weeds and I'd bet that stuff has
     changed too much in the past 20 years to be directly applicable.
+
+    Hardware transactional memory is a cool concept. I don't know if I need it,
+    but it's good to know that arm chips seems to have transactional memory
+    extensions. Nothing like that on amd64 that I can find though.
   - [ ] What Every Computer Scientist Should Know About Floating-Point Arithmetic
 * Assembly resources
   - Handy summary of (32 bit) C calling convention

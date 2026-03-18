@@ -26,8 +26,8 @@
                  (ast/application env# self# ~argsform)
                  (throw (RuntimeException.
                          (str "Invalid args passed to " (:name self#)
-                              ".\nExpected: "
-                              ~(str (:ensure more)) "\nReceived: "
+                              ".\nExpected: " ~(str (:ensure more))
+                              "\nReceived: "
                               ~(cond
                                  (symbol? argsform) {(name argsform) `~argsform}
                                  (vector? argsform)
