@@ -16,12 +16,12 @@
 (defn try-emissions!
   "Sends any messages that are ready to go, returns an emission containing the
   rest."
-  [{:keys [μ?]} {:keys [ctx] :as env} kvs]
+  [state {:keys [ctx] :as env} kvs]
   (trace! "trying emissions" kvs)
   ;; REVIEW: Should the emission context be part of the env or the state?
   ;;
   ;; I think I have it wrong here...
-  (if (or μ? (some (fn [[k v]] (not (ast/keyword? k))) kvs))
+  (if (or (:μ? state) (some (fn [[k v]] (not (ast/keyword? k))) kvs))
     (ast/emission kvs)
     (cond
       ;; TODO: Even when frozen (μ > 0) we can and should perform
