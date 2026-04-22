@@ -40,6 +40,9 @@
 
 ;;;;; simple primitive fns
 
+(defn noop [state env self args]
+  (ast/application env self args))
+
 (defn call-primitive-fn
   "given an external (clojure) function, returns an applicative wrapper to call
   it from xprl."
@@ -156,11 +159,9 @@
     "rest*"         rest*
     "count*"        count*
     "empty?*"       empty?*
-    ;; TODO: builtin macros needed for a working system.
-    ;;
-    ;; pipe
-    ;; net
-    }))
+    ;; TODO: These need runtime impls.
+    "pipe"          noop
+    "net"           noop}))
 
 ;;;;; The Ur context from which all programs derive.
 ;;
