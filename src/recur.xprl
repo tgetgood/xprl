@@ -71,11 +71,10 @@
                    (** ~x ~((sc . !) . ~(-* ~x 1))))))))
 
 (!4 . 1)
-;; FIXME: These blow the stack. Figure out why.
-;; (!4 . 2)
-;; (!4 . 3)
+(!4 . 2)
+(!4 . 3)
 
-;; (!4 . 10)
+(!4 . 10)
 
 (def !!
   (μ !
@@ -85,8 +84,6 @@
             (** ~x ~(! . ~(-* ~x 1)))))))
 
 
-;; FIXME: Every ! variant below this point gets stuck and returns an incomplete
-;; application. And I have no idea why...
 (def !5
   (sc . ~(μ f ~(!! . ~(sc . f)))))
 
@@ -121,7 +118,9 @@
   (μ x
      ~(if (<* ~x 2)
         1
-        (** ~x ~(! . ~(-* ~x 1))))))
+        ;; FIXME: why does this need to be a proper list?
+        ;; It should be (! . ~...) for symmetry.
+        (** ~x ~(! ~(-* ~x 1))))))
 
 (def !7 (rec . ~(μ ! ~!body)))
 
@@ -132,13 +131,10 @@
 
 (!7 . 10)
 
-;; FIXME: We have a scoping error here where the `x` in the defrecced fn gets
-;; shadowed by the value `x` passed to the inner fn. Using a gensym makes it
-;; work for now, but the bug didn't just go away.
 (def defrec
-  (μ x#
-     ~(def ~(nth* ~x# 1)
-        (rec . ~(μ ~(nth* ~x# 1) ~~(nth* ~x# 2))))))
+  (μ x
+     ~(def ~(nth* ~x 1)
+        (rec . ~(μ ~(nth* ~x 1) ~~(nth* ~x 2))))))
 
 (defrec !8 !body)
 
