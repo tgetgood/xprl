@@ -49,10 +49,10 @@
       (ast/immediate? f)   (eval s e (walk s e (:form f)))
       (ast/application? f) (apply s e (walk s e (:head f)) (:tail f))
       (ast/pair? f)        (env/with-env env
-                             (let [s (-> s (assoc :μ? true) (assoc :inhibit? true))]
-                               (-> f
-                                   (update :head #(walk s {} %))
-                                   (update :tail #(walk s {} %)))))
+                             (-> f
+                                 (update :head #(walk s {} %))
+                                 ;; We only need to inhibit the tail
+                                 (update :tail #(walk (assoc s :inhibit? true) {} %))))
       (ast/symbolic? f)    (let [sym (ast/symbol f)]
                              (if (env/captured? s sym)
                                (ast/input {} sym (env/capid s sym))
