@@ -123,6 +123,24 @@
 (defn elements [l]
   l)
 
+;; A SyncVal is basically a pipe that can only ever receive one element and so
+;; the stream end is just a value. I don't see a benefit here of separating the
+;; read and write ends, so we just use one value.
+;;
+;; REVIEW: I don't want the api to be too different re pipes.
+(defrecord SyncVal [key])
+
+(defn sv
+  ([] (sv "sync-val-"))
+  ([tag] (->SyncVal (gensym tag))))
+
+(defn sv? [x]
+  (instance? SyncVal x))
+
+(defn svs [task]
+  (into #{} (filter sv?) (concat (:waiting task) (:args task))))
+
+
 (defn list [xs]
   (into [] xs))
 

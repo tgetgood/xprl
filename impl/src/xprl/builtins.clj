@@ -127,7 +127,7 @@
   :ensure (ast/coll? x)
   (boolean (empty? x)))
 
-(defextern emit [state env kvs]
+#_(defextern emit [state env kvs]
   (do (assert (even? (count kvs)))
       (->> kvs
            (partition 2)
