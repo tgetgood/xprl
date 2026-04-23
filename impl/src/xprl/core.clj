@@ -83,6 +83,8 @@
   (ast/inspect (:form (r/read (r/string-reader s) @the-env))))
 
 (defn test []
+  ;; FIXME: This testrunner is synchronous, so it cannot test message passing.
+  ;; currently all tests are algebraic, but that may not be so for long.
   (reload! test-setup)
   (binding [debug/*execution-trace* false ]
     (let [retwrap (fn [f] (ast/pair (ast/symbol "emit")

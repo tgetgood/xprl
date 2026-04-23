@@ -43,8 +43,10 @@
 (defn uncapture [s sym]
   (update s :captured dissoc sym))
 
-(defn merge-ctx [env ctx]
-  (update env :ctx merge ctx))
+(defn deresolve [env input]
+  (let [syms (filter (fn [[k v]] (= v (:id input))) (:captured env))]
+    (assert (< (count syms) 2) (vec syms))
+    (-> env
+        (unbind input)
 
-(defn ctx [env]
-  (:ctx env))
+        (uncapture (first (first syms))))))

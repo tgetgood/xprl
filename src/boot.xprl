@@ -53,15 +53,15 @@
 
 ;;;;; Simple recursion
 
-(def sc
-  (μ f
-     ~(μ x
-         ~((~f . ~~f) . ~x))))
+;; (def sc
+;;   (μ f
+;;      ~(μ x
+;;          ~((~f . ~~f) . ~x))))
 
-(def rec
-  (μ g
-     ~(sc . ~(μ f
-                ~(g . ~(sc . f))))))
+;; (def rec
+;;   (μ g
+;;      ~(sc . ~(μ f
+;;                 ~(g . ~(sc . f))))))
 ;; (def defrec
 ;;   (μ x
 ;;      ~(def ~(nth* ~x 1)
