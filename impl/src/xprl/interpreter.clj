@@ -46,17 +46,13 @@
   (let [env (env/merge-local e f)]
     (cond
       (ast/immediate? f)   (eval s env (walk s env (:form f)))
-      (ast/application? f) (apply s e (walk s env (:head f)) (:tail f))
-      (ast/pair? f)        (env/with-env env f
-                             #_(-> f
-                                 (update :head #(walk s {} %))
-                                 ;; We only need to inhibit the tail
-                                 (update :tail #(walk (assoc s :inhibit? true) {} %))))
+      (ast/application? f) (apply s e (walk s e (:head f)) (:tail f))
+      (ast/pair? f)        (env/with-env env f)
       (ast/input? f)       (env/with-env env f)
       (ast/symbolic? f)    (let [sym (ast/symbol f)]
                              (if (env/captured? env sym)
                                (ast/input {} sym (env/capid env sym))
-                               (env/with-env env f)))
+                               f))
       (ast/coll? f)        (into (ast/empty f) (map (partial walk s e)) f)
       (ast/emission? f)    (sys/try-emissions! s e (walk s e (:kvs f)))
       (ast/μ? f)           (update f :body #(walk (assoc s :μ? true) env %))
