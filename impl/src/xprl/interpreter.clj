@@ -9,13 +9,10 @@
 
 (deftracefn apply [s e head tail]
   (cond
-    (ast/μ? head) (let [args (walk s e tail)]
-                    (if (and (:μ? s) (= args head))
-                      ;; delay applying a μ to itself until it reaches the root context.
-                      (ast/application e head args)
-                      (walk (env/uncapture s (:param head))
-                            (env/bind (env/merge-local e head) (:id head) args)
-                            (:body head))))
+    (ast/μ? head) (let [args (env/with-env (env/merge-local e tail) tail)]
+                    (walk (env/uncapture s (:param head))
+                          (env/bind (env/merge-local e head) (:id head) args)
+                          (:body head)))
 
     (ast/external? head)   (ast/call s e head tail)
     (ast/incomplete? head) (ast/application e head (walk s e tail))
@@ -48,17 +45,17 @@
     (cond
       (ast/immediate? f)   (eval s e (walk s e (:form f)))
       (ast/application? f) (apply s e (walk s e (:head f)) (:tail f))
-      (ast/pair? f)        (env/with-env env
-                             (-> f
-                                 (update :head #(walk s {} %))
-                                 ;; We only need to inhibit the tail
-                                 (update :tail #(walk (assoc s :inhibit? true) {} %))))
+      ;; (ast/pair? f)        (env/with-env env
+      ;;                        (-> f
+      ;;                            (update :head #(walk s {} %))
+      ;;                            ;; We only need to inhibit the tail
+      ;;                            (update :tail #(walk (assoc s :inhibit? true) {} %))))
       (ast/symbolic? f)    (let [sym (ast/symbol f)]
                              (if (env/captured? s sym)
                                (ast/input {} sym (env/capid s sym))
                                (env/with-env env f)))
       (ast/coll? f)        (into (ast/empty f) (map (partial walk s e)) f)
       (ast/emission? f)    (sys/try-emissions! s e (walk s e (:kvs f)))
-      (ast/μ? f)           (let [s (-> s (env/uncapture (:param f)) (assoc :μ? true))]
-                             (update f :body #(walk s (env/unbind e f) %)))
+      ;; (ast/μ? f)           (let [s (-> s (env/uncapture (:param f)) (assoc :μ? true))]
+      ;;                        (update f :body #(walk s (env/unbind e f) %)))
       true                 f)))
