@@ -6,13 +6,32 @@
   (:refer-clojure :exclude [resolve eval apply])
   (:require [clojure.pprint :refer [pprint]]
             [xprl.ast :as ast]
+            [xprl.builtins :as builtins]
             [xprl.env :as env]
             [xprl.system :as sys :refer [net return return-first]]))
 
 (def ret (ast/xkey :return))
 
-
 (declare walk)
+
+
+(defn emit! [ctx [state kvs]]
+  (println kvs)
+  (assert (every? ast/keyword? (map first kvs)) "Improper emission")
+  (clojure.core/apply net ctx (map (fn [kv] {:call sys/send! :args kv}) kvs)))
+
+(def overrides
+  (reduce (fn [acc [k v]] (assoc acc (get builtins/base-env (ast/symbol k)) v))
+          {}
+          {"emit" (fn [ctx state tail]
+                    (let [sync (ast/sv "emit")]
+                      (net ctx
+                        {:call walk
+                         :ctx  {ret sync}
+                         :args [state tail]}
+                        {:call emit!
+                         :args [state sync]})))}))
+
 
 (defn resolve [ctx [state form]]
   ;; (println (type form) form)
@@ -48,7 +67,9 @@
            replay))))
 
 (defn call-extern [ctx [state f tail]]
-  ((:fn f) ctx state f tail))
+  (if-let [v (get overrides f)]
+    (v ctx state tail)
+    (throw (RuntimeException. (str "unimplemented runtime call: " f)))))
 
 (defn apply [ctx [state head tail]]
   ;; (println "applying" head tail state)
