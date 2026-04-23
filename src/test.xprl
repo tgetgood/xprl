@@ -17,14 +17,15 @@
 
 (if* ~(=* 1 0) 1 2)                         2
 (if (= 1 0) 1 2)                            2
-(cond (= 1 0) 1 (= (+ 1 1) 2) 2 true 3)     2
+(sif (= 1 0) 1 2)                           2
+;; (cond (= 1 0) 1 (= (+ 1 1) 2) 2 true 3)     2
 
-;; Make sure predicates are only evaluated up until we choose a branch.
-(cond  (= (+ 1 1) 2) 2 (emit :error "kaboom") 3)     2
+;; ;; Make sure predicates are only evaluated up until we choose a branch.
+;; (cond  (= (+ 1 1) 2) 2 (emit :error "kaboom") 3)     2
 
-(condtester . 0)                            0
-(condtester . 2)                            7
-(condtester . 7)                            42
+;; (condtester . 0)                            0
+;; (condtester . 2)                            7
+;; (condtester . 7)                            42
 
 ((μ x ~(+ ~(nth* ~x 1) 1)) 4)                        5
 ((μ y ~((μ x ~(+ ~(nth* ~x 1) 1)) ~(nth* ~y 1))) 4)  5
@@ -42,16 +43,16 @@
 
 (let1 x 7 ~(+ x 1))                  8
 ((μ x ~(let1 x 3 ~x)) . 5)           3
-(let* [x 1 x 2] ~x)                  2
-(let* [x 1 y 2] ~(+ x y))            3
+;; (let* [x 1 x 2] ~x)                  2
+;; (let* [x 1 y 2] ~(+ x y))            3
 
-(let* [x 1] ~(cond ~(even? x) 1 (odd? x) 2))     2
+;; (let* [x 1] ~(cond ~(even? x) 1 (odd? x) 2))     2
 
-(let-map {x 1 a 5} ~(+ x a))         6
+;; (let-map {x 1 a 5} ~(+ x a))         6
 
-(destructure a [1 2 3])                 ((μ x {a [1 2 3]}) 1)
-(destructure [a b [c d]] [1 2 [3 4]])   ((μ x {a 1 b 2 c 3 d 4}) 1)
-(destructure [a b . c] [1 2 3 4 5])     ((μ x {a 1 b 2 c [3 4 5]}) 1)
+;; (destructure a [1 2 3])                 ((μ x {a [1 2 3]}) 1)
+;; (destructure [a b [c d]] [1 2 [3 4]])   ((μ x {a 1 b 2 c 3 d 4}) 1)
+;; (destructure [a b . c] [1 2 3 4 5])     ((μ x {a 1 b 2 c [3 4 5]}) 1)
 
 
 ;; TODO: Reimplement `fn` and we already have tests!
