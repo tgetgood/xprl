@@ -25,7 +25,7 @@
   (let [e (env/merge-local e f)]
     (cond
       (ast/input? f)  (if (env/bound? e f)
-                        (walk e (env/binding e f))
+                        (walk (env/deresolve e f) (env/binding e f))
                         (ast/immediate f))
       (ast/ref? f)    (:binding f)
       (ast/symbol? f) (ast/immediate f)
@@ -48,7 +48,7 @@
       ;; stack overflow when walking `if`. That might be why if doesn't work,
       ;; but I suspect it's just another bug.
       (ast/application? f) (apply e (walk env (:head f)) (:tail f))
-      (ast/pair? f)        (env/with-env env f)
+      (ast/pair? f)        (ast/pair (walk env (:head f)) (walk env (:tail f)))
       (ast/input? f)       (env/with-env env f)
       (ast/symbolic? f)    (let [sym (ast/symbol f)]
                              (if (env/captured? env sym)

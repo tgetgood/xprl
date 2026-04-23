@@ -46,7 +46,6 @@
 (defn deresolve [env input]
   (let [syms (filter (fn [[k v]] (= v (:id input))) (:captured env))]
     (assert (< (count syms) 2) (vec syms))
-    (-> env
+    (-> (:env input)
         (unbind input)
-
         (uncapture (first (first syms))))))
