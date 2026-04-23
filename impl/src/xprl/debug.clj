@@ -60,9 +60,8 @@
 ;; TODO: Now if I could only reverse these before printing, it would be a lot
 ;; easier to read...
 (defmacro deftracefn [name args & body]
-  (let [state (first args)
-        env   (second args)
-        input (if (= 3 (count args)) (first (rest (rest args))) (into [] (rest (rest args))))]
+  (let [env   (first args)
+        input (if (= 2 (count args)) (second args) (into [] (rest args)))]
     `(defn ~name ~args
        (let [v# (do ~@body)]
          (when *execution-trace*
