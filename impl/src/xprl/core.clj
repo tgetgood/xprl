@@ -35,22 +35,21 @@
   (assoc ccs (ast/xkey :return) cb))
 
 (defn go!
-  ([f] (i/walk {} {} (ast/immediate f)))
-  ([f conts] (sys/run* (c/entry (i/walk {} {} (ast/immediate f)) conts))))
+  ([f] (i/walk {} (ast/immediate f)))
+  ([f conts] (sys/run* (c/entry (i/walk {} (ast/immediate f)) conts))))
 
 (defn evv [s]
   (go! (:form (r/read (r/string-reader s) @the-env))))
 
 (def base-conts
   {(ast/xkey :env)     (env-updater the-env)
-   (ast/xkey :return)  (fn [v] (when (not (nil? v)) (println v)))
+   (ast/xkey :return)  (fn [v] (when (not (nil? v)) (println "=>> " v)))
    (ast/xkey :unbound) #(println "WARNING message on unbound channel:" %)
    (ast/xkey :log)     #(println "LOG:" %)
    (ast/xkey :error)   #(binding [*out* *err*]
                          (println %))})
 (defn ev [s]
-  (go! (:form (r/read (r/string-reader s) @the-env)) base-conts))
-
+  (go! (:form (r/read (r/string-reader s) @the-env)) #_base-conts))
 
 (defn iev [s]
   (ast/inspect (go! (:form (r/read (r/string-reader s) @the-env)))))
@@ -98,8 +97,8 @@
             'EOF
             (do
               (println "Evaluating: " form1)
-              (let [res (go! form1 base-conts)
-                    exp (go! form2 base-conts)]
+              (let [res (go! form1 #_base-conts)
+                    exp (go! form2 #_base-conts)]
                 (println "---")
                 (when (not= res exp)
                   ;; TODO: colour.

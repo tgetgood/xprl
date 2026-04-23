@@ -16,7 +16,7 @@
 
 
 (defn emit! [ctx [state kvs]]
-  (println kvs)
+  ;; (println kvs)
   (assert (every? ast/keyword? (map first kvs)) "Improper emission")
   (clojure.core/apply net ctx (map (fn [kv] {:call sys/send! :args kv}) kvs)))
 
@@ -46,7 +46,7 @@
   μ)
 
 (defn apply-μ [ctx [state μ arg]]
-  (println "apply-μ" μ "to" arg)
+  ;; (println "apply-μ" μ "to" arg)
   ;; (println (keys (:sv-index (:exec μ))))
   ;; (pprint (:exec μ))
   ;; (println (:ctx ctx))

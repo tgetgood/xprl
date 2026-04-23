@@ -7,15 +7,14 @@
    [xprl.ns :as ns]
    [xprl.system :as sys]))
 
-(defmacro extern [[stateform envform argsform] & more]
-  `(fn [state# env# self# args#]
-     (let [args# (if (vector? args#) args# (i/walk state# env# args#))]
+(defmacro extern [[envform argsform] & more]
+  `(fn [env# self# args#]
+     (let [args# (if (vector? args#) args# (i/walk env# args#))]
        (if (vector? args#)
          (let [~argsform args#
-               ~stateform state#
                ~envform env#
                ~argsform (if ~(= :ensure (first more))
-                           (if ~(second more) args# (i/walk state# env# args#))
+                           (if ~(second more) args# (i/walk env# args#))
                            args#)]
            (if (or ~(not= :ensure (first more)) ~(second more))
              ~(last more)
@@ -40,8 +39,8 @@
 
 ;; noops always walk their tail because the effect of a noop is network based,
 ;; not semantic.
-(defn noop [state env self args]
-  (ast/application env self (i/walk state env args)))
+(defn noop [env self args]
+  (ast/application env self (i/walk env args)))
 
 ;;;;; simple primitive fns
 
@@ -49,7 +48,7 @@
   "given an external (clojure) function, returns an applicative wrapper to call
   it from xprl."
   [f]
-  (extern [_ env tail]
+  (extern [env tail]
     :ensure (not (ast/incomplete? tail))
     (try
         (apply f tail)
@@ -107,23 +106,23 @@
 ;; of that vector can't yet be computed. It would be correct to wait until they
 ;; were, but this prunes a lot of unecessary work and is (I think) worth the
 ;; complexity.
-(defextern nth* [_ _ [x i]]
+(defextern nth* [_ [x i]]
   :ensure (and (vector? x) (int? i))
   (nth x (dec i)))
 
-(defextern first* [_ _ [x]]
+(defextern first* [_ [x]]
   :ensure (ast/coll? x)
   (first x))
 
-(defextern rest* [_ _ [x]]
+(defextern rest* [_ [x]]
   :ensure (ast/coll? x)
   (into [] (rest x)))
 
-(defextern count* [_ _ [x]]
+(defextern count* [_ [x]]
   :ensure (ast/coll? x)
   (count x))
 
-(defextern empty?* [_ _ [x]]
+(defextern empty?* [_ [x]]
   :ensure (ast/coll? x)
   (boolean (empty? x)))
 
@@ -135,15 +134,15 @@
            (i/walk state env)
            (sys/try-emissions! state env))))
 
-(defextern with-channels [state env [ctx body]]
+#_(defextern with-channels [state env [ctx body]]
   :ensure (ast/map? ctx)
   (i/walk state (env/merge-ctx env ctx) body))
 
-(defextern μ [s e [param body]]
+(defextern μ [e [param body]]
   :ensure (ast/symbolic? param)
   (let [id    (gensym "μ-param-")
         param (ast/symbol param)]
-    (ast/μ e id param (i/walk (assoc s :μ? true) (env/capture e param id) body))))
+    (ast/μ e id param (i/walk (env/capture e param id) body))))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]
