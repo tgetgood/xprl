@@ -100,7 +100,7 @@
             (do
               (println "Evaluating: " form1)
               (let [res (go! form1 #_base-conts)
-                    exp (go! form2 #_base-conts)]
+                    exp form2 #_(go! form2 #_base-conts)]
                 (println "---")
                 (when (not= res exp)
                   ;; TODO: colour.

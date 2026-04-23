@@ -50,9 +50,9 @@
 
 ;; (let-map {x 1 a 5} ~(+ x a))         6
 
-;; (destructure a [1 2 3])                 ((μ x {a [1 2 3]}) 1)
-;; (destructure [a b [c d]] [1 2 [3 4]])   ((μ x {a 1 b 2 c 3 d 4}) 1)
-;; (destructure [a b . c] [1 2 3 4 5])     ((μ x {a 1 b 2 c [3 4 5]}) 1)
+;; (destructure a [1 2 3])                 {a [1 2 3]} 1
+;; (destructure [a b [c d]] [1 2 [3 4]])   {a 1 b 2 c 3 d 4} 1
+;; (destructure [a b . c] [1 2 3 4 5])     {a 1 b 2 c [3 4 5]} 1
 
 
 ;; TODO: Reimplement `fn` and we already have tests!
