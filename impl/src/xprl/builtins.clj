@@ -19,7 +19,7 @@
            (if (or ~(not= :ensure (first more)) ~(second more))
              ~(last more)
              (if (ast/incomplete? ~argsform)
-               (ast/application env# self# ~argsform)
+               (ast/application self# ~argsform)
                (throw (RuntimeException.
                        (str "Invalid args passed to " (:name self#)
                             ".\nExpected: "
@@ -32,7 +32,7 @@
                                       (map (comp ast/symbol name) argsform)
                                       `~argsform))
                               true (str argsform " : " `~argsform))))))))
-         (ast/application env# self# args#)))))
+         (ast/application self# args#)))))
 
 (defmacro defextern [mac args & more]
   `(def ~mac (extern ~args ~@more)))
@@ -40,7 +40,7 @@
 ;; noops always walk their tail because the effect of a noop is network based,
 ;; not semantic.
 (defn noop [env self args]
-  (ast/application env self (i/walk env args)))
+  (ast/application self (i/walk env args)))
 
 ;;;;; simple primitive fns
 

@@ -44,10 +44,7 @@
   (let [env (env/merge-local e f)]
     (cond
       (ast/immediate? f)   (eval env (walk env (:form f)))
-      ;; TODO: Smoking gun: switching `e` to `env` in `apply` below causes a
-      ;; stack overflow when walking `if`. That might be why if doesn't work,
-      ;; but I suspect it's just another bug.
-      (ast/application? f) (apply e (walk env (:head f)) (:tail f))
+      (ast/application? f) (apply env (walk env (:head f)) (:tail f))
       (ast/pair? f)        (ast/pair (walk env (:head f)) (walk env (:tail f)))
       (ast/input? f)       (env/with-env env f)
       (ast/symbolic? f)    (let [sym (ast/symbol f)]

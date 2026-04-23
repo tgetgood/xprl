@@ -189,8 +189,7 @@
   (instance? Immediate x))
 
 
-(defrecord Application [env head tail]
-  Env
+(defrecord Application [head tail]
   Object
   (toString [_]
     (str "#" (str (pair head tail)))
@@ -198,9 +197,8 @@
       (str "|" (first tail) "|_" (last tail))
       (str "#" (str (pair head tail))))))
 
-(defn application
-  ([head tail] (application {} head tail))
-  ([env head tail] (->Application env head tail)))
+(defn application [head tail]
+  (->Application head tail))
 
 (defn application? [x]
   (instance? Application x))
