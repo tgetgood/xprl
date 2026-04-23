@@ -23,15 +23,13 @@
 
 (deftracefn resolve [s e f]
   (let [e (env/merge-local e f)]
-    (if (:inhibit? s)
-      (ast/immediate f)
-      (cond
-        (ast/input? f)  (if (env/bound? e f)
-                          (walk s e (env/binding e f))
-                          (ast/immediate f))
-        (ast/ref? f)    (:binding f)
-        (ast/symbol? f) (ast/immediate f)
-        true            (assert false "unreachable!!")))))
+    (cond
+      (ast/input? f)  (if (env/bound? e f)
+                        (walk s e (env/binding e f))
+                        (ast/immediate f))
+      (ast/ref? f)    (:binding f)
+      (ast/symbol? f) (ast/immediate f)
+      true            (assert false "unreachable!!"))))
 
 (deftracefn eval [s e f]
   (let [e (env/merge-local e f)]
@@ -54,6 +52,5 @@
                                (ast/input {} sym (env/capid env sym))
                                f))
       (ast/coll? f)        (into (ast/empty f) (map (partial walk s e)) f)
-      (ast/emission? f)    (sys/try-emissions! s e (walk s e (:kvs f)))
       (ast/μ? f)           (update f :body #(walk (assoc s :μ? true) env %))
       true                 f)))

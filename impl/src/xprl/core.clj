@@ -63,7 +63,7 @@
         (if (= :eof form)
           'EOF
           (do
-            (go! (ast/emission [[(ast/xkey :return) (ast/immediate form)]]) conts)
+            (go! form conts)
             (recur reader))))))
   envatom)
 

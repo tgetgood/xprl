@@ -38,10 +38,12 @@
 (defmacro defextern [mac args & more]
   `(def ~mac (extern ~args ~@more)))
 
-;;;;; simple primitive fns
-
+;; noops always walk their tail because the effect of a noop is network based,
+;; not semantic.
 (defn noop [state env self args]
-  (ast/application env self args))
+  (ast/application env self (i/walk state env args)))
+
+;;;;; simple primitive fns
 
 (defn call-primitive-fn
   "given an external (clojure) function, returns an applicative wrapper to call
@@ -151,14 +153,14 @@
   "things that would traditionally be special forms."
   (macros
    {"μ"             μ
-    "emit"          emit
-    "with-channels" with-channels
     "nth*"          nth*
     "first*"        first*
     "rest*"         rest*
     "count*"        count*
     "empty?*"       empty?*
     ;; TODO: These need runtime impls.
+    "emit"          noop
+    "with-channels" noop
     "pipe"          noop
     "net"           noop}))
 
