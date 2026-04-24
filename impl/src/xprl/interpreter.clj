@@ -7,17 +7,15 @@
 
 (declare walk)
 
-(deftracefn apply [e head tail]
+(deftracefn apply [env head tail]
   (cond
-    (ast/μ? head) (let [args (env/with-env (env/merge-local e tail) tail)]
-                    (walk (-> e
-                              (env/merge-local head)
-                              (env/uncapture (:param head))
-                              (env/bind (:id head) args))
-                          (:body head)))
+    (ast/μ? head) (walk (-> env
+                            (env/uncapture (:param head))
+                            (env/bind (:id head) tail))
+                        (:body head))
 
-    (ast/external? head)   (ast/call e head tail)
-    (ast/incomplete? head) (ast/application head (walk e tail))
+    (ast/external? head)   (ast/call env head tail)
+    (ast/incomplete? head) (ast/application head (walk env tail))
 
     true (throw (RuntimeException. (str head " is not applicable!")))))
 
