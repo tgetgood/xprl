@@ -67,9 +67,11 @@
            replay))))
 
 (defn call-extern [ctx [state f tail]]
-  (if-let [v (get overrides f)]
-    (v ctx state tail)
-    (throw (RuntimeException. (str "unimplemented runtime call: " f)))))
+  (if (= (:fn f) builtins/noop)
+    (if-let [v (get overrides f)]
+      (v ctx state tail)
+      (throw (RuntimeException. (str "unimplemented runtime call: " f))))
+    (return ctx (ast/call state f tail))))
 
 (defn apply [ctx [state head tail]]
   ;; (println "applying" head tail state)
