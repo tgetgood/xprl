@@ -145,7 +145,7 @@
   :ensure (ast/symbolic? param)
   (let [id    (gensym "μ-param-")
         param (ast/symbol param)]
-    (ast/μ e id param (i/walk (env/capture e param id) body))))
+    (ast/μ id param (i/walk (env/capture e param id) body))))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]

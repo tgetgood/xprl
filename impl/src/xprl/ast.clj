@@ -160,8 +160,7 @@
   (or (list? x) (map? x) (set? x)))
 
 
-(defrecord Pair [env head tail]
-  Env
+(defrecord Pair [head tail]
   Object
   (toString [_]
     (str "(" (str head) " "
@@ -170,9 +169,8 @@
            (str ". " (str tail)))
          ")")))
 
-(defn pair
-  ([head tail] (pair {} head tail))
-  ([env head tail] (->Pair env head tail)))
+(defn pair [head tail]
+  (->Pair head tail))
 
 (defn pair? [x]
   (instance? Pair x))
@@ -204,15 +202,14 @@
   (instance? Application x))
 
 
-(defrecord Mu [env id param body]
-  Env
+(defrecord Mu [id param body]
   Object
   (toString [_]
     (str "(#μ " param " " body ")")))
 
-(defn μ [env id param body]
+(defn μ [id param body]
   (assert (symbol? param))
-  (->Mu env id param body))
+  (->Mu id param body))
 
 (defn μ? [x]
   (instance? Mu x))
