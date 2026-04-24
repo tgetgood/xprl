@@ -52,5 +52,7 @@
                                (ast/input {} sym (env/capid env sym))
                                f))
       (ast/coll? f)        (into (ast/empty f) (map (partial walk env)) f)
-      (ast/μ? f)           (update f :body #(walk env %))
+      ;; We don't want outer arguments to effect inner calls during recursion!
+      ;; REVIEW: Is this a real problem, or am I chasing ghosts?
+      (ast/μ? f)           (update f :body #(walk (env/unbind env f) %))
       true                 f)))
