@@ -51,13 +51,13 @@
 (let* [x 1 x 2] ~x)                  2
 (let* [x 1 y 2] ~(+ x y))            3
 
-;; (let* [x 1] ~(cond ~(even? x) 1 (odd? x) 2))     2
+(let* [x 1] ~(cond ~(even? x) 1 (odd? x) 2))     2
 
-;; (let-map {x 1 a 5} ~(+ x a))         6
+(let-map {x 1 a 5} ~(+ x a))         6
 
-;; (destructure a [1 2 3])                 {a [1 2 3]} 1
-;; (destructure [a b [c d]] [1 2 [3 4]])   {a 1 b 2 c 3 d 4} 1
-;; (destructure [a b . c] [1 2 3 4 5])     {a 1 b 2 c [3 4 5]} 1
+(destructure a [1 2 3])                 {a [1 2 3]}
+(destructure [a b [c d]] [1 2 [3 4]])   {a 1 b 2 c 3 d 4}
+(destructure [a b . c] [1 2 3 4 5])     {a 1 b 2 c [3 4 5]}
 
 
 ;; TODO: Reimplement `fn` and we already have tests!
