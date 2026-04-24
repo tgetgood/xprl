@@ -7,40 +7,50 @@
    [xprl.ns :as ns]
    [xprl.system :as sys]))
 
-(defmacro extern [[envform argsform] & more]
-  `(fn [env# self# args#]
-     (let [args# (if (vector? args#) args# (i/walk env# args#))]
-       (if (vector? args#)
-         (let [~argsform args#
-               ~envform env#
-               ~argsform (if ~(= :ensure (first more))
-                           (if ~(second more) args# (i/walk env# args#))
-                           args#)]
-           (if (or ~(not= :ensure (first more)) ~(second more))
-             ~(last more)
-             (if (ast/incomplete? ~argsform)
-               (ast/application self# ~argsform)
-               (throw (RuntimeException.
-                       (str "Invalid args passed to " (:name self#)
-                            ".\nExpected: "
-                            ~(str (second more)) "\nReceived: "
-                            ~(cond
-                              (symbol? argsform) {(name argsform) `~argsform}
-                              (vector? argsform)
-                              (apply hash-map
-                                     (interleave
-                                      (map (comp ast/symbol name) argsform)
-                                      `~argsform))
-                              true (str argsform " : " `~argsform))))))))
-         (ast/application self# args#)))))
-
-(defmacro defextern [mac args & more]
-  `(def ~mac (extern ~args ~@more)))
-
 ;; noops always walk their tail because the effect of a noop is network based,
 ;; not semantic.
 (defn noop [env self args]
   (ast/application self (i/walk env args)))
+
+(defmacro extern [[envform argsform] & more]
+  `(fn [env# self# args#]
+     (try
+       (let [args# (if (vector? args#) args# (i/walk env# args#))]
+         (if (vector? args#)
+           (let [~argsform args#
+                 ~envform env#
+                 ~argsform (if ~(= :ensure (first more))
+                             (if ~(second more) args# (i/walk env# args#))
+                             args#)]
+             (if (or ~(not= :ensure (first more)) ~(second more))
+               ~(last more)
+               (if (ast/incomplete? ~argsform)
+                 (ast/application self# ~argsform)
+                 (throw (RuntimeException.
+                         (str "Invalid args passed to " (:name self#)
+                              ".\nExpected: "
+                              ~(str (second more)) "\nReceived: "
+                              ~(cond
+                                 (symbol? argsform) {(name argsform) `~argsform}
+                                 (vector? argsform)
+                                 (apply hash-map
+                                        (interleave
+                                         (map (comp ast/symbol name) argsform)
+                                         `~argsform))
+                                 true (str argsform " : " `~argsform))))))))
+           (ast/application self# args#)))
+       (catch Throwable e#
+         (debug/trace!
+            (with-out-str
+              (binding [ast/*verbose* true]
+                (ast/inspect (ast/application self# args#)))))
+         (let [msg# (str e# ":\n" (.getMessage e#) "\n" self# " " args#)]
+           (ast/application (ast/extern (ast/symbol "emit") noop)
+                            [[(ast/xkey :error) msg#]]))))))
+
+
+(defmacro defextern [mac args & more]
+  `(def ~mac (extern ~args ~@more)))
 
 ;;;;; simple primitive fns
 
@@ -50,14 +60,7 @@
   [f]
   (extern [env tail]
     :ensure (not (ast/incomplete? tail))
-    (try
-        (apply f tail)
-        (catch Exception e
-          (reset! debug/*pfn {:f f :args tail :e e})
-          (binding [ast/*verbose* true]
-            (ast/inspect (ast/application f tail)))
-          (println e)
-          :error))))
+    (apply f tail)))
 
 (defn primitive [n f]
   (ast/extern n (call-primitive-fn f)))
