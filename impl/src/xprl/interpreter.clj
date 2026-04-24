@@ -25,7 +25,7 @@
   (let [e (env/merge-local e f)]
     (cond
       (ast/input? f)  (if (env/bound? e f)
-                        (walk (env/deresolve e f) (env/binding e f))
+                        (walk (env/deresolve f) (env/binding e f))
                         (ast/immediate f))
       (ast/ref? f)    (:binding f)
       (ast/symbol? f) (ast/immediate f)

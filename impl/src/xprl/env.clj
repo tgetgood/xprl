@@ -43,9 +43,12 @@
 (defn uncapture [s sym]
   (update s :captured dissoc sym))
 
-(defn deresolve [env input]
-  (let [syms (filter (fn [[k v]] (= v (:id input))) (:captured env))]
-    (assert (< (count syms) 2) (vec syms))
-    (-> (:env input)
-        (unbind input)
-        (uncapture (first (first syms))))))
+(defn deresolve [{:keys [env id sym] :as input}]
+  (let [env (unbind env input)]
+    ;; REVIEW: Does this really cause bugs? I'm not sure.
+    ;; It certainly comes up. And if the value to which an input is bound were
+    ;; to become captured by that same input, that would be nonsensical, so
+    ;; guarding isn't crazy.
+    (if (and (captured? env sym) (= id (capid env sym)))
+      (uncapture env sym)
+     env)))
