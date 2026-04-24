@@ -21,24 +21,23 @@
 
     true (throw (RuntimeException. (str head " is not applicable!")))))
 
-(deftracefn resolve [e f]
-  (let [e (env/merge-local e f)]
-    (cond
-      (ast/input? f)  (if (env/bound? e f)
-                        (walk (env/deresolve f) (env/binding e f))
-                        (ast/immediate f))
-      (ast/ref? f)    (:binding f)
-      (ast/symbol? f) (ast/immediate f)
-      true            (assert false "unreachable!!"))))
+(deftracefn resolve [env f]
+  (cond
+    (ast/input? f) (let [env (env/merge-local env f)]
+                     (if (env/bound? env f)
+                       (walk (env/deresolve f) (env/binding env f))
+                       (ast/immediate f)))
+    (ast/ref? f)    (:binding f)
+    (ast/symbol? f) (ast/immediate f)
+    true            (assert false "unreachable!!")))
 
-(deftracefn eval [e f]
-  (let [e (env/merge-local e f)]
-    (cond
-      (ast/coll? f)       (into (ast/empty f) (map #(walk e (ast/immediate %))) f)
-      (ast/pair? f)       (apply e (walk e (ast/immediate (:head f))) (:tail f))
-      (ast/symbolic? f)   (resolve e f)
-      (ast/incomplete? f) (ast/immediate f)
-      true                f)))
+(deftracefn eval [env f]
+  (cond
+    (ast/coll? f)       (into (ast/empty f) (map #(walk env (ast/immediate %))) f)
+    (ast/pair? f)       (apply env (walk env (ast/immediate (:head f))) (:tail f))
+    (ast/symbolic? f)   (resolve env f)
+    (ast/incomplete? f) (ast/immediate f)
+    true                f))
 
 (deftracefn walk [e f]
   (let [env (env/merge-local e f)]
@@ -46,7 +45,7 @@
       (ast/immediate? f)   (eval env (walk env (:form f)))
       (ast/application? f) (apply env (walk env (:head f)) (:tail f))
       (ast/pair? f)        (ast/pair (walk env (:head f)) (walk env (:tail f)))
-      (ast/input? f)       (env/with-env env f)
+      (ast/input? f)       (if (env/bound? env f) (env/with-env env f) f)
       (ast/symbolic? f)    (let [sym (ast/symbol f)]
                              (if (env/captured? env sym)
                                (ast/input {} sym (env/capid env sym))
