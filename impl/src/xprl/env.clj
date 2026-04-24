@@ -18,7 +18,7 @@
 
 (defn bind [env id val]
   (-> env
-      (assoc-in [:bindings id] val)))
+      (assoc-in [:bindings id] [env val])))
 
 (defn bound? [env input]
   (contains? (:bindings env) (:id input)))
