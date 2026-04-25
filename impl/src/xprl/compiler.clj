@@ -14,8 +14,7 @@
 
 (declare walk)
 
-
-(defn emit! [ctx [state kvs]]
+(defn emit! [ctx kvs]
   ;; (println kvs)
   (assert (every? ast/keyword? (map first kvs)) "Improper emission")
   (clojure.core/apply net ctx (map (fn [kv] {:call sys/send! :args kv}) kvs)))
@@ -23,15 +22,10 @@
 (def overrides
   (reduce (fn [acc [k v]] (assoc acc (get builtins/base-env (ast/symbol k)) v))
           {}
-          {"emit" (fn [ctx state tail]
-                    (let [sync (ast/sv "emit")]
-                      (net ctx
-                        {:call walk
-                         :ctx  {ret sync}
-                         :args [state tail]}
-                        {:call emit!
-                         :args [state sync]})))}))
-
+          {"emit" (fn [ctx _ tail]
+                    (emit! ctx tail))
+           "net"  (fn [ctx state tail]
+                    (net ctx tail))}))
 
 (defn resolve [ctx [state form]]
   ;; (println (type form) form)
