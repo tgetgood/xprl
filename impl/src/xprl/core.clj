@@ -49,7 +49,10 @@
    (ast/xkey :error)   #(binding [*out* *err*]
                          (println %))})
 (defn ev [s]
-  (go! (:form (r/read (r/string-reader s) @the-env)) #_base-conts))
+  (go! (:form (r/read (r/string-reader s) @the-env))))
+
+(defn ev! [s]
+  (go! (:form (r/read (r/string-reader s) @the-env)) base-conts))
 
 (defn iev [s]
   (ast/inspect (go! (:form (r/read (r/string-reader s) @the-env)))))

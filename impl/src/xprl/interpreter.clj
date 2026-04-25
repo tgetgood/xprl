@@ -48,7 +48,7 @@
                            ;; becomes important. But if it isn't bound yet, then
                            ;; the env can't effect anything it might later be
                            ;; bound to, can it?
-                           ;; REVIEW:
+                           ;; REVIEW: I'm not so sure.
                            (if (env/bound? env f) (env/with-env env f) f))
     (ast/symbolic? f)    (let [sym (ast/symbol f)]
                            (if (env/captured? env sym)

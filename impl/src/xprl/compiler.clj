@@ -19,13 +19,18 @@
   (assert (every? ast/keyword? (map first kvs)) "Improper emission")
   (clojure.core/apply net ctx (map (fn [kv] {:call sys/send! :args kv}) kvs)))
 
+(defn net! [ctx tail]
+  (clojure.core/apply
+   net ctx
+   (map (fn [form] {:call walk :args [{} form]}) tail)))
+
 (def overrides
   (reduce (fn [acc [k v]] (assoc acc (get builtins/base-env (ast/symbol k)) v))
           {}
           {"emit" (fn [ctx _ tail]
                     (emit! ctx tail))
            "net"  (fn [ctx state tail]
-                    (net ctx tail))}))
+                    (net! ctx tail))}))
 
 (defn resolve [ctx [state form]]
   ;; (println (type form) form)
@@ -35,17 +40,12 @@
     (ast/symbolic? form) (throw (RuntimeException. (str "unbound symbol: " form)))
     true                 (assert false "unreachable!!")))
 
-;; TODO: Each invocation of a μ needs its own set of "storage locations" (svs).
-(defn uniquify [μ]
-  μ)
-
 (defn apply-μ [ctx [state μ arg]]
   ;; (println "apply-μ" μ "to" arg)
   ;; (println (keys (:sv-index (:exec μ))))
   ;; (pprint (:exec μ))
   ;; (println (:ctx ctx))
-  (let [μ      (uniquify μ)
-        input  (:id μ)
+  (let [input  (:id μ)
         replay (select-keys (:sv-cache ctx) (keys (:sv-index (:exec μ))))]
     (clojure.core/apply
      net (sys/merge-ctx ctx (:exec μ))
