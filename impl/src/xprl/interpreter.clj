@@ -21,11 +21,11 @@
 
 (deftracefn resolve [env f]
   (cond
-    (ast/input? f) (let [env (env/merge-local env f)]
-                     (if (env/bound? env f)
-                       (let [[env val] (env/binding env f)]
-                         (walk (env/merge-local env f) val))
-                       (ast/immediate f)))
+    (ast/input? f)  (let [env (env/merge-local env f)]
+                      (if (env/bound? env f)
+                        (let [[env val] (env/binding env f)]
+                          (walk (env/merge-envs (:env f) env) val))
+                        (ast/immediate f)))
     (ast/ref? f)    (:binding f)
     (ast/symbol? f) (ast/immediate f)
     true            (assert false "unreachable!!")))
@@ -43,7 +43,13 @@
     (ast/immediate? f)   (eval env (walk env (:form f)))
     (ast/application? f) (apply env (walk env (:head f)) (:tail f))
     (ast/pair? f)        (ast/pair (walk env (:head f)) (walk env (:tail f)))
-    (ast/input? f)       (env/with-env (env/merge-local env f) f)
+    (ast/input? f)       (let [env (env/merge-local env f)]
+                           ;; Once a parameter is bound, the surrounding env
+                           ;; becomes important. But if it isn't bound yet, then
+                           ;; the env can't effect anything it might later be
+                           ;; bound to, can it?
+                           ;; REVIEW:
+                           (if (env/bound? env f) (env/with-env env f) f))
     (ast/symbolic? f)    (let [sym (ast/symbol f)]
                            (if (env/captured? env sym)
                              (ast/input {} sym (env/capid env sym))
