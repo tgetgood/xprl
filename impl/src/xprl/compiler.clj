@@ -77,6 +77,8 @@
                                 :args [state tail]}
                                {:call apply-μ
                                 :args [state head sync]}))
+    (ast/recurser? head)   (net ctx {:call apply-μ
+                                     :args [state (:μ head) tail]})
     (ast/external? head)   (net ctx {:call call-extern
                                      :args [state head tail]})
 

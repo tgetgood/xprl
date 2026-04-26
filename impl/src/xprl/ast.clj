@@ -214,6 +214,24 @@
 (defn μ? [x]
   (instance? Mu x))
 
+(defn named-μ? [μ]
+  false)
+
+(defn μ-name [μ]
+  (throw (RuntimeException. "not implemented")))
+
+
+(defrecord Recurrence [μ]
+  Object
+  (toString [_]
+    (str (symbol "recur"))))
+
+(defn recurser [μ]
+  (->Recurrence μ))
+
+(defn recurser? [x]
+  (instance? Recurrence x))
+
 
 (defrecord Extern [name fn]
   Object

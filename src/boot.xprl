@@ -23,10 +23,6 @@
 (def empty? (wrap . empty?*))
 (def merge (wrap . merge*))
 
-(def let1
-  (μ x
-     ~((μ ~(nth* ~x 1) ~(nth* ~x 3)) . ~(nth* ~x 2))))
-
 ;;;;; branching
 
 (def if* ; previously `select`.
@@ -53,10 +49,21 @@
 
 ;;;;; Simple recursion
 
+(def let1
+  (μ x
+     ~((μ ~(nth* ~x 1) ~(nth* ~x 3)) . ~(nth* ~x 2))))
+
 ;; (def sc
 ;;   (μ f
 ;;      ~(μ x
 ;;          ~((~f . ~~f) . ~x))))
+
+;; (def defrec
+;;   (μ x
+;;      ~(def ~(nth* ~x 1)
+;;         (sc . ~(μ ~(nth* ~x 1)
+;;                   ~(let1 ~(nth* ~x 1) ~(sc . ~(nth* ~x 1))
+;;                          ~~(nth* ~x 2)))))))
 
 ;; (def rec
 ;;   (μ g
@@ -78,12 +85,13 @@
 ;;      ~(def ~(nth* ~x 1)
 ;;         (Y . ~(μ ~(nth* ~x 1) ~~(nth* ~x 2))))))
 
-;; (defrec !
-;;   (μ x
-;;      ~(if (<* ~(nth* ~x 1) 2)
-;;          1
-;;          (** ~(nth* ~x 1) ~(! ~(-* ~(nth* ~x 1) 1))))))
+(def !
+  (μ x
+     ~(if (<* ~(nth* ~x 1) 2)
+         1
+         (** ~(nth* ~x 1) ~(recur ~(-* ~(nth* ~x 1) 1))))))
 
+(! 3)
 ;; (defrec cond
 ;;   (μ body
 ;;      ~(when (<* 1 ~(count* ~body))

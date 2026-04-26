@@ -11,11 +11,15 @@
   (cond
     (ast/μ? head) (walk (-> env
                             (env/uncapture (:param head))
+                            (env/bind (:recur head) (ast/recurser head))
                             (env/bind (:id head) tail))
                         (:body head))
 
     (ast/external? head)   (ast/call env head tail)
     (ast/incomplete? head) (ast/application head (walk env tail))
+    ;; REVIEW: should we walk the tail in recursers? Will that break things like
+    ;; let?
+    (ast/recurser? head)   (ast/application head (walk env tail))
 
     true (throw (RuntimeException. (str head " is not applicable!")))))
 
