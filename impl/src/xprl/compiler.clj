@@ -25,12 +25,10 @@
    (map (fn [form] {:call walk :args [{} form]}) tail)))
 
 (def overrides
-  (reduce (fn [acc [k v]] (assoc acc (get builtins/base-env (ast/symbol k)) v))
-          {}
-          {"emit" (fn [ctx _ tail]
-                    (emit! ctx tail))
-           "net"  (fn [ctx state tail]
-                    (net! ctx tail))}))
+  {"emit" (fn [ctx _ tail]
+            (emit! ctx tail))
+   "net"  (fn [ctx state tail]
+            (net! ctx tail))})
 
 (defn resolve [ctx [state form]]
   ;; (println (type form) form)
@@ -62,8 +60,8 @@
 
 (defn call-extern [ctx [state f tail]]
   (if (= (:fn f) builtins/noop)
-    (if-let [v (get overrides f)]
-      (v ctx state tail)
+    (if (contains? overrides (:name f))
+      ((get overrides (:name f)) ctx state tail)
       (throw (RuntimeException. (str "unimplemented runtime call: " f))))
     (return ctx (ast/call state f tail))))
 
