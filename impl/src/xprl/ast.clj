@@ -202,14 +202,15 @@
   (instance? Application x))
 
 
-(defrecord Mu [id recid name param body]
+(defrecord Mu [id rec name param body]
   Object
   (toString [_]
     (str "(#μ " param " " body ")")))
 
-(defn μ [id recid name param body]
+(defn μ [id rec name param body]
   (assert (symbol? param))
-  (->Mu id param body))
+  (assert (or (nil? name) (symbol name)))
+  (->Mu id rec name param body))
 
 (defn μ? [x]
   (instance? Mu x))
@@ -218,7 +219,7 @@
 (defrecord Recurrence [μ]
   Object
   (toString [_]
-    (str (symbol "recur"))))
+    (str (:name μ))))
 
 (defn recurser [μ]
   (->Recurrence μ))

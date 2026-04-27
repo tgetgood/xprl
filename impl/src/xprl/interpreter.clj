@@ -9,13 +9,10 @@
 
 (deftracefn apply [env head tail]
   (cond
-    (ast/μ? head) (let [rec (ast/recurser head)
-                        env (-> env
+    (ast/μ? head) (let [env (-> env
                                 (env/uncapture (:param head))
-                                (env/bind (:id head) tail))
-                        env (if-let [name (:name head)]
-                              (env/bind env (:name head) rec)
-                              env)]
+                                (env/bind (:id head) tail)
+                                (env/bind (:rec head) (ast/recurser head)))]
                     (walk env (:body head)))
 
     (ast/external? head)   (ast/call env head tail)
