@@ -1,7 +1,3 @@
- ;; REVIEW: I know this is throwaway code, but it's really bad, even for that.
-;; I'm not going to be able to read this in a week, let alone debug it.
-;;
-;; But at least it's out of my head and on paper...
 (ns xprl.compiler
   (:refer-clojure :exclude [resolve eval apply])
   (:require [clojure.pprint :refer [pprint]]
@@ -15,7 +11,6 @@
 (declare walk)
 
 (defn emit! [ctx kvs]
-  ;; (println kvs)
   (assert (every? ast/keyword? (map first kvs)) "Improper emission")
   (clojure.core/apply net ctx (map (fn [kv] {:call sys/send! :args kv}) kvs)))
 
@@ -31,7 +26,6 @@
             (net! ctx tail))})
 
 (defn resolve [ctx [state form]]
-  ;; (println (type form) form)
   (cond
     (ast/input? form)    (return ctx (:id form))
     (ast/ref? form)      (return ctx (:binding form))
@@ -39,10 +33,6 @@
     true                 (assert false "unreachable!!")))
 
 (defn apply-μ [ctx [state μ arg]]
-  ;; (println "apply-μ" μ "to" arg)
-  ;; (println (keys (:sv-index (:exec μ))))
-  ;; (pprint (:exec μ))
-  ;; (println (:ctx ctx))
   (let [input  (:id μ)
         replay (select-keys (:sv-cache ctx) (keys (:sv-index (:exec μ))))]
     (clojure.core/apply
@@ -66,7 +56,6 @@
     (return ctx (ast/call state f tail))))
 
 (defn apply [ctx [state head tail]]
-  ;; (println "applying" head tail state)
   (cond
     (ast/μ? head)          (let [sync (ast/sv "apply-μ?")]
                              (net ctx
@@ -99,8 +88,6 @@
     true                 (return ctx form)))
 
 (defn walk [ctx [state form]]
-  ;; (println "walking" form "with" state "in" )
-  ;; (pprint ctx)
   (cond
     (ast/immediate? form)   (let [sync (ast/sv "walk-immediate")]
                               (net ctx
