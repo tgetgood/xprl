@@ -45,8 +45,7 @@
               (binding [ast/*verbose* true]
                 (ast/inspect (ast/application self# args#)))))
          (let [msg# (str e# ":\n" (.getMessage e#) "\n" self# " " args#)]
-           (ast/application (ast/extern (ast/symbol "emit") noop)
-                            [[(ast/xkey :error) msg#]]))))))
+           (ast/application (ast/extern "emit" noop) [[(ast/xkey :error) msg#]]))))))
 
 
 (defmacro defextern [mac args & more]
