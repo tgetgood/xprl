@@ -141,13 +141,16 @@
   :ensure (ast/map? ctx)
   (i/walk state (env/merge-ctx env ctx) body))
 
-(defextern μ [env [param body]]
-  :ensure (ast/symbolic? param)
-  (let [id    (gensym "μ-param-")
+(defextern μ [env args]
+  :ensure (and (ast/symbolic? (first args))
+               (if (= 3 (count args)) (ast/symbolic? (second args)) true))
+  (let [[name param body] (if (= 3 (count args)) args (into [nil] args))
+        id    (gensym "μ-param-")
         recid (gensym "μ-recur-")
         param (ast/symbol param)
-        env (-> env (env/capture (ast/symbol "recur") recid) (env/capture param id))]
-    (assoc (ast/μ id param (i/walk env body)) :recur recid)))
+        env (env/capture env param id)
+        env (if (nil? name) env (env/capture env name recid))]
+    (ast/μ id recid name param (i/walk env body))))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]

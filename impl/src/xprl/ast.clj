@@ -202,23 +202,17 @@
   (instance? Application x))
 
 
-(defrecord Mu [id param body]
+(defrecord Mu [id recid name param body]
   Object
   (toString [_]
     (str "(#μ " param " " body ")")))
 
-(defn μ [id param body]
+(defn μ [id recid name param body]
   (assert (symbol? param))
   (->Mu id param body))
 
 (defn μ? [x]
   (instance? Mu x))
-
-(defn named-μ? [μ]
-  false)
-
-(defn μ-name [μ]
-  (throw (RuntimeException. "not implemented")))
 
 
 (defrecord Recurrence [μ]
