@@ -17,9 +17,7 @@
 
     (ast/external? head)   (ast/call env head tail)
     (ast/incomplete? head) (ast/application head (walk env tail))
-    ;; REVIEW: should we walk the tail in recursers? Will that break things like
-    ;; let?
-    (ast/recurser? head)   (ast/application head (walk env tail))
+    (ast/recurser? head)   (ast/application head tail)
 
     true (throw (RuntimeException. (str head " is not applicable!")))))
 
