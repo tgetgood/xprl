@@ -1,11 +1,13 @@
 (ns xprl.builtins
   (:require
    [xprl.ast :as ast]
+   [xprl.compiler :as c]
    [xprl.debug :as debug]
    [xprl.env :as env]
    [xprl.interpreter :as i]
    [xprl.ns :as ns]
    [xprl.system :as sys]))
+
 
 ;; noops always walk their tail because the effect of a noop is network based,
 ;; not semantic.
@@ -53,6 +55,24 @@
 
 ;;;;; simple primitive fns
 
+;; Compiled primitives
+
+(defn apply-primitive! [f]
+  (fn [ctx [args]]
+    (assert (vector? args) "Primitives can only operate on vectors of args.")
+    (sys/return ctx (apply f args))))
+
+(defn c-primitive [f]
+  (fn [ctx state head tail]
+    ;; (println "extern" name)
+    (let [sync (ast/sv "primitive-walk-tail")]
+      (sys/net ctx
+           {:call c/walk
+            :ctx {sys/ret sync}
+            :args [state tail]}
+           {:call (apply-primitive! f)
+            :args [sync]}))))
+
 (defn call-primitive-fn
   "given an external (clojure) function, returns an applicative wrapper to call
   it from xprl."
@@ -62,7 +82,7 @@
     (apply f tail)))
 
 (defn primitive [n f]
-  (ast/extern n (call-primitive-fn f)))
+  (ast/extern n {:interpreted (call-primitive-fn f) :compiled (c-primitive f)}))
 
 (defn primitives [m]
   (reduce (fn [acc [k v]] (assoc acc (ast/symbol k) (primitive k v))) {} m))
@@ -128,18 +148,6 @@
   :ensure (ast/coll? x)
   (boolean (empty? x)))
 
-#_(defextern emit [state env kvs]
-  (do (assert (even? (count kvs)))
-      (->> kvs
-           (partition 2)
-           (mapv (fn [[k v]] [(ast/immediate k) v]))
-           (i/walk state env)
-           (sys/try-emissions! state env))))
-
-#_(defextern with-channels [state env [ctx body]]
-  :ensure (ast/map? ctx)
-  (i/walk state (env/merge-ctx env ctx) body))
-
 (defextern μ [env args]
   :ensure (and (ast/symbolic? (first args))
                (if (= 3 (count args)) (ast/symbolic? (second args)) true))
@@ -153,7 +161,7 @@
 
 (defn macros [m]
   (reduce (fn [acc [k f]]
-            (assoc acc (ast/symbol k) (ast/extern k f))) {} m))
+            (assoc acc (ast/symbol k) (ast/extern k {:interpreted f}))) {} m))
 
 (def special
   "things that would traditionally be special forms."
@@ -163,9 +171,25 @@
     "first*"        first*
     "rest*"         rest*
     "count*"        count*
-    "empty?*"       empty?*
-    ;; TODO: These need runtime impls.
-    "emit"          noop
+    "empty?*"       empty?*}))
+
+(defn emit! [ctx _ kvs]
+  (assert (every? ast/keyword? (map first kvs)) "Improper emission")
+  (apply sys/net ctx (map (fn [kv] {:call sys/send! :args kv}) kvs)))
+
+(defn net! [ctx _ tail]
+  (apply sys/net ctx
+   (map (fn [form] {:call c/walk :args [{} form]}) tail)))
+
+
+(defn runtime-impls [m]
+  (reduce (fn [m [k v]]
+            (assoc m (ast/symbol k) (ast/extern k {:interpreted noop :compiled v})))
+          {} m))
+
+(def rt
+  (runtime-impls
+   {"emit"          emit!
     "with-channels" noop
     "pipe"          noop
     "net"           noop}))
@@ -178,4 +202,4 @@
 ;; have no past, no origin. why is bootstrapping so singular like that?
 
 (def base-env
-  (reduce (fn [e [k v]] (ns/ns-intern e k v)) ns/empty-ns (merge special fns)))
+  (reduce (fn [e [k v]] (ns/ns-intern e k v)) ns/empty-ns (merge special fns rt)))

@@ -228,21 +228,21 @@
   (instance? Recurrence x))
 
 
-(defrecord Extern [name fn]
+(defrecord Extern [name fns]
   Object
   (toString [_]
     (str "#F[" name "]")))
 
-(defn extern [name fn]
-  (->Extern name fn))
+(defn extern [name fns]
+  (->Extern name fns))
 
 (defn external? [x]
   (instance? Extern x))
 
 (defn call
   "Invokes primitive `f` with args `t` in `env`."
-  [env f t]
-  ((:fn f) env f t))
+  [switch env f t]
+  ((get (:fns f) switch) env f t))
 
 
 (defrecord Context [chs form]

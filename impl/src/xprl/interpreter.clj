@@ -15,7 +15,7 @@
                                 (env/bind (:rec head) (ast/recurser head)))]
                     (walk env (:body head)))
 
-    (ast/external? head)   (ast/call env head tail)
+    (ast/external? head)   (ast/call :interpreted env head tail)
     (ast/incomplete? head) (ast/application head (walk env tail))
     (ast/recurser? head)   (ast/application head tail)
 
