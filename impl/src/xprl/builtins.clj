@@ -8,46 +8,64 @@
    [xprl.ns :as ns]
    [xprl.system :as sys]))
 
+(declare emit-extern)
 
 ;; noops always walk their tail because the effect of a noop is network based,
 ;; not semantic.
 (defn noop [env self args]
   (ast/application self (i/walk env args)))
 
-(defmacro extern [[envform argsform] & more]
-  `(fn [env# self# args#]
-     (try
-       (let [args# (if (vector? args#) args# (i/walk env# args#))]
-         (if (vector? args#)
-           (let [~argsform args#
-                 ~envform env#
-                 ~argsform (if ~(= :ensure (first more))
-                             (if ~(second more) args# (i/walk env# args#))
-                             args#)]
-             (if (or ~(not= :ensure (first more)) ~(second more))
-               ~(last more)
-               (if (ast/incomplete? ~argsform)
-                 (ast/application self# ~argsform)
-                 (throw (RuntimeException.
-                         (str "Invalid args passed to " (:name self#)
-                              ".\nExpected: "
-                              ~(str (second more)) "\nReceived: "
-                              ~(cond
-                                 (symbol? argsform) {(name argsform) `~argsform}
-                                 (vector? argsform)
-                                 (apply hash-map
-                                        (interleave
-                                         (map (comp ast/symbol name) argsform)
-                                         `~argsform))
-                                 true (str argsform " : " `~argsform))))))))
-           (ast/application self# args#)))
-       (catch Throwable e#
-         (debug/trace!
-            (with-out-str
-              (binding [ast/*verbose* true]
-                (ast/inspect (ast/application self# args#)))))
-         (let [msg# (str e# ":\n" (.getMessage e#) "\n" self# " " args#)]
-           (ast/application (ast/extern "emit" noop) [[(ast/xkey :error) msg#]]))))))
+(defmacro extern [args & kws]
+  (let [kws (apply hash-map kws)]
+    (assert (and (contains? kws :ensure) (contains? kws :return))
+            "structure forms need both :ensure and :return expressions.")
+    `(let [ensure# (fn [& x#] (when (vector? (second x#)) (let [~args x#] ~(:ensure kws))))
+           return# (fn [~@args] ~(:return kws))
+           error#  (fn [head# tail#]
+                     (throw (RuntimeException.
+                             ;; TODO: pass on line and col info from reader.
+                             ;; As is it's long lost by this point...
+                             (str "Type mismatch in " (:name head#)
+                                  "\nExpected: " ~(str (:ensure kws))
+                                  "\nReceived: " '~args " = " tail#))))]
+
+       {:interpreted
+        (fn [env# self# args#]
+          (try
+            (let [args# (if (vector? args#) args# (i/walk env# args#))]
+              (if (vector? args#)
+                (let [args# (if (ensure# env# args#)
+                              args# (i/walk env# args#))]
+                  (if (ensure# env# args#)
+                    (return# env# args#)
+                    (if (ast/incomplete? args#)
+                      (ast/application self# args#)
+                      (error# self# args#))))
+                (ast/application self# args#)))
+            (catch Throwable e#
+              (debug/trace!
+                (with-out-str
+                  (binding [ast/*verbose* true]
+                    (ast/inspect (ast/application self# args#)))))
+              (let [msg# (str e# ":\n" (.getMessage e#) "\n" self# " " args#)]
+                (ast/application emit-extern [[(ast/xkey :error) msg#]])))))
+        :compiled
+        (fn [ctx# state# head# tail#]
+          (let [f2# (fn [ctx# [state# head# tail#]]
+                      (if (ensure# state# tail#)
+                        (sys/return ctx# (return# state# tail#))
+                        (error# head# tail#)))]
+            (if (ensure# state# tail#)
+              (sys/net ctx#
+                {:call f2#
+                 :args [state# head# tail#]})
+              (let [sync# (ast/sv (str "sform-" (:name head#)))]
+                (sys/net ctx#
+                  {:call c/walk
+                   :ctx  {sys/ret sync#}
+                   :args [state# tail#]}
+                  {:call f2#
+                   :args [state# head# sync#]})))))})))
 
 
 (defmacro defextern [mac args & more]
@@ -55,34 +73,16 @@
 
 ;;;;; simple primitive fns
 
-;; Compiled primitives
-
-(defn apply-primitive! [f]
-  (fn [ctx [args]]
-    (assert (vector? args) "Primitives can only operate on vectors of args.")
-    (sys/return ctx (apply f args))))
-
-(defn c-primitive [f]
-  (fn [ctx state head tail]
-    ;; (println "extern" name)
-    (let [sync (ast/sv "primitive-walk-tail")]
-      (sys/net ctx
-           {:call c/walk
-            :ctx {sys/ret sync}
-            :args [state tail]}
-           {:call (apply-primitive! f)
-            :args [sync]}))))
-
 (defn call-primitive-fn
   "given an external (clojure) function, returns an applicative wrapper to call
   it from xprl."
   [f]
-  (extern [env tail]
+  (extern [_ tail]
     :ensure (not (ast/incomplete? tail))
-    (apply f tail)))
+    :return (apply f tail)))
 
 (defn primitive [n f]
-  (ast/extern n {:interpreted (call-primitive-fn f) :compiled (c-primitive f)}))
+  (ast/extern n (call-primitive-fn f)))
 
 (defn primitives [m]
   (reduce (fn [acc [k v]] (assoc acc (ast/symbol k) (primitive k v))) {} m))
@@ -119,8 +119,7 @@
     ;; time we get raw Symbols back is when a μ shadows a Ref with its
     ;; parameter. So when we say `symbol?` in xprl we could mean either. But
     ;; then should they be distinguishable in the language?
-    "symbol?*" ast/symbolic?
-    }))
+    "symbol?*" ast/symbolic?}))
 
 ;;;;; specialish forms
 
@@ -130,38 +129,38 @@
 ;; complexity.
 (defextern nth* [_ [x i]]
   :ensure (and (vector? x) (int? i))
-  (nth x (dec i)))
+  :return (nth x (dec i)))
 
 (defextern first* [_ [x]]
   :ensure (ast/coll? x)
-  (first x))
+  :return (first x))
 
 (defextern rest* [_ [x]]
   :ensure (ast/coll? x)
-  (into [] (rest x)))
+  :return (into [] (rest x)))
 
 (defextern count* [_ [x]]
   :ensure (ast/coll? x)
-  (count x))
+  :return (count x))
 
 (defextern empty?* [_ [x]]
   :ensure (ast/coll? x)
-  (boolean (empty? x)))
+  :return (boolean (empty? x)))
 
 (defextern μ [env args]
   :ensure (and (ast/symbolic? (first args))
                (if (= 3 (count args)) (ast/symbolic? (second args)) true))
-  (let [[name param body] (if (= 3 (count args)) args (into [nil] args))
-        id    (gensym "μ-param-")
-        recid (gensym "μ-recur-")
-        param (ast/symbol param)
-        env (env/capture env param id)
-        env (if (nil? name) env (env/capture env name recid))]
+  :return (let [[name param body] (if (= 3 (count args)) args (into [nil] args))
+                id                (gensym "μ-param-")
+                recid             (gensym "μ-recur-")
+                param             (ast/symbol param)
+                env               (env/capture env param id)
+                env               (if (nil? name) env (env/capture env name recid))]
     (ast/μ id recid name param (i/walk env body))))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]
-            (assoc acc (ast/symbol k) (ast/extern k {:interpreted f}))) {} m))
+            (assoc acc (ast/symbol k) (ast/extern k f))) {} m))
 
 (def special
   "things that would traditionally be special forms."
@@ -173,11 +172,11 @@
     "count*"        count*
     "empty?*"       empty?*}))
 
-(defn emit! [ctx _ kvs]
+(defn emit! [ctx _ _ kvs]
   (assert (every? ast/keyword? (map first kvs)) "Improper emission")
   (apply sys/net ctx (map (fn [kv] {:call sys/send! :args kv}) kvs)))
 
-(defn net! [ctx _ tail]
+(defn net! [ctx _ _ tail]
   (apply sys/net ctx
    (map (fn [form] {:call c/walk :args [{} form]}) tail)))
 
@@ -192,7 +191,9 @@
    {"emit"          emit!
     "with-channels" noop
     "pipe"          noop
-    "net"           noop}))
+    "net"           net!}))
+
+(def emit-extern (get rt (ast/symbol "emit")))
 
 ;;;;; The Ur context from which all programs derive.
 ;;

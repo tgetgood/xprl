@@ -241,9 +241,10 @@
 
 (defn call
   "Invokes primitive `f` with args `t` in `env`."
-  [switch env f t]
-  ((get (:fns f) switch) env f t))
-
+  ([switch env f t]
+   ((get (:fns f) switch) env f t))
+  ([switch ctx state f tail]
+   ((get (:fns f) switch) ctx state f tail)))
 
 (defrecord Context [chs form]
   Object

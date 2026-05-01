@@ -50,7 +50,7 @@
                              {:call apply-μ
                               :args [state head sync]}))
     (ast/external? head) (net ctx {:call (fn [ctx [state head tail]]
-                                           (ast/call :compiled ctx head tail))
+                                           (ast/call :compiled ctx state head tail))
                                    :args [state head tail]})
 
     true (throw (RuntimeException. (str head " is not applicable!")))))
