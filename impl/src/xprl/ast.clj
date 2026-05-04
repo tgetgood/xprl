@@ -202,6 +202,19 @@
   (instance? Application x))
 
 
+(defrecord SelfCall [env head tail]
+  Env
+  Object
+  (toString [_]
+    (str (application head tail))))
+
+(defn selfcall [env head tail]
+  (->SelfCall env head tail))
+
+(defn selfcall? [x]
+  (instance? SelfCall x))
+
+
 (defrecord Mu [id rec name param body]
   Object
   (toString [_]
@@ -536,7 +549,7 @@
 (defn incomplete? [x]
   (if (coll? x)
     (some incomplete? x)
-    (or (input? x) (immediate? x) (application? x))))
+    (or (input? x) (immediate? x) (application? x) (selfcall? x))))
 
 (defn empty
   "Wrapper for clojure.core/empty that returns `[]` given a MapEntry."

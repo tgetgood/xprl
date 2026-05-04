@@ -17,7 +17,8 @@
 
     (ast/external? head)   (ast/call :interpreted env head tail)
     (ast/incomplete? head) (ast/application head (walk env tail))
-    (ast/recurser? head)   (ast/application head tail)
+    ;; FIXME: Since we're not walking the tail, we need to store the env with it.
+    (ast/recurser? head)   (ast/selfcall env head tail)
 
     true (throw (RuntimeException. (str head " is not applicable!")))))
 
