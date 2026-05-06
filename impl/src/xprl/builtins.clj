@@ -28,7 +28,6 @@
                              (str "Type mismatch in " (:name head#)
                                   "\nExpected: " ~(str (:ensure kws))
                                   "\nReceived: " '~args " = " tail#))))]
-
        {:interpreted
         (fn [env# self# args#]
           (try
@@ -59,7 +58,8 @@
               (sys/net ctx#
                 {:call f2#
                  :args [state# head# tail#]})
-              (let [sync# (ast/sv (str "sform-" (:name head#)))]
+              (error# head# tail#)
+              #_(let [sync# (ast/sv (str "sform-" (:name head#)))]
                 (sys/net ctx#
                   {:call c/walk
                    :ctx  {sys/ret sync#}

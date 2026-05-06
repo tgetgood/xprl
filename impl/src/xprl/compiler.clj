@@ -3,19 +3,9 @@
   (:require [clojure.pprint :refer [pprint]]
             [xprl.ast :as ast]
             [xprl.env :as env]
-            [xprl.system :as sys :refer [net return return-first]]))
-
-(def ret (ast/xkey :return))
+            [xprl.system :as sys :refer [net return return-first ret]]))
 
 (declare walk)
-
-;; TODO: Even with the compiler cache, we still need a two pass compiler, at the
-;; very least, to correctly handle recursion. Naive compilation, in particular,
-;; will regress infinitely.
-(def ^:private compiler-cache (atom {}))
-
-(defn compile [state μ]
-  )
 
 (defn resolve [ctx [state form]]
   (cond
@@ -44,9 +34,6 @@
   (cond
     (ast/μ? head)        (let [sync (ast/sv "apply-μ?")]
                            (net ctx
-                             {:call walk
-                              :ctx  {ret sync}
-                              :args [state tail]}
                              {:call apply-μ
                               :args [state head sync]}))
     (ast/external? head) (net ctx {:call (fn [ctx [state head tail]]
@@ -92,8 +79,54 @@
                              form syncs)))
     true             (return ctx form)))
 
+(defn μ-walk* [state form]
+  ;; (println "μ-walk" form)
+  (cond
+    (ast/application? form) (let [tail (μ-walk state (:tail form))
+                                  sync (ast/sv "μ-walk-application?")
+                                  head (μ-walk state (:head form))
+                                  ht   [{:call net/apply
+                                         :ctx  {ret sync}
+                                         :args [state (:return head) (:return tail)]}]]
+                              {:return sync
+                               :tasks  (into [] (concat ht
+                                                        (:tasks head)
+                                                        (:tasks tail)))})
+    (vector? form)          (let [vform (mapv (partial μ-walk state) form)
+                                  sync  (ast/sv "μ-walk-vector?")]
+                              {:return sync
+                               :tasks  (into [{:call return
+                                               :ctx  {ret sync}
+                                               :args (into [] (map :return) vform)}]
+                                             (mapcat :tasks)
+                                             vform)})
+    (ast/input? form)       {:return (:id form)}
+    (ast/immediate? form)   (let [f    (μ-walk state (:form form))
+                                  sync (ast/sv "μ-walk-immediate?")]
+                              {:return sync
+                               ;; REVIEW: This calls `eval` at runtime!
+                               ;; That's fine if we're sure that the arg is
+                               ;; symbolic. But if it has to call `walk`, then
+                               ;; we need the whole interpreter!
+                               :tasks  (conj (:tasks f)
+                                             {:call net/eval
+                                              :ctx  {ret sync}
+                                              :args [state (:return f)]})})
+    (ast/μ? form)           (let [svs (:waiting (:exec form))]
+                              (if (empty? svs)
+                                {:return form}
+                                (let [sync   (ast/sv "μ-walk-μ?")
+                                      sv-vec (into [] svs)] ; fix the order!
+                                  {:return sync
+                                   :tasks  [{:call (fn [ctx vs]
+                                                     (return ctx (closeμ form sv-vec vs)))
+                                             :ctx {ret sync}
+                                             :waiting svs
+                                             :args sv-vec}]})))
+    true                    {:return form}))
 
-(defn entry [form ccmap]
-  (net (sys/empty-ctx ccmap)
-    {:call walk
-     :args [{} form]}))
+(defn compile [env {:keys [form] :as ctx}]
+  (cond
+    (ast/immediate? form) (eval env (compile env (update ctx :form :form)))
+    (ast/input? form)     (assoc ctx :return (:id form) :form ::EOE)
+    (ast/symbolic? form)  ()))

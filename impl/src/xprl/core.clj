@@ -87,9 +87,9 @@
 
 (defn test []
   ;; FIXME: This testrunner is synchronous, so it cannot test message passing.
-  ;; currently all tests are algebraic, but that may not be so for long.
+  ;; Most of the tests failing as of now need message passing to run.
   (reload! test-setup)
-  (binding [debug/*execution-trace* false ]
+  (binding [debug/*execution-trace* false]
     (let [retwrap (fn [f] (ast/pair (ast/symbol "emit")
                                     [(ast/xkey :return) (ast/immediate f)]))]
       (println "\nStarting tests:\n")

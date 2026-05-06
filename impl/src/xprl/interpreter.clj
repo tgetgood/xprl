@@ -62,3 +62,14 @@
     ;; REVIEW: Is this a real problem, or am I chasing ghosts?
     (ast/μ? f)           (update f :body #(walk (env/unbind env f) %))
     true                 f))
+
+;; TODO: current work list
+;;
+;; 1) reimplement (or restore) pipes as infinite lazy seqs of SVs.
+;; 2) rewrite xprl.system as a message passing router using pipes instead of
+;; svs/not-a-compiler as currently implemented.
+;; 3) Extend the interpreter so that the rest of the tests pass
+;; 4) squiggol impl
+;; 5) implement :env channel and namespaces in xprl itself
+;; 6) (might need to switch 5 & 6) figure out data representations in xprl
+;; itself.
