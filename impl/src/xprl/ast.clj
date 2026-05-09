@@ -140,6 +140,18 @@
 (defn svs [task]
   (into #{} (filter sv?) (concat (:waiting task) (:args task))))
 
+(defrecord Pipe [name svs cache]
+  Object
+  (toString [_]
+    (str ">--(" name ")-->")))
+
+(defn pipe [name]
+  ;; REVIEW: Can I use immutable pipes, or do I need
+  (->Pipe name (repeatedly #(sv name)) []))
+
+(defn pipe? [x]
+  (instance? Pipe x))
+
 
 (defn list [xs]
   (into [] xs))

@@ -66,9 +66,8 @@
           wps (:waiting new)]
       (if (empty? wps)
         (update ctx :stack conj new)
-        (update ctx :sv-index #(reduce (fn [index wp]
-                                         (update-task-index index wp task new))
-                                       % wps) )))))
+        (update ctx :sv-index
+                #(reduce (fn [index wp] (update-task-index index wp task new)) % wps))))))
 
 (defn deliver-val [ctx ch val]
   (let [tasks (get-in ctx [:sv-index ch])
