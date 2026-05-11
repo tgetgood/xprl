@@ -2,11 +2,11 @@
   (:refer-clojure :exclude [resolve eval apply])
   (:require [xprl.ast :as ast]
             [xprl.debug :refer [deftracefn]]
-            [xprl.env :as env]
-            [xprl.system :as sys]))
+            [xprl.env :as env]))
 
 (declare walk)
 
+(defn net [& args])
 (deftracefn apply [env head tail]
   (cond
     (ast/μ? head) (let [rec (ast/pipe (str (:name head) "-recurser"))]
@@ -19,9 +19,10 @@
                                       (env/bind (:rec head) (ast/recurser rec)))]
                           (walk env (:body head))))
                       rec)
-                     (ast/Emission env {rec [tail]})))
+                     (ast/emission env {rec [tail]})))
 
-    (ast/external? head)   (ast/call :interpreted env head tail)
+
+    (ast/external? head)   (ast/call env head tail)
     (ast/incomplete? head) (ast/application head (walk env tail))
     ;; FIXME: Since we're not walking the tail, we need to store the env with it.
     (ast/recurser? head)   (ast/emission env {(:p head) [tail]})

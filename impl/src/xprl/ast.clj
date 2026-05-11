@@ -214,19 +214,6 @@
   (instance? Application x))
 
 
-(defrecord SelfCall [env head tail]
-  Env
-  Object
-  (toString [_]
-    (str (application head tail))))
-
-(defn selfcall [env head tail]
-  (->SelfCall env head tail))
-
-(defn selfcall? [x]
-  (instance? SelfCall x))
-
-
 (defrecord Mu [id rec name param body]
   Object
   (toString [_]
@@ -253,23 +240,21 @@
   (instance? Recurrence x))
 
 
-(defrecord Extern [name fns]
+(defrecord Extern [name fn]
   Object
   (toString [_]
     (str "#F[" name "]")))
 
-(defn extern [name fns]
-  (->Extern name fns))
+(defn extern [name fn]
+  (->Extern name fn))
 
 (defn external? [x]
   (instance? Extern x))
 
 (defn call
   "Invokes primitive `f` with args `t` in `env`."
-  ([switch env f t]
-   ((get (:fns f) switch) env f t))
-  ([switch ctx state f tail]
-   ((get (:fns f) switch) ctx state f tail)))
+  [env f t]
+  ((:fn f) env f t))
 
 (defrecord Context [chs form]
   Object
@@ -561,7 +546,7 @@
 (defn incomplete? [x]
   (if (coll? x)
     (some incomplete? x)
-    (or (input? x) (immediate? x) (application? x) (selfcall? x))))
+    (or (input? x) (immediate? x) (application? x))))
 
 (defn empty
   "Wrapper for clojure.core/empty that returns `[]` given a MapEntry."

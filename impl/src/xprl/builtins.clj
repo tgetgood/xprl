@@ -1,19 +1,10 @@
 (ns xprl.builtins
   (:require
    [xprl.ast :as ast]
-   [xprl.compiler :as c]
    [xprl.debug :as debug]
    [xprl.env :as env]
    [xprl.interpreter :as i]
-   [xprl.ns :as ns]
-   [xprl.system :as sys]))
-
-(declare emit-extern)
-
-;; noops always walk their tail because the effect of a noop is network based,
-;; not semantic.
-(defn noop [env self args]
-  (ast/application self (i/walk env args)))
+   [xprl.ns :as ns]))
 
 (defmacro extern [args & kws]
   (let [kws (apply hash-map kws)]
@@ -28,44 +19,25 @@
                              (str "Type mismatch in " (:name head#)
                                   "\nExpected: " ~(str (:ensure kws))
                                   "\nReceived: " '~args " = " tail#))))]
-       {:interpreted
-        (fn [env# self# args#]
-          (try
-            (let [args# (if (vector? args#) args# (i/walk env# args#))]
-              (if (vector? args#)
-                (let [args# (if (ensure# env# args#)
-                              args# (i/walk env# args#))]
-                  (if (ensure# env# args#)
-                    (return# env# args#)
-                    (if (ast/incomplete? args#)
-                      (ast/application self# args#)
-                      (error# self# args#))))
-                (ast/application self# args#)))
-            (catch Throwable e#
-              (debug/trace!
-                (with-out-str
-                  (binding [ast/*verbose* true]
-                    (ast/inspect (ast/application self# args#)))))
-              (let [msg# (str e# ":\n" (.getMessage e#) "\n" self# " " args#)]
-                (ast/emission env# {(ast/xkey :error) [msg#]})))))
-        #_:compiled
-        #_(fn [ctx# state# head# tail#]
-          (let [f2# (fn [ctx# [state# head# tail#]]
-                      (if (ensure# state# tail#)
-                        (sys/return ctx# (return# state# tail#))
-                        (error# head# tail#)))]
-            (if (ensure# state# tail#)
-              (sys/net ctx#
-                {:call f2#
-                 :args [state# head# tail#]})
-              (error# head# tail#)
-              #_(let [sync# (ast/sv (str "sform-" (:name head#)))]
-                (sys/net ctx#
-                  {:call c/walk
-                   :ctx  {sys/ret sync#}
-                   :args [state# tail#]}
-                  {:call f2#
-                   :args [state# head# sync#]})))))})))
+       (fn [env# self# args#]
+         (try
+           (let [args# (if (vector? args#) args# (i/walk env# args#))]
+             (if (vector? args#)
+               (let [args# (if (ensure# env# args#)
+                             args# (i/walk env# args#))]
+                 (if (ensure# env# args#)
+                   (return# env# args#)
+                   (if (ast/incomplete? args#)
+                     (ast/application self# args#)
+                     (error# self# args#))))
+               (ast/application self# args#)))
+           (catch Throwable e#
+             (debug/trace!
+              (with-out-str
+                (binding [ast/*verbose* true]
+                  (ast/inspect (ast/application self# args#)))))
+             (let [msg# (str e# ":\n" (.getMessage e#) "\n" self# " " args#)]
+               (ast/emission env# {(ast/xkey :error) [msg#]}))))))))
 
 
 (defmacro defextern [mac args & more]
@@ -161,41 +133,31 @@
 
 (defextern emit [env kvs]
   :ensure (every? ast/keyword? (map first kvs))
-  :return (ast/Emission
+  :return (ast/emission
            env (reduce (fn [acc [k v]] (update acc k (fnil conj []) v)) {} kvs)))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]
             (assoc acc (ast/symbol k) (ast/extern k f))) {} m))
 
+;; noops always walk their tail because the effect of a noop is network based,
+;; not semantic.
+(defn noop [env self args]
+  (ast/application self (i/walk env args)))
+
 (def special
   "things that would traditionally be special forms."
   (macros
-   {"μ"       μ
-    "nth*"    nth*
-    "emit"    emit
-    "first*"  first*
-    "rest*"   rest*
-    "count*"  count*
-    "empty?*" empty?*}))
-
-(defn net! [ctx _ _ tail]
-  (apply sys/net ctx
-   (map (fn [form] {:call c/walk :args [{} form]}) tail)))
-
-
-(defn runtime-impls [m]
-  (reduce (fn [m [k v]]
-            (assoc m (ast/symbol k) (ast/extern k {:interpreted noop :compiled v})))
-          {} m))
-
-(def rt
-  (runtime-impls
-   {"with-channels" noop
+   {"μ"             μ
+    "nth*"          nth*
+    "first*"        first*
+    "rest*"         rest*
+    "count*"        count*
+    "empty?*"       empty?*
+    "emit"          emit
+    "with-channels" noop
     "pipe"          noop
-    "net"           net!}))
-
-(def emit-extern (get rt (ast/symbol "emit")))
+    "net"           noop}))
 
 ;;;;; The Ur context from which all programs derive.
 ;;
@@ -205,4 +167,4 @@
 ;; have no past, no origin. why is bootstrapping so singular like that?
 
 (def base-env
-  (reduce (fn [e [k v]] (ns/ns-intern e k v)) ns/empty-ns (merge special fns rt)))
+  (reduce (fn [e [k v]] (ns/ns-intern e k v)) ns/empty-ns (merge special fns)))

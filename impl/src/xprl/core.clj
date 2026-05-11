@@ -3,13 +3,11 @@
   (:require
    [xprl.ast :as ast]
    [xprl.builtins :as builtins]
-   [xprl.compiler :as c]
    [xprl.debug :as debug]
    [xprl.env :as env]
    [xprl.interpreter :as i]
    [xprl.ns :as ns]
-   [xprl.reader :as r]
-   [xprl.system :as sys]))
+   [xprl.reader :as r]))
 
 (def the-env (atom builtins/base-env))
 
@@ -36,7 +34,7 @@
 
 (defn go!
   ([f] (i/walk {} (ast/immediate f)))
-  ([f conts] (sys/run* (c/entry (i/walk {} (ast/immediate f)) conts))))
+  ([f conts] (i/walk {} (ast/immediate f)) conts))
 
 (defn evv [s]
   (go! (:form (r/read (r/string-reader s) @the-env))))
