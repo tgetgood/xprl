@@ -241,13 +241,13 @@
   (instance? Mu x))
 
 
-(defrecord Recurrence [μ]
+(defrecord Recurrence [p]
   Object
   (toString [_]
-    (str (:name μ))))
+    (str (:name p))))
 
-(defn recurser [μ]
-  (->Recurrence μ))
+(defn recurser [p]
+  (->Recurrence p))
 
 (defn recurser? [x]
   (instance? Recurrence x))
@@ -283,13 +283,13 @@
   (instance? Context x))
 
 
-(defrecord Emission [kvs]
+(defrecord Emission [env msgs]
   Object
   (toString [_]
-    (str "#E" kvs)))
+    (str "#E" msgs)))
 
-(defn emission [kvs]
-  (->Emission kvs))
+(defn emission [env kvs]
+  (->Emission env kvs))
 
 (defn emission? [x]
   (instance? Emission x))
@@ -433,13 +433,13 @@
 
 ;;; Emission
 
-(defmethod print-method Emission [{:keys [kvs]} ^Writer w]
+(defmethod print-method Emission [{:keys [msgs]} ^Writer w]
   (.write w "#E")
-  (print-method kvs w))
+  (print-method msgs w))
 
-(defmethod pp/simple-dispatch Emission [{:keys [kvs]}]
+(defmethod pp/simple-dispatch Emission [{:keys [msgs]}]
   (pp/write-out (symbol "#E"))
-  (pp/simple-dispatch kvs))
+  (pp/simple-dispatch msgs))
 
 ;;;;; Inspection
 
@@ -544,7 +544,7 @@
   (insp [form ^Writer w level]
     (spacer w level)
     (.write w "E\n")
-    (loop [kvs (elements (:kvs form))]
+    (loop [kvs (elements (:msgs form))]
       (when (<= 2 (count kvs))
         (insp (first kvs) w (inc level))
         (insp (second kvs) w (inc level))
