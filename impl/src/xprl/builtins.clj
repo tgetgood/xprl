@@ -133,8 +133,15 @@
 
 (defextern emit [env kvs]
   :ensure (every? ast/keyword? (map first kvs))
-  :return (ast/emission
-           env (reduce (fn [acc [k v]] (update acc k (fnil conj []) v)) {} kvs)))
+  :return (let [cable (:cable env)]
+            (assert (every? #(contains? cable (first %)) kvs) "undeliverable message!")
+            ;; TODO: unbound and error channels.
+            ;; All error messages should be delivered within the language.
+            (ast/emission
+             env (reduce (fn [acc [k v]]
+                           (update acc (with-meta k {:wire (get cable k)})
+                                   (fnil conj []) v))
+                         {} kvs))))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]
@@ -155,8 +162,8 @@
     "count*"        count*
     "empty?*"       empty?*
     "emit"          emit
+    "wire"          noop
     "with-channels" noop
-    "pipe"          noop
     "net"           noop}))
 
 ;;;;; The Ur context from which all programs derive.

@@ -250,7 +250,7 @@
 
 ;; (def return-stream
 ;;   (μ [form]
-;;      ~(let* [[st ch] ~(pipe)]
+;;      ~(let* [[st ch] ~(wire)]
 ;;         ~(net
 ;;           ~(with-channels {:return ch} ~form)
 ;;           st))))

@@ -123,11 +123,11 @@
 (defn elements [l]
   l)
 
-;; A SyncVal is basically a pipe that can only ever receive one element and so
+;; A SyncVal is basically a wire that can only ever receive one element and so
 ;; the stream end is just a value. I don't see a benefit here of separating the
 ;; read and write ends, so we just use one value.
 ;;
-;; REVIEW: I don't want the api to be too different re pipes.
+;; REVIEW: I don't want the api to be too different re wires.
 (defrecord SyncVal [key])
 
 (defn sv
@@ -140,17 +140,18 @@
 (defn svs [task]
   (into #{} (filter sv?) (concat (:waiting task) (:args task))))
 
-(defrecord Pipe [name svs cache]
+
+(defrecord Wire [name svs cache]
   Object
   (toString [_]
     (str ">--(" name ")-->")))
 
-(defn pipe [name]
-  ;; REVIEW: Can I use immutable pipes, or do I need
-  (->Pipe name (repeatedly #(sv name)) []))
+(defn wire [name]
+  ;; REVIEW: We'll start by trying immutable wires.
+  (->Wire name (repeatedly #(sv name)) []))
 
-(defn pipe? [x]
-  (instance? Pipe x))
+(defn wire? [x]
+  (instance? Wire x))
 
 
 (defn list [xs]
@@ -307,6 +308,9 @@
 
 (ps LooseEnd)
 (pps LooseEnd)
+
+(ps Wire)
+(pps Wire)
 
 ;;; Keyword
 
