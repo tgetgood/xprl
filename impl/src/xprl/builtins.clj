@@ -47,9 +47,9 @@
                   (binding [ast/*verbose* true]
                     (ast/inspect (ast/application self# args#)))))
               (let [msg# (str e# ":\n" (.getMessage e#) "\n" self# " " args#)]
-                (ast/application emit-extern [[(ast/xkey :error) msg#]])))))
-        :compiled
-        (fn [ctx# state# head# tail#]
+                (ast/emission env# {(ast/xkey :error) [msg#]})))))
+        #_:compiled
+        #_(fn [ctx# state# head# tail#]
           (let [f2# (fn [ctx# [state# head# tail#]]
                       (if (ensure# state# tail#)
                         (sys/return ctx# (return# state# tail#))
@@ -158,6 +158,12 @@
                 env               (if (nil? name) env (env/capture env name recid))]
     (ast/μ id recid name param (i/walk env body))))
 
+
+(defextern emit [env kvs]
+  :ensure (every? ast/keyword? (map first kvs))
+  :return (ast/Emission
+           env (reduce (fn [acc [k v]] (update acc k (fnil conj []) v)) {} kvs)))
+
 (defn macros [m]
   (reduce (fn [acc [k f]]
             (assoc acc (ast/symbol k) (ast/extern k f))) {} m))
@@ -165,16 +171,13 @@
 (def special
   "things that would traditionally be special forms."
   (macros
-   {"μ"             μ
-    "nth*"          nth*
-    "first*"        first*
-    "rest*"         rest*
-    "count*"        count*
-    "empty?*"       empty?*}))
-
-(defn emit! [ctx _ _ kvs]
-  (assert (every? ast/keyword? (map first kvs)) "Improper emission")
-  (apply sys/net ctx (map (fn [kv] {:call sys/send! :args kv}) kvs)))
+   {"μ"       μ
+    "nth*"    nth*
+    "emit"    emit
+    "first*"  first*
+    "rest*"   rest*
+    "count*"  count*
+    "empty?*" empty?*}))
 
 (defn net! [ctx _ _ tail]
   (apply sys/net ctx
@@ -188,8 +191,7 @@
 
 (def rt
   (runtime-impls
-   {"emit"          emit!
-    "with-channels" noop
+   {"with-channels" noop
     "pipe"          noop
     "net"           net!}))
 
