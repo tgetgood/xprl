@@ -141,17 +141,29 @@
   (into #{} (filter sv?) (concat (:waiting task) (:args task))))
 
 
-(defrecord Wire [name svs cache]
+(defrecord Wire [name connections]
   Object
   (toString [_]
     (str ">--(" name ")-->")))
 
 (defn wire [name]
   ;; REVIEW: We'll start by trying immutable wires.
-  (->Wire name (repeatedly #(sv name)) []))
+  (->Wire name (atom {})))
 
 (defn wire? [x]
   (instance? Wire x))
+
+
+(defrecord Network [name tasks]
+  Object
+  (toString [_]
+    (str ">--(" name ")--<")))
+
+(defn net [name tasks]
+  (->Network name tasks))
+
+(defn net? [x]
+  (instance? Network x))
 
 
 (defn list [xs]
@@ -160,7 +172,7 @@
 (defn list? [x]
   (vector? x))
 
-;; Records are IMaps which is a royal pain in the ass.
+;; Records are IMaps which is a royal pain in the ass sometimes.
 (defn map? [x]
   (or (instance? clojure.lang.PersistentArrayMap x)
       (instance? clojure.lang.PersistentHashMap x)))

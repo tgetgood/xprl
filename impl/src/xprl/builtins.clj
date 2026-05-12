@@ -130,7 +130,6 @@
                 env               (if (nil? name) env (env/capture env name recid))]
     (ast/μ id recid name param (i/walk env body))))
 
-
 (defextern emit [env kvs]
   :ensure (every? ast/keyword? (map first kvs))
   :return (let [cable (:cable env)]
@@ -138,10 +137,8 @@
             ;; TODO: unbound and error channels.
             ;; All error messages should be delivered within the language.
             (ast/emission
-             env (reduce (fn [acc [k v]]
-                           (update acc (with-meta k {:wire (get cable k)})
-                                   (fnil conj []) v))
-                         {} kvs))))
+             env
+             (map (fn [[k v]] [(with-meta k {:wire (get cable k)}) v]) kvs))))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]

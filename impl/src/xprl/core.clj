@@ -5,6 +5,7 @@
    [xprl.builtins :as builtins]
    [xprl.debug :as debug]
    [xprl.env :as env]
+   [xprl.executor :as exec]
    [xprl.interpreter :as i]
    [xprl.ns :as ns]
    [xprl.reader :as r]
@@ -28,14 +29,15 @@
     (reset! te l)
     (let [[sym value] l]
       (assert (ast/symbolic? sym) sym)
-      (swap! env ns/ns-intern (ast/symbol sym) value))))
+      (swap! env ns/ns-intern (ast/symbol sym) value)
+      nil)))
 
 (defn with-return [ccs cb]
   (assoc ccs (ast/xkey :return) cb))
 
 (defn go!
-  ([f] (i/walk {} (ast/immediate f)))
-  ([f conts] (i/walk {:cable conts} (ast/immediate f))))
+  ([f] (i/start (ast/immediate f) (sys/base-cable)))
+  ([f conts] (exec/start! (sys/splice (go! f) conts ::repl-connect))))
 
 (defn evv [s]
   (go! (:form (r/read (r/string-reader s) @the-env))))
@@ -48,7 +50,7 @@
    (ast/xkey :error)   #(binding [*out* *err*]
                          (println %))})
 (defn ev [s]
-  (go! (:form (r/read (r/string-reader s) @the-env)) (sys/base-cable)))
+  (go! (:form (r/read (r/string-reader s) @the-env)) ))
 
 (defn ev! [s]
   (go! (:form (r/read (r/string-reader s) @the-env)) base-conts))

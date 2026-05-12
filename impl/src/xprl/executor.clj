@@ -1,6 +1,29 @@
 (ns xprl.executor
   (:require [xprl.ast :as ast]))
 
-(def deliver! [dest msg]
+(defn deliver! [dest msg]
+  (assert (not (nil? dest)))
+  (cond
+    (ast/wire? dest) (run! (fn [[_ conn]] (deliver! conn msg)) @(:connections dest))
+    (fn? dest) (dest msg)
+    true (throw (RuntimeException.
+                 (str "Cannot deliver message to a " (type dest) ":\n" dest)))))
 
-  )
+(defn msgs [form]
+  (cond
+    (ast/emission? form) (into [] (:msgs form))
+    (ast/net? form)      (into [] (mapcat msgs) (:tasks form))
+    true                 []))
+
+
+(defn execute! [[dest msg]]
+  (println dest (meta dest))
+  (if-let [next (deliver! (:wire (meta dest)) msg)]
+    (msgs next)
+    []))
+
+(defn start! [form]
+  (loop [work (msgs form)]
+    (println work)
+    (when (seq work)
+      (recur (into (pop work) (execute! (peek work)))))))

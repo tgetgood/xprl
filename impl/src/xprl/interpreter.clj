@@ -2,30 +2,30 @@
   (:refer-clojure :exclude [resolve eval apply])
   (:require [xprl.ast :as ast]
             [xprl.debug :refer [deftracefn]]
-            [xprl.env :as env]))
+            [xprl.env :as env]
+            [xprl.system :as sys]))
 
 (declare walk)
 
 (defn net [& args]
-  ::network)
+  (ast/net
+           args))
 
 (deftracefn apply [env head tail]
   (cond
     (ast/μ? head) (let [rec (ast/wire (str (:name head) "-recurser"))]
-                    (net
-                     (map
-                      (fn [env msg]
-                        (let [env (-> env
-                                      (env/uncapture (:param head))
-                                      (env/bind (:id head) tail)
-                                      (env/bind (:rec head) (ast/recurser rec)))]
-                          (walk env (:body head))))
-                      rec)
-                     (ast/emission env {rec [tail]})))
+                    (sys/splice! rec (gensym "μ-invoke-")
+                                 (fn [msg]
+                                   (let [env (-> env
+                                                 (env/uncapture (:param head))
+                                                 (env/bind (:id head) tail)
+                                                 (env/bind (:rec head) (ast/recurser rec)))]
+                                     (walk env (:body head)))))
+                    (ast/emission env [[(with-meta (ast/xkey :recur) {:wire rec}) tail]]))
 
     (ast/external? head)   (ast/call env head tail)
     (ast/incomplete? head) (ast/application head (walk env tail))
-    (ast/recurser? head)   (ast/emission env {(:p head) [tail]})
+    (ast/recurser? head)   (ast/emission env [[(:p head) tail]])
 
     true (throw (RuntimeException. (str head " is not applicable!")))))
 
@@ -80,3 +80,9 @@
 ;; 5) implement :env channel and namespaces in xprl itself
 ;; 6) (might need to switch 5 & 6) figure out data representations in xprl
 ;; itself.
+
+(defn start [form conts]
+  (let [res (walk {:cable conts} form)]
+    (try
+      (with-meta res {:cable conts})
+      (catch Exception e res))))
