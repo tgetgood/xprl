@@ -12,7 +12,6 @@
 (defn msgs [form]
   (cond
     (ast/emission? form) (into [] (:msgs form))
-    (ast/net? form)      (into [] (mapcat msgs) (:tasks form))
     true                 []))
 
 
