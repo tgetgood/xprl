@@ -128,7 +128,8 @@
                 param             (ast/symbol param)
                 env               (env/capture env param id)
                 env               (if (nil? name) env (env/capture env name recid))]
-    (ast/μ id recid name param (i/walk env body))))
+
+            (ast/μ id recid name param (i/walk env body))))
 
 (defextern emit [env kvs]
   :ensure (every? ast/keyword? (map first kvs))
@@ -138,7 +139,7 @@
             ;; All error messages should be delivered within the language.
             (ast/emission
              env
-             (map (fn [[k v]] [(with-meta k {:wire (get cable k)}) v]) kvs))))
+             (mapv (fn [[k v]] [(with-meta k {:wire (get cable k)}) v]) kvs))))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]

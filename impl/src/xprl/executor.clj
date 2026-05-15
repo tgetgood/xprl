@@ -17,13 +17,11 @@
 
 
 (defn execute! [[dest msg]]
-  (println dest (meta dest))
   (if-let [next (deliver! (:wire (meta dest)) msg)]
     (msgs next)
     []))
 
 (defn start! [form]
   (loop [work (msgs form)]
-    (println work)
     (when (seq work)
       (recur (into (pop work) (execute! (peek work)))))))

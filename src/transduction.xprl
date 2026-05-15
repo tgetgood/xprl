@@ -12,6 +12,21 @@
 ;; TODO: Think about currying, or at least defining (map f) without xs.
 ;; Ensure that ((comp (map f) (map g)) xs) == ((map g) ((map f) xs))
 
+(defn map [f xs]
+  (net
+   (f (first xs))
+   (map f (rest xs))))
+
+(defn cat [xs]
+  (net . xs))
+
+(defn reduce [rf init xs]
+  (let [ch (pipe init)]
+    (net
+     (last ch)
+     (with-channels {:return ch}
+       (map rf ch xs)))))
+
 (defn filter [p xs]
   (map (fn [x] (when (p x) x)) xs))
 

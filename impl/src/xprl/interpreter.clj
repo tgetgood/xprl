@@ -7,21 +7,13 @@
 
 (declare walk)
 
-(defn net [& args]
-  (ast/net
-           args))
-
 (deftracefn apply [env head tail]
   (cond
-    (ast/μ? head) (let [rec (ast/wire (str (:name head) "-recurser"))]
-                    (sys/splice! rec (gensym "μ-invoke-")
-                                 (fn [msg]
-                                   (let [env (-> env
-                                                 (env/uncapture (:param head))
-                                                 (env/bind (:id head) tail)
-                                                 (env/bind (:rec head) (ast/recurser rec)))]
-                                     (walk env (:body head)))))
-                    (ast/emission env [[(with-meta (ast/xkey :recur) {:wire rec}) tail]]))
+    (ast/μ? head) (let [env (-> env
+                                (env/uncapture (:param head))
+                                (env/bind (:id head) tail)
+                                (env/bind (:rec head) (ast/recurser head)))]
+                    (walk env (:body head)))
 
     (ast/external? head)   (ast/call env head tail)
     (ast/incomplete? head) (ast/application head (walk env tail))
@@ -68,6 +60,7 @@
     ;; We don't want outer arguments to effect inner calls during recursion!
     ;; REVIEW: Is this a real problem, or am I chasing ghosts?
     (ast/μ? f)           (update f :body #(walk (env/unbind env f) %))
+    (ast/emission? f)    (update f :msgs (partial walk env))
     true                 f))
 
 ;; TODO: current work list
@@ -81,6 +74,11 @@
 ;; 6) (might need to switch 5 & 6) figure out data representations in xprl
 ;; itself.
 
+;; FIXME: I don't like this at all. In order to splice a cable, which means in
+;; order to capture, extend, or otherwise manipulate the cable, we need to keep
+;; a side channeled reference to the cable as a whole. Capturing should be
+;; independent of out of band data or else it will end up too complicated to be
+;; sure of sandboxing.
 (defn start [form conts]
   (let [res (walk {:cable conts} form)]
     (try

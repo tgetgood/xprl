@@ -154,18 +154,6 @@
   (instance? Wire x))
 
 
-(defrecord Network [name tasks]
-  Object
-  (toString [_]
-    (str ">--(" name ")--<")))
-
-(defn net [name tasks]
-  (->Network name tasks))
-
-(defn net? [x]
-  (instance? Network x))
-
-
 (defn list [xs]
   (into [] xs))
 
@@ -562,7 +550,7 @@
 (defn incomplete? [x]
   (if (coll? x)
     (some incomplete? x)
-    (or (input? x) (immediate? x) (application? x))))
+    (or (input? x) (immediate? x) (application? x) (emission? x))))
 
 (defn empty
   "Wrapper for clojure.core/empty that returns `[]` given a MapEntry."
