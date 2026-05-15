@@ -45,7 +45,7 @@
 (defn cat [xs]
   (emit
    :return (first xs)
-   cat     (rest xs)))
+   :return (cat (rest xs))))
 
 (defn reduce [rf init xs]
   (let [ch (pipe init)]
@@ -90,9 +90,6 @@
 ;; to the return channel.
 
 
-(defn filter [p xs]
-  (map (fn [x] (when (p x) x)) xs))
-
 ;; Ideally we would have some sort of interrupt on channel close at which point
 ;; we could get the final element without iteration. But how would that work
 ;; exectly?
@@ -105,6 +102,10 @@
 ;;
 ;; Wouldn't that be swell?
 
+
+(defn filter [p xs]
+  (map (fn [x] (when (p x) x)) xs))
+
 (defn last [xs]
   (let [next (rest xs)]
     (if (empty? next) ; curiously, this is where we have to park and wait.
@@ -114,20 +115,13 @@
 (def net
   (μ xs
      ~(emit . ~(map ))))
+
 (defn reduce [rf init xs]
   (let [[state state-ch] (pipe init)]
     (net
      (with-channels {:return state-ch}
        (map* rf state xs))
      (last state))))
-
-;; This one doesn't really work since it would require `emit` to send some
-;; messages before receiving all of the messages to send.
-(defn reduce [rf init xs]
-  (let [[st ch] (pipe init)]
-    (net
-     (emit-all ch (map rf st xs))
-     (last st))))
 
 ;;;;; And scan. Not sure I have a use for this, but hey.
 
@@ -137,14 +131,6 @@
            (let [next (f state x)]
              (emit state-ch next :return next)))
          state xs)))
-
-;; or (better because we only need one stream instead of two):
-
-(defn scan [rf init xs]
-  (let [[st ch] (pipe init)]
-    (net
-     (emit-all ch (map rf st xs))
-     st)))
 
 ;; Which gives us the alternate `reduce`:
 
@@ -171,16 +157,3 @@
       (let [rem (last state)]
         (when (not (empty? rem))
           rem))))))
-
-;; REVIEW: I probably ought to make this idea of emit-all a built in part of the
-;; syntax, it comes up so often and we don't want to be forced to create
-;; sequences we don't want.
-;;
-;; maybe something like
-;;
-;; (emit :log "message" ^:many ch xs)
-;;
-;;;;; And if you really want it:
-
-(defμ stream xss
-  (return-stream ~(emit-all :return xss)))
