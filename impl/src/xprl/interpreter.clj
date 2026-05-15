@@ -17,7 +17,8 @@
 
     (ast/external? head)   (ast/call env head tail)
     (ast/incomplete? head) (ast/application head (walk env tail))
-    (ast/recurser? head)   (ast/emission env [[(:p head) tail]])
+    (ast/recurser? head)   (ast/emission env
+                             [[(ast/xkey :return) (ast/application env (:p head) tail)]])
 
     true (throw (RuntimeException. (str head " is not applicable!")))))
 
@@ -73,14 +74,3 @@
 ;; 5) implement :env channel and namespaces in xprl itself
 ;; 6) (might need to switch 5 & 6) figure out data representations in xprl
 ;; itself.
-
-;; FIXME: I don't like this at all. In order to splice a cable, which means in
-;; order to capture, extend, or otherwise manipulate the cable, we need to keep
-;; a side channeled reference to the cable as a whole. Capturing should be
-;; independent of out of band data or else it will end up too complicated to be
-;; sure of sandboxing.
-(defn start [form conts]
-  (let [res (walk {:cable conts} form)]
-    (try
-      (with-meta res {:cable conts})
-      (catch Exception e res))))

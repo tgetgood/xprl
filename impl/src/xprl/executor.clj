@@ -24,3 +24,9 @@
   (loop [work (msgs form)]
     (when (seq work)
       (recur (into (pop work) (execute! (peek work)))))))
+
+;; TODO: take the cable in here, thread the form and create the initial queue,
+;; then run to empty.
+;;
+;; I think the system logic from the compiler branch (which I deleted here) is
+;; actually the right way to go.

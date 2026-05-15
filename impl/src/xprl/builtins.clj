@@ -137,9 +137,7 @@
             (assert (every? #(contains? cable (first %)) kvs) "undeliverable message!")
             ;; TODO: unbound and error channels.
             ;; All error messages should be delivered within the language.
-            (ast/emission
-             env
-             (mapv (fn [[k v]] [(with-meta k {:wire (get cable k)}) v]) kvs))))
+            (ast/emission env kvs)))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]

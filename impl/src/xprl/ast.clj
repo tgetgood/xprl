@@ -274,7 +274,7 @@
   (toString [_]
     (str "#E" msgs)))
 
-(defn emission [env kvs]
+(defn emission {:style/indent [1]} [env kvs]
   (->Emission env kvs))
 
 (defn emission? [x]
