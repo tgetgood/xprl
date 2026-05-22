@@ -12,96 +12,27 @@
 ;; TODO: Think about currying, or at least defining (map f) without xs.
 ;; Ensure that ((comp (map f) (map g)) xs) == ((map g) ((map f) xs))
 
-;; TODO: Overloading
-#_(defn map [f]
-  (fn [xs]
-    (map f xs)))
+;; N.B.: The order of threads in a net matters. It must since they share
+;; channels and we must be able to control the order of messages on a given
+;; channel.
 
 (defn map [f xs]
-  (emit
-   f                  (first xs)
-   (fn [x] (map f x)) (rest xs)))
+  (net
+   (f (first xs))
+   (map f (rest xs))))
+
+
+(defn cat [xs]
+  (net
+   (first xs)
+   (cat (rest xs))))
 
 ;; or
 
-(defn map [f xs]
-  (emit
-   :return (f (first xs))
-   :return (map f (rest xs))))
-
-;; In this case, the ordering constraint is real. It's nice to make it explicit
-;; as well.
-;;
-;; Perhaps this is the way around the channel/μ dual emission confusion.
-
-;; N.B.: the `emit` being used in this file ~evaluates~ its argument.
-
-(def emit
-  (μ x
-     ~(emit* . ~~x)))
-
-;; Where `emit*` takes keyword/value pairs and does not walk anything.
-
 (defn cat [xs]
-  (emit
-   :return (first xs)
-   :return (cat (rest xs))))
+  (map identity xs))
 
-(defn reduce [rf init xs]
-  (let [ch (pipe init)]
-    (emit
-     :return (last ch)
-
-     ;; This is ugly. We have an expression, basically a thunk, and we're taking
-     ;; part of it out to get a receiver. The part we take out is arbitrary. We
-     ;; could just as easily create a function of an unused argument and send it
-     ;; garbage. This isn't communication, it's timing control.
-     (fn [xs] (with-channels {:return ch}
-                (map rf ch xs)))
-     xs)))
-
-;; What about:
-
-(defn reduce [rf init xs]
-  (let [w (wire init)]
-    (emit
-     :return (with-channels {:return w} (map rf w xs))
-     :return (last w))))
-
-;; ?
-;; The issue here, of course, is that the two emissions to :return create a
-;; false dependency. Since `with-channels` diverts :return, this will never
-;; actually send anything to the :return channel of the `emit` statement. (Is it
-;; a statement? It returns zero or more values...)
-;;
-;; So if we have to put the `with-channels` expression first so that it doesn't
-;; wait forever, then we've brought in a family of race conditions I've been
-;; hoping to avoid.
-;;
-;; so we need to put a buffer-and-reorder method in place. If we can park
-;; computations, then it's as easy as that, and there are real advantages to
-;; that as back pressure.
-
-;; What about a special `:drop` channel which makes it explicit that the thing
-;; in question returns nothing?
-;;
-;; I think that can be handles simply by inspecting the message passing graph.
-;; We should be able to detect "statically" that there are no edges passing out
-;; to the return channel.
-
-
-;; Ideally we would have some sort of interrupt on channel close at which point
-;; we could get the final element without iteration. But how would that work
-;; exectly?
-;;
-;; A special builtin to track the last value sent on ch could be justified.
-;;
-;; Unless, of course, we can find some trick to compile this (very common)
-;; pattern of (net (populate ch) (last st)) into something that just keeps the
-;; most recent value in a register and eventually returns that on a signal.
-;;
-;; Wouldn't that be swell?
-
+;; That's intriguing. It could be the sign of a conceptual bug.
 
 (defn filter [p xs]
   (map (fn [x] (when (p x) x)) xs))
@@ -112,30 +43,38 @@
       (first xs)
       (last next))))
 
-(def net
-  (μ xs
-     ~(emit . ~(map ))))
-
-(defn reduce [rf init xs]
-  (let [[state state-ch] (pipe init)]
+(defn reduce (rf init xs)
+  (let [w (wire init)]
     (net
-     (with-channels {:return state-ch}
-       (map* rf state xs))
-     (last state))))
+     (with-channels {:return w} (map rf w xs))
+     (last w))))
 
 ;;;;; And scan. Not sure I have a use for this, but hey.
 
 (defn scan [f init xs]
-  (let [[state state-ch] (pipe init)]
+  (let [w (wire init)]
     (map (fn [state x]
            (let [next (f state x)]
-             (emit state-ch next :return next)))
-         state xs)))
+             (emit w next :return next)))
+         w xs)))
 
 ;; Which gives us the alternate `reduce`:
 
 (defn reduce [rf init xs]
   (last (scan rf init xs)))
+
+;; we could also say
+
+(defn scan [rf init xs]
+  (let [w (wire init)]
+    (net
+     (with-channels {:return w} (map rf w xs))
+     w)))
+
+;; since `scan` is really just one of the threads that makes up the network for
+;; `reduce`.
+;;  This gives us a relation between networks and emissions. What can we learn
+;; from it?
 
 ;;;;; Moving on
 
