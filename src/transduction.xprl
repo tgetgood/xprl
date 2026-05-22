@@ -16,11 +16,20 @@
 ;; channels and we must be able to control the order of messages on a given
 ;; channel.
 
-(defn map [f xs]
+(defn map* [f xs]
   (net
    (f (first xs))
-   (map f (rest xs))))
+   (map* f (rest xs))))
 
+(def return-stream
+  (μ expr
+     ~(let1 w ~(wire)
+        ~(net
+          ~w ;; put the return first in case optimisations don't work initially.
+          ~(with-channels {:return w} ~expr)))))
+
+(defn map [f xs]
+  (return-stream (map* f xs)))
 
 (defn cat [xs]
   (net
@@ -58,11 +67,6 @@
              (emit w next :return next)))
          w xs)))
 
-;; Which gives us the alternate `reduce`:
-
-(defn reduce [rf init xs]
-  (last (scan rf init xs)))
-
 ;; we could also say
 
 (defn scan [rf init xs]
@@ -71,10 +75,28 @@
      (with-channels {:return w} (map rf w xs))
      w)))
 
+;; =>
+
+(defn scan [rf init xs]
+  (let [w (wire init)]
+    (with-channels {:return w} (map rf w xs))))
+
 ;; since `scan` is really just one of the threads that makes up the network for
-;; `reduce`.
+;; `reduce` and `with-stream` already does the networking for us.
+
 ;;  This gives us a relation between networks and emissions. What can we learn
 ;; from it?
+
+;; This gives us the alternate `reduce`:
+
+(defn reduce [rf init xs]
+  (last (scan rf init xs)))
+
+;; Which does not explicitly use `net` at all.
+;; What's more; there's no inefficiency from defining `reduce` in terms of
+;; `scan`. Nothing is retained anyway. And if you do want to keep the `scan`
+;; stream, you can.
+;; We are going to need a builtin for `last` though.
 
 ;;;;; Moving on
 
@@ -83,16 +105,57 @@
 
 (defn partition [n xs]
   (return-stream
-   (let [[state state-ch] (pipe [])]
+   (let [w (wire [])]
      (net
       ;; Emit partitioned elements as you go.
       (map (fn [state x]
               (let [s' (conj state x)]
                 (if (= n (count s'))
-                  (emit :return s' state-ch [])
-                  (emit state-ch s'))))
-            state xs)
+                  (emit :return s' w [])
+                  (emit w s'))))
+            w xs)
       ;; Flush the remaining state, if any, once `xs` is exhausted.
-      (let [rem (last state)]
+      (let [rem (last w)]
         (when (not (empty? rem))
           rem))))))
+
+;; I think we can reduce this further to:
+
+(defn partition [n xs]
+  (reduce (fn [state x]
+            (if (= n (count (last state)))
+              (conj state [x])
+              (conj (butlast state) (conj (last state) x))))
+          [] xs))
+
+;; In fact, I conjecture that all stateless transducers reduce to `map` and
+;; stateful transducers to `reduce`. That'll be a hell of a thing to prove.
+
+;; The downside of the above is that it's not obvious how to get automatic
+;; pipeline paralellism. When we're explicitely sending intermediates along a
+;; wire, each message is a thing to be acted upon by the next step. Here, we
+;; need domain knowledge of `partition` in order to use the chunks before
+;; `partition` finishes. This is because the elaborate `partition` creates a
+;; stream whereas the simpler `partition` produces an ordinary vector.
+
+;; So I might be losing my automatic fusion and pipeline parallelism
+;; capabilities. That's not acceptable.
+
+;; The above shows that there is an obvious advantage to explicit message and
+;; wire manipulation.
+
+;; Can I get both that advantage and the simpler syntax at the same time?
+
+;; Maybe my conjecture is wrong and `partition` is just nice enough to be
+;; implemented in terms of `reduce`...
+
+;; The most general sequence processor has 3 parts: setup before we process any
+;; input, the thing to do with each element of input, and a finaliser to run
+;; after there's no input left to process. Clojure also has the notion of
+;; "reduced", but we can get that just by closing streams when there's no work
+;; left to be done.
+
+;; Well, a transducer that halts early can't be built off of map or reduce since
+;; they both keep going. But I think the complexity is properly encapsualted in
+;; that nothing is effected except those processors which need the option of
+;; early termination. There are comparatively few of those.
