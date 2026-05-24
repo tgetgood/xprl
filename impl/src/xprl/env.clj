@@ -8,7 +8,7 @@
     (assoc x :env env)
     x))
 
-(defn merge-envs [outer inner]
+(defn merge-envs [inner outer]
   (merge-with merge outer inner))
 
 (defn merge-local [env x]

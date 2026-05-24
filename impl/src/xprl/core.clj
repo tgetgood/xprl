@@ -28,16 +28,17 @@
   (fn [l]
     (reset! te l)
     (let [[sym value] l]
-      (assert (ast/symbolic? sym) sym)
-      (swap! env ns/ns-intern (ast/symbol sym) value)
+      ;; (assert (ast/symbolic? sym) sym)
+      (when (ast/symbolic? sym)
+        (swap! env ns/ns-intern (ast/symbol sym) value))
       nil)))
 
 (defn with-return [ccs cb]
   (assoc ccs (ast/xkey :return) cb))
 
 (defn go!
-  ([f] (i/start (ast/immediate f) (sys/base-cable)))
-  ([f conts] (exec/start! (sys/splice (go! f) conts ::repl-connect))))
+  ([f] (i/walk {} (ast/immediate f)))
+  ([f conts] (exec/start! conts (go! f))))
 
 (defn evv [s]
   (go! (:form (r/read (r/string-reader s) @the-env))))

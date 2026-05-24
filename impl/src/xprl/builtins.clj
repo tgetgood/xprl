@@ -134,10 +134,7 @@
 (defextern emit [env kvs]
   :ensure (every? ast/keyword? (map first kvs))
   :return (let [cable (:cable env)]
-            (assert (every? #(contains? cable (first %)) kvs) "undeliverable message!")
-            ;; TODO: unbound and error channels.
-            ;; All error messages should be delivered within the language.
-            (ast/emission env kvs)))
+            (i/walk-emission env (ast/emission env kvs))))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]
