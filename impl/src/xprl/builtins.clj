@@ -127,8 +127,8 @@
                 recid             (gensym "μ-recur-")
                 param             (ast/symbol param)
                 env               (env/capture env param id)
-                env               (if (nil? name) env (env/capture env name recid))]
-
+                env               (if (nil? name) env (env/capture env name recid))
+                body              (env/walk-capture param (ast/input env param id) body)]
             (ast/μ id recid name param (i/walk env body))))
 
 (defextern emit [env kvs]

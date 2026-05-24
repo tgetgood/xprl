@@ -52,3 +52,15 @@
     (if (and (captured? env sym) (= id (capid env sym)))
       (uncapture env sym)
      env)))
+
+(defn walk-capture [sym input form]
+  (let [walk (partial walk-capture sym input)]
+    (cond
+      (ast/immediate? form)   (update form :form walk)
+      (ast/application? form) (-> form (update :head walk) (update :tail walk))
+      (ast/pair? form)        (-> form (update :head walk) (update :tail walk))
+      (ast/symbolic? form)    (if (= (ast/symbol form) sym) input form)
+      (ast/μ? form)           (update form :body walk)
+      (ast/emission? form)    (update form :msgs walk)
+      (ast/coll? form)        (into (ast/empty form) (map walk) form)
+      true                    form)))

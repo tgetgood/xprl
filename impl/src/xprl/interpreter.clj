@@ -7,22 +7,12 @@
 
 (declare walk)
 
-(defn softwalk [env f]
-  (let [softwalk (partial softwalk env)]
-    (cond
-      (ast/immediate? f)   (update f :form softwalk)
-      (ast/application? f) (-> f (update :head softwalk) (update :tail softwalk))
-      (ast/pair? f)        (-> f (update :head softwalk) (update :tail softwalk))
-      (ast/input? f)       f
-      (ast/symbolic? f)    (walk env f)
-      (ast/μ? f)           (update f :body softwalk)
-      (ast/emission? f)    (update f :msgs softwalk)
-      true                 f)))
+
 
 (defn walk-emission [env f]
   (let [env (env/merge-envs (:env f) env)]
     (-> (assoc f :env env)
-        (update :msgs #(mapv (fn [[k v]] [(walk env k) (walk env v)]) %)))))
+        (update :msgs #(mapv (fn [[k v]] [(walk env k) v]) %)))))
 
 (deftracefn apply [env head tail]
   (cond
@@ -63,7 +53,6 @@
     (cond
       (ast/immediate? f)   (eval env (walk (:form f)))
       (ast/application? f) (apply env (walk (:head f)) (:tail f))
-      ;; (ast/pair? f)        (ast/pair (walk (:head f)) (softwalk env (:tail f)))
       (ast/input? f)       (let [env (env/merge-local env f)]
                              ;; Once a parameter is bound, the surrounding env
                              ;; becomes important. But if it isn't bound yet, then
