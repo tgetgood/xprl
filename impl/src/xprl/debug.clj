@@ -1,5 +1,6 @@
 (ns xprl.debug
-  (:require [xprl.ast :as ast]))
+  (:require [xprl.ast :as ast]
+            [xprl.env :as env]))
 
 (def ^:dynamic *verbose* false)
 
@@ -57,6 +58,19 @@
   ([form] (causes *index-key* form))
   ([k form] (get-in @index [k form])))
 
+(defn build-env [form]
+  (cond
+    (ast/immediate? form)   (build-env (:form form))
+    (ast/application? form) (merge (build-env (:head form)) (build-env (:tail form)))
+    (ast/pair? form)        (merge (build-env (:head form)) (build-env (:tail form)))
+    (ast/μ? form)           (build-env (:body form))
+    (ast/emission? form)    (build-env (:msgs form))
+    (ast/coll? form)        (reduce merge {} (map build-env form))
+    (ast/input? form)       (if (env/bound? form)
+                              {(:id form) (env/binding form)}
+                              {(:id form) :unbound})
+    true                    {}))
+
 ;; TODO: Now if I could only reverse these before printing, it would be a lot
 ;; easier to read...
 (defmacro deftracefn [name args & body]
@@ -66,7 +80,7 @@
        (let [v# (do ~@body)]
          (when *execution-trace*
            (record! ~input v# {:op ~(keyword name)}))
-         (trace! "---" ~(str name) "in"  (or (:bindings ~env) {})
+         (trace! "---" ~(str name) "in"  (build-env ~input)
                  "\n---\n" ~input "\n-->\n" v# "\n---")
          v#))))
 
