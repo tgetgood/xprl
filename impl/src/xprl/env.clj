@@ -13,35 +13,17 @@
 
 (defn merge-local [env x]
   (if (ast/env? x)
-    (merge-envs env (:env x))
+    (merge-envs (:env x) env)
     env))
 
-(defn bind [env id val]
-  (-> env
-      (assoc-in [:bindings id] [env val])))
+(defn bind [input val]
+  (assoc input :binding val))
 
-(defn bound? [env input]
-  (contains? (:bindings env) (:id input)))
+(defn bound? [input]
+  (contains? input :binding))
 
-(defn binding [env form]
-  (get-in env [:bindings (:id form)]))
-
-(defn unbind
-  "Removes parameter bindings from nested invocations of the same function."
-  [env μ]
-  (update env :bindings dissoc (:id μ)))
-
-(defn capture [s sym id]
-  (update s :captured assoc sym id))
-
-(defn captured? [s sym]
-  (contains? (:captured s) sym))
-
-(defn capid [s sym]
-  (get-in s [:captured sym]))
-
-(defn uncapture [s sym]
-  (update s :captured dissoc sym))
+(defn binding [form]
+  (get form :binding))
 
 (defmacro walk-cond
   "Separate tree traversal from the important logic."
@@ -71,9 +53,9 @@
   (let [walk (partial walk-bind bindings)]
     (walk-cond form walk
       (ast/input? form) (if (contains? bindings (:id form))
-                          (with-env (bind (:env form) (:id form)
-                                          (get bindings (:id form)))
-                            form)
+                          (bind form (get bindings (:id form)))
                           ;; REVIEW: Walk binding?
-                          form)
+                          (if (bound? form)
+                            (update form :binding walk)
+                            form))
       (ast/μ? form)     (update form :body walk))))

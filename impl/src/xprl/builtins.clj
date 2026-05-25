@@ -126,10 +126,14 @@
                 id                (gensym "μ-param-")
                 recid             (gensym "μ-recur-")
                 param             (ast/symbol param)
-                env               (env/capture env param id)
-                env               (if (nil? name) env (env/capture env name recid))
-                body              (env/walk-capture param (ast/input env param id) body)]
-            (ast/μ id recid name param (i/walk env body))))
+                body (if (nil? name)
+                       body
+                       (let [name (ast/symbol name)]
+                         (env/walk-capture name (ast/input env name recid) body)))]
+            (->> body
+                 (env/walk-capture param (ast/input env param id))
+                 (i/walk env)
+                 (ast/μ id recid name param))))
 
 (defextern emit [env kvs]
   :ensure (every? ast/keyword? (map first kvs))

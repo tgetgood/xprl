@@ -4,7 +4,7 @@
 
 ;; N.B.: This file goes through alternating phases of working and being a fork bomb.
 
-#_(def Y
+(def Y
   (μ f
      ~((μ x ~(f . ~(x . ~x)))
        .

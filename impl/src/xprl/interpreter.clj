@@ -12,16 +12,13 @@
     (-> (assoc f :env env)
         (update :msgs #(mapv (fn [[k v]] [(walk env k) v]) %)))))
 
+(def x (atom nil))
 (deftracefn apply [env head tail]
   (cond
-    (ast/μ? head) (let [env (-> env
-                                (env/uncapture (:param head))
-                                (env/bind (:id head) tail)
-                                (env/bind (:rec head) (ast/recurser head)))]
-                    (->> (:body head)
-                         (env/walk-bind {(:id head) tail
-                                         (:rec head) (ast/recurser head)})
-                         (walk env)))
+    (ast/μ? head) (let [bindings {(:id head) tail
+                                  (:rec head) (ast/recurser head)}
+                        body (env/walk-bind bindings (:body head))]
+                    (walk env body))
 
     (ast/external? head)   (ast/call env head tail)
     (ast/incomplete? head) (ast/application head (walk env tail))
@@ -32,11 +29,13 @@
 
 (deftracefn resolve [env f]
   (cond
-    (ast/input? f)  (let [env (env/merge-local env f)]
-                      (if (env/bound? env f)
-                        (let [[env val] (env/binding env f)]
-                          (walk (env/merge-envs (:env f) env) val))
-                        (ast/immediate f)))
+    (ast/input? f)  (if (env/bound? f)
+                      (walk env (env/binding f))
+                      (ast/immediate f))
+    #_(if (env/bound? env f)
+        (let [[env val] (env/binding env f)]
+          (walk (env/merge-envs (:env f) env) val))
+        (ast/immediate f))
     (ast/ref? f)    (:binding f)
     (ast/symbol? f) (ast/immediate f)
     true            (assert false "unreachable!!")))
@@ -54,20 +53,12 @@
     (cond
       (ast/immediate? f)   (eval env (walk (:form f)))
       (ast/application? f) (apply env (walk (:head f)) (:tail f))
-      ;; FIXME: This shouldn't be necessary.
-      (ast/input? f)       (let [env (env/merge-local env f)]
-                             ;; Once a parameter is bound, the surrounding env
-                             ;; becomes important. But if it isn't bound yet, then
-                             ;; the env can't effect anything it might later be
-                             ;; bound to, can it?
-                             ;; REVIEW: I'm not so sure.
-                             (env/with-env env f)
-                             #_(if (env/bound? env f) (env/with-env env f) f))
+      ;; (ast/input? f)       (env/with-env (env/merge-local env f) f)
       ;; FIXME: neither should this
-      (ast/symbolic? f)    (let [sym (ast/symbol f)]
-                             (if (env/captured? env sym)
-                               (ast/input {} sym (env/capid env sym))
-                               f))
+      ;; (ast/symbolic? f)    (let [sym (ast/symbol f)]
+      ;;                        (if (env/captured? env sym)
+      ;;                          (ast/input {} sym (env/capid env sym))
+      ;;                          f))
       (ast/coll? f)        (into (ast/empty f) (map walk) f)
       (ast/μ? f)           (update f :body walk)
       (ast/emission? f)    (walk-emission env f)
