@@ -8,9 +8,7 @@
 (declare walk)
 
 (defn walk-emission [env f]
-  (let [env (env/merge-envs (:env f) env)]
-    (-> (assoc f :env env)
-        (update :msgs #(mapv (fn [[k v]] [(walk env k) v]) %)))))
+  (update f :msgs #(mapv (fn [[k v]] [(walk env k) v]) %)))
 
 (deftracefn apply [env head tail]
   (cond

@@ -3,19 +3,6 @@
   (:require [clojure.set :as set]
             [xprl.ast :as ast]))
 
-(defn with-env [env x]
-  (if (ast/env? x)
-    (assoc x :env env)
-    x))
-
-(defn merge-envs [inner outer]
-  (merge-with merge outer inner))
-
-(defn merge-local [env x]
-  (if (ast/env? x)
-    (merge-envs (:env x) env)
-    env))
-
 (defn bind [input val]
   (assoc input :binding val))
 
