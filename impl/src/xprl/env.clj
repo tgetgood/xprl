@@ -43,26 +43,37 @@
 (defn uncapture [s sym]
   (update s :captured dissoc sym))
 
-(defn deresolve [{:keys [env id sym] :as input}]
-  (let [env (unbind env input)]
-    ;; REVIEW: Does this really cause bugs? I'm not sure.
-    ;; It certainly comes up. And if the value to which an input is bound were
-    ;; to become captured by that same input, that would be nonsensical, so
-    ;; guarding isn't crazy.
-    (if (and (captured? env sym) (= id (capid env sym)))
-      (uncapture env sym)
-     env)))
+(defmacro walk-cond
+  "Separate tree traversal from the important logic."
+  [form walk & cases]
+  {:syle/indent [2]}
+  `(cond
+     (ast/immediate? ~form)   (update ~form :form ~walk)
+     (ast/application? ~form) (-> ~form (update :head ~walk) (update :tail ~walk))
+     (ast/pair? ~form)        (-> ~form (update :head ~walk) (update :tail ~walk))
+     (ast/coll? ~form)        (into (ast/empty ~form) (map ~walk) ~form)
+     (ast/emission? ~form)    (update ~form :msgs ~walk)
+     ~@cases
+     true                     ~form ))
 
 (defn walk-capture [sym input form]
   (let [walk (partial walk-capture sym input)]
-    (cond
-      (ast/immediate? form)   (update form :form walk)
-      (ast/application? form) (-> form (update :head walk) (update :tail walk))
-      (ast/pair? form)        (-> form (update :head walk) (update :tail walk))
-      (ast/symbolic? form)    (if (= (ast/symbol form) sym) input form)
-      (ast/μ? form)           (if (= sym (:param form))
-                                form
-                                (update form :body walk))
-      (ast/emission? form)    (update form :msgs walk)
-      (ast/coll? form)        (into (ast/empty form) (map walk) form)
-      true                    form)))
+    (walk-cond form walk
+      ;; FIXME: If we're creating nested μs from the outside in, then we'll need
+      ;; to clobber inputs in narrower contexts. That's correct, but there might
+      ;; be cases where it leads to problems.
+      (ast/symbolic? form) (if (= (ast/symbol form) sym) input form)
+      (ast/μ? form)        (if (= sym (:param form))
+                             form
+                             (update form :body walk)))))
+
+(defn walk-bind [bindings form]
+  (let [walk (partial walk-bind bindings)]
+    (walk-cond form walk
+      (ast/input? form) (if (contains? bindings (:id form))
+                          (with-env (bind (:env form) (:id form)
+                                          (get bindings (:id form)))
+                            form)
+                          ;; REVIEW: Walk binding?
+                          form)
+      (ast/μ? form)     (update form :body walk))))

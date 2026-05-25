@@ -7,8 +7,6 @@
 
 (declare walk)
 
-
-
 (defn walk-emission [env f]
   (let [env (env/merge-envs (:env f) env)]
     (-> (assoc f :env env)
@@ -20,7 +18,10 @@
                                 (env/uncapture (:param head))
                                 (env/bind (:id head) tail)
                                 (env/bind (:rec head) (ast/recurser head)))]
-                    (walk env (:body head)))
+                    (->> (:body head)
+                         (env/walk-bind {(:id head) tail
+                                         (:rec head) (ast/recurser head)})
+                         (walk env)))
 
     (ast/external? head)   (ast/call env head tail)
     (ast/incomplete? head) (ast/application head (walk env tail))
@@ -53,6 +54,7 @@
     (cond
       (ast/immediate? f)   (eval env (walk (:form f)))
       (ast/application? f) (apply env (walk (:head f)) (:tail f))
+      ;; FIXME: This shouldn't be necessary.
       (ast/input? f)       (let [env (env/merge-local env f)]
                              ;; Once a parameter is bound, the surrounding env
                              ;; becomes important. But if it isn't bound yet, then
@@ -61,6 +63,7 @@
                              ;; REVIEW: I'm not so sure.
                              (env/with-env env f)
                              #_(if (env/bound? env f) (env/with-env env f) f))
+      ;; FIXME: neither should this
       (ast/symbolic? f)    (let [sym (ast/symbol f)]
                              (if (env/captured? env sym)
                                (ast/input {} sym (env/capid env sym))
