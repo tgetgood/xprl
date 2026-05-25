@@ -12,14 +12,11 @@
     (-> (assoc f :env env)
         (update :msgs #(mapv (fn [[k v]] [(walk env k) v]) %)))))
 
-(def x (atom nil))
 (deftracefn apply [env head tail]
   (cond
-    (ast/μ? head) (let [bindings {(:id head) tail
-                                  (:rec head) (ast/recurser head)}
-                        body (env/walk-bind bindings (:body head))]
-                    (walk env body))
-
+    (ast/μ? head)          (let [bindings {(:id head)  tail
+                                           (:rec head) (ast/recurser head)}]
+                             (walk env (env/walk-bind bindings (:body head))))
     (ast/external? head)   (ast/call env head tail)
     (ast/incomplete? head) (ast/application head (walk env tail))
     (ast/recurser? head)   (ast/emission env
@@ -32,10 +29,6 @@
     (ast/input? f)  (if (env/bound? f)
                       (walk env (env/binding f))
                       (ast/immediate f))
-    #_(if (env/bound? env f)
-        (let [[env val] (env/binding env f)]
-          (walk (env/merge-envs (:env f) env) val))
-        (ast/immediate f))
     (ast/ref? f)    (:binding f)
     (ast/symbol? f) (ast/immediate f)
     true            (assert false "unreachable!!")))
@@ -53,12 +46,6 @@
     (cond
       (ast/immediate? f)   (eval env (walk (:form f)))
       (ast/application? f) (apply env (walk (:head f)) (:tail f))
-      ;; (ast/input? f)       (env/with-env (env/merge-local env f) f)
-      ;; FIXME: neither should this
-      ;; (ast/symbolic? f)    (let [sym (ast/symbol f)]
-      ;;                        (if (env/captured? env sym)
-      ;;                          (ast/input {} sym (env/capid env sym))
-      ;;                          f))
       (ast/coll? f)        (into (ast/empty f) (map walk) f)
       (ast/μ? f)           (update f :body walk)
       (ast/emission? f)    (walk-emission env f)

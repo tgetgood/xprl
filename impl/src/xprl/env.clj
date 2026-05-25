@@ -45,7 +45,7 @@
       ;; to clobber inputs in narrower contexts. That's correct, but there might
       ;; be cases where it leads to problems.
       (ast/symbolic? form) (if (= (ast/symbol form) sym) input form)
-      (ast/μ? form)        (if (= sym (:param form))
+      (ast/μ? form)        (if (or (= sym (:param form)) (= sym (:name form)))
                              form
                              (update form :body walk)))))
 
@@ -54,7 +54,6 @@
     (walk-cond form walk
       (ast/input? form) (if (contains? bindings (:id form))
                           (bind form (get bindings (:id form)))
-                          ;; REVIEW: Walk binding?
                           (if (bound? form)
                             (update form :binding walk)
                             form))

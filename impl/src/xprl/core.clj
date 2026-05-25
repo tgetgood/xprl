@@ -28,9 +28,8 @@
   (fn [l]
     (reset! te l)
     (let [[sym value] l]
-      ;; (assert (ast/symbolic? sym) sym)
-      (when (ast/symbolic? sym)
-        (swap! env ns/ns-intern (ast/symbol sym) value))
+      (assert (ast/symbolic? sym) sym)
+      (swap! env ns/ns-intern (ast/symbol sym) value)
       nil)))
 
 (defn with-return [ccs cb]
