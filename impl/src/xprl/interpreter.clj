@@ -59,7 +59,8 @@
                              ;; the env can't effect anything it might later be
                              ;; bound to, can it?
                              ;; REVIEW: I'm not so sure.
-                             (if (env/bound? env f) (env/with-env env f) f))
+                             (env/with-env env f)
+                             #_(if (env/bound? env f) (env/with-env env f) f))
       (ast/symbolic? f)    (let [sym (ast/symbol f)]
                              (if (env/captured? env sym)
                                (ast/input {} sym (env/capid env sym))

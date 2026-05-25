@@ -60,7 +60,9 @@
       (ast/application? form) (-> form (update :head walk) (update :tail walk))
       (ast/pair? form)        (-> form (update :head walk) (update :tail walk))
       (ast/symbolic? form)    (if (= (ast/symbol form) sym) input form)
-      (ast/μ? form)           (update form :body walk)
+      (ast/μ? form)           (if (= sym (:param form))
+                                form
+                                (update form :body walk))
       (ast/emission? form)    (update form :msgs walk)
       (ast/coll? form)        (into (ast/empty form) (map walk) form)
       true                    form)))
