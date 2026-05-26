@@ -7,9 +7,6 @@
 
 (declare walk)
 
-(defn walk-emission [env f]
-  (update f :msgs #(mapv (fn [[k v]] [(walk env k) v]) %)))
-
 (deftracefn apply [env head tail]
   (cond
     (ast/μ? head)          (let [bindings {(:id head)  tail
@@ -46,7 +43,7 @@
       (ast/application? f) (apply env (walk (:head f)) (:tail f))
       (ast/coll? f)        (into (ast/empty f) (map walk) f)
       (ast/μ? f)           (update f :body walk)
-      (ast/emission? f)    (walk-emission env f)
+      (ast/emission? f)    (update f :msgs #(mapv (fn [[k v]] [(walk k) v]) %))
       true                 f)))
 
 ;; TODO: current work list

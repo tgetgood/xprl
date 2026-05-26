@@ -66,9 +66,8 @@
     (ast/μ? form)           (build-env (:body form))
     (ast/emission? form)    (build-env (:msgs form))
     (ast/coll? form)        (reduce merge {} (map build-env form))
-    (ast/input? form)       (if (env/bound? form)
-                              {(:id form) (env/binding form)}
-                              {(:id form) :unbound})
+    (ast/input? form)       {(str (:sym form) "->(" (:id form) ")")
+                             (if (env/bound? form) (env/binding form) :unbound)}
     true                    {}))
 
 ;; TODO: Now if I could only reverse these before printing, it would be a lot
