@@ -31,7 +31,11 @@
       ;; FIXME: If we're creating nested μs from the outside in, then we'll need
       ;; to clobber inputs in narrower contexts. That's correct, but there might
       ;; be cases where it leads to problems.
-      (ast/symbolic? form) (if (= (ast/symbol form) sym) input form)
+      (ast/symbolic? form) (if (= (ast/symbol form) sym)
+                             input
+                             (if (and (ast/input? form) (bound? form))
+                               (update form :binding walk)
+                               form))
       (ast/μ? form)        (if (or (= sym (:param form)) (= sym (:name form)))
                              form
                              (update form :body walk)))))
