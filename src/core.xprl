@@ -29,7 +29,7 @@
 ;;;;; tests
 
 
-(defμ pow x
+#_(defμ pow x
   (let* [n ~(nth* ~x 1)
          k ~(nth* ~x 2)]
      ~(cond
