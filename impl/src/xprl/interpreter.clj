@@ -10,7 +10,7 @@
 (deftracefn apply [env head tail]
   (cond
     (ast/μ? head)          (let [bindings {(:id head)  tail
-                                           (:rec head) (ast/recurser head)}]
+                                           (:rec head) head #_(ast/recurser head)}]
                              (walk env (env/walk-bind bindings (:body head))))
     (ast/external? head)   (ast/call env head tail)
     (ast/incomplete? head) (ast/application head (walk env tail))
@@ -36,7 +36,7 @@
     (ast/incomplete? f) (ast/immediate f)
     true                f))
 
-(deftracefn walk [env f]
+(deftracefn walk* [env f]
   (let [walk (partial walk env)]
     (cond
       (ast/immediate? f)   (eval env (walk (:form f)))
@@ -45,6 +45,8 @@
       (ast/μ? f)           (update f :body walk)
       (ast/emission? f)    (update f :msgs #(mapv (fn [[k v]] [(walk k) v]) %))
       true                 f)))
+
+(def walk (memoize walk*))
 
 ;; TODO: current work list
 ;;
