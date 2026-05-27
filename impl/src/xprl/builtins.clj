@@ -129,9 +129,9 @@
                 body (if (nil? name)
                        body
                        (let [name (ast/symbol name)]
-                         (env/walk-capture name (ast/input env name recid) body)))]
+                         (env/walk-capture name (ast/input name recid) body)))]
             (->> body
-                 (env/walk-capture param (ast/input env param id))
+                 (env/walk-capture param (ast/input param id))
                  (i/walk env)
                  (ast/μ id recid name param))))
 

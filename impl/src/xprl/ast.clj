@@ -86,23 +86,16 @@
   (->Ref sym local))
 
 
-(defprotocol Env)
-
-(defn env? [x]
-  (satisfies? Env x))
-
-
-(defrecord LooseEnd [env sym id]
-  Env
+(defrecord LooseEnd [sym id]
   Object
   (toString [_]
-    (str sym "->" (when *verbose* (str "(" id ")")))))
+    (str sym "->(" id ")")))
 
 (defn input? [x]
   (instance? LooseEnd x))
 
-(defn input [env sym id]
-  (->LooseEnd env sym id))
+(defn input [sym id]
+  (->LooseEnd sym id))
 
 
 (defn symbolic? [x]
