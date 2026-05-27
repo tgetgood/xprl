@@ -80,6 +80,15 @@
                    (let1 ~(nth* ~bindings 1) ~(nth* ~bindings 2)
                          ~(let* ~(rest* ~(rest* ~bindings)) ~body))))))
 
+(def let*1
+  (μ let*1 x
+     ~(let1 bindings ~(nth* ~x 1)
+            ~(let1 body ~(nth* ~x 2)
+                   ~(if (empty?* ~bindings)
+                      body
+                      (let1 ~(nth* ~bindings 1) ~(nth* ~bindings 2)
+                            ~(let*1 ~(rest* ~(rest* ~bindings)) ~body)))))))
+
 (def let-map
   (μ let-map x
      ~(let1 bindings ~(nth* ~x 1)
