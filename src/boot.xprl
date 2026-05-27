@@ -72,14 +72,13 @@
 
 ;; ;;;;; destructuring
 
-(def let*
-  (μ let* x
-     ~(let1 bindings ~(nth* ~x 1)
-           ~(let1 body ~(nth* ~x 2)
-                  ~(if (empty?* ~bindings)
-                     body
-                     (let1 ~(nth* ~bindings 1) ~(nth* ~bindings 2)
-                           ~(let* ~(rest* ~(rest* ~bindings)) ~body)))))))
+(defμ let* x
+  (let1 bindings ~(nth* ~x 1)
+         ~(let1 body ~(nth* ~x 2)
+                ~(if (empty?* ~bindings)
+                   body
+                   (let1 ~(nth* ~bindings 1) ~(nth* ~bindings 2)
+                         ~(let* ~(rest* ~(rest* ~bindings)) ~body))))))
 
 (def let-map
   (μ let-map x
