@@ -25,6 +25,8 @@
      ~@cases
      true                     ~form ))
 
+;; REVIEW: Three separate tree walkers probably indicates something wrong.
+
 (defn walk-capture [sym input form]
   (let [walk (partial walk-capture sym input)]
     (walk-cond form walk
@@ -49,3 +51,24 @@
                             (update form :binding walk)
                             form))
       (ast/μ? form)     (update form :body walk))))
+
+(defn walk-rename [find replace form]
+  (let [walk (partial walk-rename find replace)]
+    (walk-cond form walk
+      (ast/input? form) (if (= find (:id form))
+                          (ast/input (:sym form) replace)
+                          (if (bound? form)
+                            (update form :binding walk)
+                            form))
+      (ast/μ? form)     (if (= find (:id form))
+                      form
+                      (update form :body walk)))))
+
+(defn rename-inputs [bindings]
+  (into {} (map (fn [[k v]] [k (gensym (str k "-"))])) bindings))
+
+(defn invoke [bindings form]
+  (let [renames (rename-inputs bindings)
+        binds   (into {} (map (fn [[k v]] [(get renames k) v])) bindings)]
+    (->> (reduce (fn [acc [k v]] (walk-rename k v acc)) form renames)
+         (walk-bind binds))))

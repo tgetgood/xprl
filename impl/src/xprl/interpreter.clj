@@ -21,7 +21,7 @@
     ;; is theoretically important.
     (ast/μ? head)          (let [bindings {(:id head)  tail
                                            (:rec head) head}]
-                             (walk env (env/walk-bind bindings (:body head))))
+                             (walk env (env/invoke bindings (:body head))))
     (ast/external? head)   (ast/call env head tail)
     (ast/incomplete? head) (ast/application head (walk env tail))
 
