@@ -229,18 +229,6 @@
   (instance? Mu x))
 
 
-(defrecord Recurrence [p]
-  Object
-  (toString [_]
-    (str (:name p))))
-
-(defn recurser [p]
-  (->Recurrence p))
-
-(defn recurser? [x]
-  (instance? Recurrence x))
-
-
 (defrecord Extern [name fn]
   Object
   (toString [_]

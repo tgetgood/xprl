@@ -9,13 +9,21 @@
 
 (deftracefn apply [env head tail]
   (cond
+    ;; FIXME: μs should be constructed as entities which can efficiently receive
+    ;; the arguments they expect. This will remove the need walk the ast again
+    ;; and again.
+    ;;
+    ;; It will, however, lead to an excessively verbose first pass where
+    ;; everything get set up and nothing knocked down, even when doing so would
+    ;; be trivial.
+    ;;
+    ;; But it will also make calling a μ a genuine act of message passing, which
+    ;; is theoretically important.
     (ast/μ? head)          (let [bindings {(:id head)  tail
-                                           (:rec head) head #_(ast/recurser head)}]
+                                           (:rec head) head}]
                              (walk env (env/walk-bind bindings (:body head))))
     (ast/external? head)   (ast/call env head tail)
     (ast/incomplete? head) (ast/application head (walk env tail))
-    (ast/recurser? head)   (ast/emission env
-                             [[(ast/xkey :return) (ast/application (:p head) tail)]])
 
     true (throw (RuntimeException. (str head " is not applicable!")))))
 
