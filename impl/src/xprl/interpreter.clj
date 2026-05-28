@@ -14,7 +14,7 @@
     ;; and again.
     ;;
     ;; It will, however, lead to an excessively verbose first pass where
-    ;; everything get set up and nothing knocked down, even when doing so would
+    ;; everything gets set up and nothing knocked down, even when doing so would
     ;; be trivial.
     ;;
     ;; But it will also make calling a μ a genuine act of message passing, which
