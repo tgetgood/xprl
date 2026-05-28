@@ -39,9 +39,6 @@
   ([f] (i/walk {} (ast/immediate f)))
   ([f conts] (exec/start! conts (go! f))))
 
-(defn evv [s]
-  (go! (:form (r/read (r/string-reader s) @the-env))))
-
 (def base-conts
   {(ast/xkey :env)     (env-updater the-env)
    (ast/xkey :return)  (fn [v] (when (not (nil? v)) (println "=>> " v)))
