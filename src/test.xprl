@@ -61,18 +61,18 @@
 (destructure [a b . c] [1 2 3 4 5])     {a 1 b 2 c [3 4 5]}
 
 
-;; TODO: Reimplement `fn` and we already have tests!
-;; ((fn [x y z] (+ x (* y z))) 1 2 3)       7
-;; ((fn [x [y z]] (* x y z)) 5 [5 5])       125
+;; N.B.: The bootstrapping `fn` needs to be named. This is a kludge.
+((fn _ [x y z] (+ x (* y z))) 1 2 3)       7
+((fn _ [x [y z]] (* x y z)) 5 [5 5])       125
 
 
-;; ((fn xs (+ (nth xs 1) (nth xs 2) (nth (nth xs 3) 1) 1)) 2 3 [1]) #_=> 7
+((fn _ xs (+ (nth xs 1) (nth xs 2) (nth (nth xs 3) 1) 1)) 2 3 [1]) #_=> 7
 
-;; ((fn x ((nth x 1) (nth x 1))) (fn x 1)) 1
+((fn _ x ((nth x 1) (nth x 1))) (fn _ x 1)) 1
 
-;; ((fn x (+ 1 x)) . 1)                 2
-;; (inc 6)                              7
-;; ((fn xs (nth xs 2)) 1 2 3)           2
+((fn _ x (+ 1 x)) . 1)                 2
+(inc 6)                              7
+((fn _ xs (nth xs 2)) 1 2 3)           2
 
 ;; (!1 . 5)  120
 ;; (!2 . 5)  120

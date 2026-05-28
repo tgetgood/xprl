@@ -162,19 +162,20 @@
            ~(let-map ~(destructure ~(nth* ~x 2) ~args)
               ~~(nth* ~x 3))))))
 
-#_(defμ fn2 [params body]
-  (μ args
-     ~(let-map ~(destructure ~params ~~args)
-        ~~body)))
+;; (defμ fn2 [params body]
+;;   (μ args
+;;      ~(let-map ~(destructure ~params ~~args)
+;;         ~~body)))
 
-#_(defμ fn3 [name params body]
-  ~(μ ~name args
-      ~(let-map ~(destructure ~params ~~args)
-         ~~body)))
+(def fn
+  (μ x
+     ~(μ ~(nth* ~x 1) args
+          ~(let-map ~(destructure ~(nth* ~x 2) ~~args)
+             ~~(nth* ~x 3)))))
 
-#_(defμ fn args
-  (let1 indirect ~(nth* ~[fn2 fn3] ~(-* ~(count* ~args) 1))
-        ~(indirect . ~args)))
+;; (defμ fn args
+;;   (let1 indirect ~(nth* [error fn2 fn3] ~(count* ~args))
+;;         ~(~indirect . ~args)))
 
 #_(def fn
   (μ args
@@ -187,8 +188,12 @@
                              ~(let1 dispatch ~(match ~defs ~fn-args)
                                     ~(dispatch . ~fn-args))))))))
 
-#_(defμ defn x
-  (def ~(nth* ~x 1) (fn . ~x)))
+(def defn
+  (μ x
+     ~(def ~(nth* ~x 1) (fn . ~x))))
+
+(defn inc [x]
+  (+ x 1))
 
 ;; ;;;;; streams
 
