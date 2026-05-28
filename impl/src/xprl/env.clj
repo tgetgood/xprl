@@ -60,7 +60,7 @@
                           (if (bound? form)
                             (update form :binding walk)
                             form))
-      (ast/μ? form)     (if (= find (:id form))
+      (ast/μ? form)     (if (or (= find (:id form)) (= find (:recid form)))
                       form
                       (update form :body walk)))))
 
