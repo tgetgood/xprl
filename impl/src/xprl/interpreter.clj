@@ -2,27 +2,20 @@
   (:refer-clojure :exclude [resolve eval apply])
   (:require [xprl.ast :as ast]
             [xprl.debug :refer [deftracefn]]
-            [xprl.env :as env]
-            [xprl.system :as sys]))
+            [xprl.env :as env]))
 
 (declare walk)
 
+(defn emit! [env f args]
+  (ast/emission env [[:xprl.executor/new-task! [env f args]]]))
+
+(defn walk-emission [env em]
+  (update em :msgs (fn [xs] (into [] (map (fn [[k v]] [(walk env k) v])) xs))))
+
 (deftracefn apply [env head tail]
   (cond
-    ;; FIXME: μs should be constructed as entities which can efficiently receive
-    ;; the arguments they expect. This will remove the need walk the ast again
-    ;; and again.
-    ;;
-    ;; It will, however, lead to an excessively verbose first pass where
-    ;; everything gets set up and nothing knocked down, even when doing so would
-    ;; be trivial.
-    ;;
-    ;; But it will also make calling a μ a genuine act of message passing, which
-    ;; is theoretically important.
-    (ast/μ? head)          (let [bindings {(:id head)  tail
-                                           (:rec head) head}]
-                             (walk env (env/invoke bindings (:body head))))
-    (ast/external? head)   (ast/call env head tail)
+    (ast/μ? head)          (emit! env head tail)
+    (ast/external? head)   (emit! env head tail)
     (ast/incomplete? head) (ast/application head (walk env tail))
 
     true (throw (RuntimeException. (str head " is not applicable!")))))
@@ -51,17 +44,7 @@
       (ast/application? f) (apply env (walk (:head f)) (:tail f))
       (ast/coll? f)        (into (ast/empty f) (map walk) f)
       (ast/μ? f)           (update f :body walk)
-      (ast/emission? f)    (update f :msgs #(mapv (fn [[k v]] [(walk k) v]) %))
+      (ast/emission? f)    (walk-emission env f)
       true                 f)))
 
 (def walk (memoize walk*))
-
-;; TODO: current work list
-;;
-;; 1) reimplement (or restore) pipes as infinite lazy seqs of SVs.
-;; 2) rewrite xprl.system as a message passing router using pipes instead of
-;; svs/not-a-compiler as currently implemented.
-;; 4) squiggol impl
-;; 5) implement :env channel and namespaces in xprl itself
-;; 6) (might need to switch 5 & 6) figure out data representations in xprl
-;; itself.

@@ -1,38 +1,69 @@
 (ns xprl.executor
   (:require [xprl.ast :as ast]
+            [xprl.builtins :as builtins]
+            [xprl.env :as env]
             [xprl.interpreter :as i]))
 
-(defn deliver! [cable k env msg]
-  (let [dest (get cable k)]
-    (assert (not (nil? dest)))
-    (cond
-      (ast/wire? dest) (run! (fn [[_ conn]] (deliver! conn msg)) @(:connections dest))
-      (fn? dest)       (dest (i/walk env msg))
-      (ast/μ? dest)    (i/apply env dest msg)
-      true             (throw (RuntimeException.
-                               (str "Cannot deliver message to a " (type dest) ":\n" dest))))))
+(defn walk-task [env form]
+  [i/walk [env form]])
 
-(defn msgs [form]
+(defn μ-task [env μ args]
+  (let [bindings {(:id μ)  args
+                  (:rec μ) μ}]
+    (walk-task [env (env/invoke bindings (:body μ))])))
+
+(defn external-task [env f args]
+  [ast/call [env f args]])
+
+(defn task [env f args]
   (cond
-    (ast/emission? form) (into [] (map (fn [x] (into [(:env form)] x))) (:msgs form))
-    true                 []))
+    (ast/μ? f)        (μ-task env f args)
+    (ast/external? f) (external-task env f args)
+    true              (throw (RuntimeException. (str "cannot enqueue " f)))))
 
+(defn enqueue! [exec task]
+  (swap! exec update :work conj task))
 
-(defn execute! [[dest msg]]
-  (if-let [next (deliver! (:wire (meta dest)) msg)]
-    (msgs next)
-    []))
+(defn add-work! [exec env f args]
+  (enqueue! exec (task env f args))
+  nil)
 
-(defn start! [cable form]
-  (if (ast/emission? form)
-    (run! (fn [[env k msg]] (deliver! cable k env msg)) (msgs form))
-    form)
-  #_(loop [work (msgs form)]
-    (when (seq work)
-      (recur (into (pop work) (execute! (peek work)))))))
+(defn send! [exec {:keys [cable] :as env} [k v]]
+  (if (= ::new-task! k) ; HACK: Hard coded channel to prevent circular dependencies.
+    (apply add-work! exec v)
+    (if (contains? cable k)
+      (add-work! exec env (get cable k) v)
+      (throw (RuntimeException. (str "Cannot send " v " to " k ". No such channel."))))))
 
-;; TODO: take the cable in here, thread the form and create the initial queue,
-;; then run to empty.
-;;
-;; I think the system logic from the compiler branch (which I deleted here) is
-;; actually the right way to go.
+(defn enqueue-emission! [exec env {:keys [msgs] :as em}]
+  (let [env (update env :cable :merge (:cable (:env em)))]
+    (run! (partial send! exec env) msgs)))
+
+(defn run-task! [exec [f args]]
+  ;; KLUDGE: first arg is always `env`. That should be better controlled.
+  (let [env      (first args)
+        args     (into [env] (rest args))
+        v        (apply f args)]
+    (if (ast/emission? v)
+      (enqueue-emission! exec env v)
+      (if (contains? (:cable env) (ast/xkey :return))
+        (send! exec env [(ast/xkey :return) v])
+        (println "dropping returned value: " v)))))
+
+(defn create! []
+  (atom {:work  []
+         :index {}}))
+
+(defn seed! [exec cable form]
+  (enqueue! exec (walk-task {:cable cable} form)))
+
+(defn start! [exec]
+  (let [tasks (:work @exec)]
+    (println (count tasks))
+    (when (seq tasks)
+      ;; TODO: dosync for work stealing.
+      (let [t (peek tasks)]
+        ;; Remove tasks from work stack *before* running it!
+        (swap! exec update :work pop)
+        (run-task! exec t))
+      (recur exec))))

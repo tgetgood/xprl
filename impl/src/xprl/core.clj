@@ -37,15 +37,21 @@
 
 (defn go!
   ([f] (i/walk {} (ast/immediate f)))
-  ([f conts] (exec/start! conts (go! f))))
+  ([f conts] (sys/start! conts (ast/immediate f))))
+
+(defn cable [cmap]
+  (into {} (map (fn [[k v]]
+                  [(ast/xkey k)
+                   (builtins/primitive (ast/symbol (str "root-cable-" (name k))) v)]))
+        cmap))
 
 (def base-conts
-  {(ast/xkey :env)     (env-updater the-env)
-   (ast/xkey :return)  (fn [v] (when (not (nil? v)) (println "=>> " v)))
-   (ast/xkey :unbound) #(println "WARNING message on unbound channel:" %)
-   (ast/xkey :log)     #(println "LOG:" %)
-   (ast/xkey :error)   #(binding [*out* *err*]
-                         (println %))})
+  (cable {:env     (env-updater the-env)
+          :return  (fn [v] (when (not (nil? v)) (println "=>> " v)))
+          :unbound #(println "WARNING message on unbound channel:" %)
+          :log     #(println "LOG:" %)
+          :error   #(binding [*out* *err*] (println %))}))
+
 (defn ev [s]
   (go! (:form (r/read (r/string-reader s) @the-env)) ))
 
@@ -57,16 +63,15 @@
 
 (defn loadfile [envatom fname]
   (println "\nloading:" fname "\n")
-  (let [conts (merge base-conts {(ast/xkey :env) (env-updater envatom)})]
-    (loop [reader (r/file-reader fname)]
-      (let [env    @envatom
-            reader (r/read reader env)
-            form   (:form reader)]
-        (if (= :eof form)
-          'EOF
-          (do
-            (go! form conts)
-            (recur reader))))))
+  (loop [reader (r/file-reader fname)]
+    (let [env    @envatom
+          reader (r/read reader env)
+          form   (:form reader)]
+      (if (= :eof form)
+        'EOF
+        (do
+          (go! form base-conts)
+          (recur reader)))))
   envatom)
 
 (defn reload! [fnames]

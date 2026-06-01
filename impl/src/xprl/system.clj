@@ -1,5 +1,6 @@
 (ns xprl.system
-  (:require [xprl.ast :as ast]))
+  (:require [xprl.ast :as ast]
+            [xprl.executor :as exec]))
 
 (defn naked-cable [ks]
   (into {} (map (fn [k] [(ast/xkey k) (ast/wire (gensym (str (name k) "-repl-")))])) ks))
@@ -17,3 +18,13 @@
               (splice! (get cable k) tag v)))
           conts))
   form)
+
+(defn init! []
+  {:executors [(exec/create!)]})
+
+;; FIXME: We should reuse the system, not recreate it for each form.
+(defn start! [cable form]
+  (let [sys (init!)]
+    (exec/seed! (first (:executors sys)) cable form)
+    (run! exec/start! (:executors sys))
+    sys))
