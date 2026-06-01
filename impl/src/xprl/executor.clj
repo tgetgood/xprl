@@ -63,7 +63,7 @@
     (when (seq tasks)
       ;; TODO: dosync for work stealing.
       (let [t (peek tasks)]
-        ;; Remove tasks from work stack *before* running it!
+        ;; Remove task from work stack *before* running it!
         (swap! exec update :work pop)
         (run-task! exec t))
       (recur exec))))
