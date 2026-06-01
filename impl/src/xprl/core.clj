@@ -32,9 +32,6 @@
       (swap! env ns/ns-intern (ast/symbol sym) value)
       nil)))
 
-(defn with-return [ccs cb]
-  (assoc ccs (ast/xkey :return) cb))
-
 (defn go!
   ([f] (i/walk {} (ast/immediate f)))
   ([f conts] (sys/start! conts (ast/immediate f))))
@@ -44,6 +41,9 @@
                   [(ast/xkey k)
                    (builtins/primitive (ast/symbol (str "root-cable-" (name k))) v)]))
         cmap))
+
+(defn with-return [ccs cb]
+  (merge ccs (cable {:return cb})))
 
 (def base-conts
   (cable {:env     (env-updater the-env)
