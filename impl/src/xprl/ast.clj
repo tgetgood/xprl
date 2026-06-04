@@ -514,7 +514,7 @@
   (insp [form ^Writer w level]
     (spacer w level)
     (.write w "E\n")
-    (loop [kvs (elements (:msgs form))]
+    (loop [kvs (flatten (elements (:msgs form)))]
       (when (<= 2 (count kvs))
         (insp (first kvs) w (inc level))
         (insp (second kvs) w (inc level))
@@ -531,7 +531,7 @@
 (defn incomplete? [x]
   (if (coll? x)
     (some incomplete? x)
-    (or (input? x) (immediate? x) (application? x) (emission? x))))
+    (or (immediate? x) (application? x))))
 
 (defn empty
   "Wrapper for clojure.core/empty that returns `[]` given a MapEntry."

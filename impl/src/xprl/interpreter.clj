@@ -7,7 +7,7 @@
 (declare walk)
 
 (defn emit! [env f args]
-  (ast/emission env [[:xprl.executor/new-task! [env f args]]]))
+  (ast/emission env [[:xprl.executor/new-task! [f args]]]))
 
 (defn walk-emission [env em]
   (update em :msgs (fn [xs] (into [] (map (fn [[k v]] [(walk env k) v])) xs))))

@@ -4,66 +4,71 @@
             [xprl.env :as env]
             [xprl.interpreter :as i]))
 
-(defn walk-task [env form]
-  [i/walk [env form]])
+(defn walk-task [form]
+  (fn [env] (i/walk env form)))
 
-(defn μ-task [env μ args]
+(defn μ-task [μ args]
   (let [bindings {(:id μ)  args
                   (:rec μ) μ}]
-    (walk-task [env (env/invoke bindings (:body μ))])))
+    (walk-task (env/invoke bindings (:body μ)))))
 
-(defn external-task [env f args]
-  [ast/call [env f args]])
+(defn external-task [f args]
+  (fn [env] (ast/call env f args)))
 
-(defn task [env f args]
+(defn task [f args]
   (cond
-    (ast/μ? f)        (μ-task env f args)
-    (ast/external? f) (external-task env f args)
+    (ast/μ? f)        (μ-task f args)
+    (ast/external? f) (external-task f args)
     true              (throw (RuntimeException. (str "cannot enqueue " f)))))
 
 (defn enqueue! [exec task]
   (swap! exec update :work conj task))
 
-(defn add-work! [exec env f args]
-  (enqueue! exec (task env f args))
+(defn enqueue-task! [exec f args]
+  (enqueue! exec (task f args))
   nil)
 
-(defn send! [exec {:keys [cable] :as env} [k v]]
-  (if (= ::new-task! k) ; HACK: Hard coded channel to prevent circular dependencies.
-    (apply add-work! exec v)
-    (if (contains? cable k)
-      (add-work! exec env (get cable k) v)
+(defn send! [exec env k v]
+  (if (contains? env k)
+    (enqueue-task! exec (get env k) v)
+    (do (println env)
       (throw (RuntimeException. (str "Cannot send " v " to " k ". No such channel."))))))
 
-(defn enqueue-emission! [exec env {:keys [msgs] :as em}]
-  (let [env (update env :cable :merge (:cable (:env em)))]
-    (run! (partial send! exec env) msgs)))
+(defn enqueue-emission! [exec {:keys [env msgs]}]
+  (run! (fn [[k v]] (send! exec env k v)) msgs))
 
-(defn run-task! [exec [f args]]
-  ;; KLUDGE: first arg is always `env`. That should be better controlled.
-  (let [env      (first args)
-        args     (into [env] (rest args))
-        v        (apply f args)]
-    (if (ast/emission? v)
-      (enqueue-emission! exec env v)
-      (if (contains? (:cable env) (ast/xkey :return))
-        (send! exec env [(ast/xkey :return) v])
-        (println "dropping returned value: " v)))))
+(defn run-task! [exec env task]
+  ;; Tasks are contextual thunks, so they're functions of the env in which they
+  ;; eventually execute.
+  (let [v (task env)]
+    (cond
+      (ast/emission? v)                  (enqueue-emission! exec v)
+      (ast/incomplete? v)                (println "error" v)
+      (nil? v)                           nil
+      ;; FIXME: using send here replaces a task with a task, which is no good.
+      ;; At some point we have to forget the task stack and DO SOMETHING
+      (contains? env (ast/xkey :return)) (send! exec env (ast/xkey :return) [v])
+      true                               (println "dropping returned value: " v))))
 
 (defn create! []
   (atom {:work  []
          :index {}}))
 
-(defn seed! [exec cable form]
-  (enqueue! exec (walk-task {:cable cable} form)))
+(defn seed! [exec form]
+  (enqueue! exec (walk-task form)))
 
-(defn start! [exec]
-  (let [tasks (:work @exec)]
-    (println (count tasks))
-    (when (seq tasks)
-      ;; TODO: dosync for work stealing.
-      (let [t (peek tasks)]
-        ;; Remove task from work stack *before* running it!
-        (swap! exec update :work pop)
-        (run-task! exec t))
-      (recur exec))))
+(defn start! [exec root-cable]
+  (let [env   (assoc root-cable ::new-task!
+                     (builtins/primitive "enqueue" (fn [f args]
+                                                     (enqueue-task! exec f args))))]
+    (loop []
+      (let [tasks (:work @exec)]
+        (println (count tasks))
+        (when (seq tasks)
+          (println (peek tasks))
+          ;; TODO: dosync for work stealing.
+          (let [t (peek tasks)]
+            ;; Remove task from work stack *before* running it!
+            (swap! exec update :work pop)
+            (run-task! exec env t))
+          (recur))))))
