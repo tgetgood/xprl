@@ -137,7 +137,7 @@
 
 (defextern emit [env kvs]
   :ensure (every? ast/keyword? (map first kvs))
-  :return (i/walk env (ast/emission env kvs)))
+  :return (ast/emission env kvs))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]
