@@ -6,7 +6,14 @@
 
 (declare walk)
 
-(defn emit! [env f args]
+(defn with-return [env rf f]
+  (let [env (assoc env (ast/xkey :return) (ptask rf))]
+    (f env)))
+
+(defn return! {:style/indent 1} [env v]
+  (ast/emission env [[(ast/xkey :return) v]]))
+
+(defn call! [env f args]
   (ast/emission env [[:xprl.executor/new-task! [f args]]]))
 
 (defn walk-emission [env em]
@@ -14,37 +21,42 @@
 
 (deftracefn apply [env head tail]
   (cond
-    (ast/μ? head)          (emit! env head tail)
-    (ast/external? head)   (emit! env head tail)
-    (ast/incomplete? head) (ast/application head (walk env tail))
+    (ast/μ? head)          (call! env head tail)
+    (ast/external? head)   (call! env head tail)
 
     true (throw (RuntimeException. (str head " is not applicable!")))))
 
 (deftracefn resolve [env f]
-  (cond
-    (ast/input? f)  (if (env/bound? f)
-                      (walk env (env/binding f))
-                      (ast/immediate f))
-    (ast/ref? f)    (:binding f)
-    (ast/symbol? f) (ast/immediate f)
-    true            (assert false "unreachable!!")))
+  (return! env
+    (cond
+      (ast/input? f)  (if (env/bound? f)
+                        (walk env (env/binding f))
+                        (ast/immediate f))
+      (ast/ref? f)    (:binding f)
+      (ast/symbol? f) (ast/immediate f)
+      true            (assert false "unreachable!!"))))
+
+(defn walk-coll [env f xs acc]
+  (if (seq xs)
+    (with-return env #(walk-coll env f (rest xs) (conj acc %))
+      (walk env (f (first xs))))
+    (return! env acc)))
 
 (deftracefn eval [env f]
   (cond
-    (ast/coll? f)       (into (ast/empty f) (map #(walk env (ast/immediate %))) f)
-    (ast/pair? f)       (apply env (walk env (ast/immediate (:head f))) (:tail f))
+    (ast/coll? f)       (walk-coll env ast/immediate f (ast/empty f))
+    (ast/pair? f)       (with-return env #(apply env % (:tail f))
+                          #(walk % (ast/immediate (:head f))))
     (ast/symbolic? f)   (resolve env f)
-    (ast/incomplete? f) (ast/immediate f)
-    true                f))
+    true                (return! env f)))
 
 (deftracefn walk* [env f]
-  (let [walk (partial walk env)]
-    (cond
-      (ast/immediate? f)   (eval env (walk (:form f)))
-      (ast/application? f) (apply env (walk (:head f)) (:tail f))
-      (ast/coll? f)        (into (ast/empty f) (map walk) f)
-      (ast/μ? f)           (update f :body walk)
-      (ast/emission? f)    (walk-emission env f)
-      true                 f)))
+  (cond
+    (ast/immediate? f)   (with-return env #(eval env %) #(walk % (:form f)))
+    (ast/application? f) (with-return env #(apply env % (:tail f)) #(walk % (:head f)))
+    (ast/coll? f)        (walk-coll env identity f (ast/empty f))
+    (ast/μ? f)           (return! env (update f :body walk))
+    (ast/emission? f)    (return! env (walk-emission env f))
+    true                 (return! env f)))
 
 (def walk (memoize walk*))
