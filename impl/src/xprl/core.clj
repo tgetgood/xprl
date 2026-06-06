@@ -37,9 +37,7 @@
   ([f conts] (sys/start! conts (ast/immediate f))))
 
 (defn cable [cmap]
-  (into {} (map (fn [[k v]]
-                  [(ast/xkey k)
-                   (builtins/primitive (ast/symbol (str "root-cable-" (name k))) v)]))
+  (into {} (map (fn [[k v]] [(ast/xkey k) (fn [args] (fn [] (v args)))]))
         cmap))
 
 (defn with-return [ccs cb]

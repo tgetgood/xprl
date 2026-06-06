@@ -25,6 +25,6 @@
 ;; FIXME: We should reuse the system, not recreate it for each form.
 (defn start! [cable form]
   (let [sys (init!)]
-    (exec/seed! (first (:executors sys)) form)
-    (run! #(exec/start! % cable) (:executors sys))
+    (exec/seed! (first (:executors sys)) cable form)
+    (run! exec/start! (:executors sys))
     sys))
