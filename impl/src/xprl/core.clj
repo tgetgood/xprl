@@ -29,7 +29,13 @@
     (reset! te l)
     (let [[sym value] l]
       (assert (ast/symbolic? sym) sym)
-      (swap! env ns/ns-intern (ast/symbol sym) value)
+      (println "rewalking " value)
+      (sys/start! {(ast/xkey :return)
+                   (fn [value]
+                     (println "received" value)
+                     (swap! env ns/ns-intern (ast/symbol sym) value)
+                     nil)}
+                  value)
       nil)))
 
 (defn go!
@@ -37,8 +43,7 @@
   ([f conts] (sys/start! conts (ast/immediate f))))
 
 (defn cable [cmap]
-  (into {} (map (fn [[k v]] [(ast/xkey k) (fn [args] (fn [] (v args)))]))
-        cmap))
+  (into {} (map (fn [[k v]] [(ast/xkey k) v])) cmap))
 
 (defn with-return [ccs cb]
   (merge ccs (cable {:return cb})))

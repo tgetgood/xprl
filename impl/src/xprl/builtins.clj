@@ -26,7 +26,10 @@
                (let [args# (if (ensure# env# args#)
                              args# (i/walk env# args#))]
                  (if (ensure# env# args#)
-                   (return# env# args#)
+                   (let [v# (return# env# args#)]
+                     (if (ast/emission? v#)
+                       v#
+                       (ast/emission env# [[(ast/xkey :return) v#]])))
                    (if (ast/incomplete? args#)
                      (ast/application self# args#)
                      (error# self# args#))))
