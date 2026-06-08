@@ -6,50 +6,9 @@
 
 (declare walk)
 
-(defn with-return [env rf f]
-  (let [env (assoc env (ast/xkey :return) rf)]
-    (f env)))
+(defn walk-emission [env msgs]
+  (into [] (map (fn [[k v]] [(walk env k) v])) msgs))
 
-(defn return! {:style/indent 1} [env v]
-  (if (ast/emission? v)
-    v
-    (ast/emission env [[(ast/xkey :return) v]])))
-
-(defn walk-coll [env xs acc]
-  (if (seq xs)
-    (with-return env #(walk-coll env (rest xs) (conj acc %))
-      #(walk % (first xs)))
-    (return! env acc)))
-
-(defn walk-emission* [env msgs acc]
-  (if (seq msgs)
-    (with-return env #(walk-emission* env (rest msgs) (conj acc %))
-      (fn [env]
-        (let [[ch msg] (first msgs)]
-          (with-return env (fn [k] [k msg]) #(walk % ch)))))
-    (return! env acc)))
-
-(defn walk-emission [cenv {:keys [env msgs]}]
-  (with-return env #(ast/emission env %) #(walk-emission* % msgs [])))
-
-;; REVIEW: What is the point of turning this into an emission?
-;;
-;; Yes, the fact that the message passing and invocation are isomorphic is of
-;; theoretical interest. It's very pretty. But actually doing it seems to be
-;; just unnecessary complexity.
-
-#_(deftracefn apply [env head tail]
-  (with-return env
-    (cond
-      (ast/μ? head)        (fn [tail]
-                             (let [bindings {(:id head) tail, (:rec head) head}]
-                               (walk env (env/invoke bindings (:body head)))))
-      (ast/external? head) (fn [tail] (ast/call env head tail))
-
-      true (throw (RuntimeException. (str head " is not applicable!"))))
-    #(return! % tail)))
-
-;; The equivalent version with fewer steps.
 (deftracefn apply [env head tail]
   (cond
     (ast/μ? head)        (let [bindings {(:id head) tail, (:rec head) head}]
@@ -59,30 +18,28 @@
     true (throw (RuntimeException. (str head " is not applicable!")))))
 
 (deftracefn resolve [env f]
-  (return! env
-    (cond
-      (ast/input? f)  (if (env/bound? f)
-                        (walk env (env/binding f))
-                        (ast/immediate f))
-      (ast/ref? f)    (:binding f)
-      (ast/symbol? f) (ast/immediate f)
-      true            (assert false "unreachable!!"))))
+  (cond
+    (ast/input? f)  (if (env/bound? f)
+                      (walk env (env/binding f))
+                      (ast/immediate f))
+    (ast/ref? f)    (:binding f)
+    (ast/symbol? f) (ast/immediate f)
+    true            (assert false "unreachable!!")))
 
 (deftracefn eval [env f]
   (cond
-    (ast/coll? f)       (walk-coll env (map ast/immediate f) (ast/empty f))
-    (ast/pair? f)       (with-return env #(apply env % (:tail f))
-                          #(walk % (ast/immediate (:head f))))
+    (ast/coll? f)       (into (ast/empty f) (map #(walk env (ast/immediate %))) f)
+    (ast/pair? f)       (apply env (walk env (ast/immediate (:head f))) (:tail f))
     (ast/symbolic? f)   (resolve env f)
-    true                (return! env f)))
+    true                f))
 
 (deftracefn walk* [env f]
   (cond
-    (ast/immediate? f)   (with-return env #(eval env %) #(walk % (:form f)))
-    (ast/application? f) (with-return env #(apply env % (:tail f)) #(walk % (:head f)))
-    (ast/coll? f)        (walk-coll env f (ast/empty f))
-    ;; (ast/μ? f)           (return! env (update f :body (partial walk env)))
-    (ast/emission? f)    f
-    true                 (return! env f)))
+    (ast/immediate? f)   (eval env (walk env (:form f)))
+    (ast/application? f) (apply env (walk env (:head f)) (:tail f))
+    (ast/coll? f)        (into (ast/empty f) (partial walk env) f)
+    (ast/μ? f)           (update f :body (partial walk env))
+    (ast/emission? f)    (update f :msgs (partial walk-emission env))
+    true                 f))
 
 (def walk (memoize walk*))

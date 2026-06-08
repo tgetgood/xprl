@@ -19,18 +19,18 @@
     (do (println env)
       (throw (RuntimeException. (str "Cannot send " v " to " k ". No such channel."))))))
 
-(defn do-emission! [exec {:keys [env msgs] :as em}]
-  (if (:freeze (meta env))
-    (println "--\n"env msgs)
-    (run! (fn [[k v]] (send! exec env k v)) msgs)))
-
+(defn do-emission! [exec {:keys [env msgs]}]
+  (run! (fn [[k v]] (send! exec env k v)) msgs))
 
 (defn create! []
   (atom {:work  []
          :index {}}))
 
 (defn seed! [exec cable form]
-  (enqueue! exec (i/walk cable form)))
+  (let [e (i/walk cable form)]
+    (enqueue! exec (if (ast/emission? e)
+                     e
+                     (ast/emission cable [[(ast/xkey :return) e]])))))
 
 (defn start! [exec]
   (let [ems (:work @exec)]

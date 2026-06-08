@@ -8,19 +8,18 @@
 
 (defn build-extern [testfn returnfn errorfn]
   (fn [env self args]
-    (i/return! env
-      (try
-        (cond
-          (testfn env args)      (returnfn env args)
-          (ast/incomplete? args) (ast/application self args)
-          true                   (errorfn self args))
-        (catch Throwable e
-          (debug/trace!
-            (with-out-str
-              (binding [ast/*verbose* true]
-                (ast/inspect (ast/application self args)))))
-          (let [msg (str e ":\n" (.getMessage e) "\n" self " " args)]
-            (ast/emission env [[(ast/xkey :error) msg]])))))))
+    (try
+      (cond
+        (testfn env args)      (returnfn env args)
+        (ast/incomplete? args) (ast/application self args)
+        true                   (errorfn self args))
+      (catch Throwable e
+        (debug/trace!
+          (with-out-str
+            (binding [ast/*verbose* true]
+              (ast/inspect (ast/application self args)))))
+        (let [msg (str e ":\n" (.getMessage e) "\n" self " " args)]
+          (ast/emission env [[(ast/xkey :error) msg]]))))))
 
 (defmacro extern [args & kws]
   (let [kws (apply hash-map kws)]
@@ -36,6 +35,7 @@
                                   "\nExpected: " ~(str (:ensure kws))
                                   "\nReceived: " '~args " = " tail#))))]
        (build-extern ensure# return# error#))))
+
 
 (defmacro defextern [mac args & more]
   `(def ~mac (extern ~args ~@more)))
@@ -124,14 +124,14 @@
                 id    (gensym "μ-param-")
                 recid (gensym "μ-recur-")
                 param (ast/symbol param)
-                env   (with-meta {} {:freeze true :parent env})
                 body  (if (nil? name)
-                        body
-                        (let [name (ast/symbol name)]
-                          (env/walk-capture name (ast/input name recid) body)))
-                body  (env/walk-capture param (ast/input param id) body)]
-            (i/with-return env #(i/return! env (ast/μ id recid name param %))
-              #(i/walk % body))))
+                       body
+                       (let [name (ast/symbol name)]
+                         (env/walk-capture name (ast/input name recid) body)))]
+            (->> body
+                 (env/walk-capture param (ast/input param id))
+                 (i/walk env)
+                 (ast/μ id recid name param))))
 
 (defextern emit [env kvs]
   :ensure (every? ast/keyword? (map first kvs))
@@ -144,7 +144,7 @@
 ;; noops always walk their tail because the effect of a noop is network based,
 ;; not semantic.
 (defn noop [env self args]
-  (assert false "unimplemented"))
+  (ast/application self (i/walk env args)))
 
 (def special
   "things that would traditionally be special forms."
