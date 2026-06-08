@@ -19,8 +19,11 @@
     (do (println env)
       (throw (RuntimeException. (str "Cannot send " v " to " k ". No such channel."))))))
 
-(defn do-emission! [exec {:keys [env msgs]}]
-  (run! (fn [[k v]] (send! exec env k v)) msgs))
+(defn do-emission! [exec {:keys [env msgs] :as em}]
+  (if (:freeze (meta env))
+    (println "--\n"env msgs)
+    (run! (fn [[k v]] (send! exec env k v)) msgs)))
+
 
 (defn create! []
   (atom {:work  []
@@ -31,10 +34,11 @@
 
 (defn start! [exec]
   (let [ems (:work @exec)]
-    (println ems)
+    ;; (println ems)
     (when (seq ems)
       ;; TODO: dosync for work stealing.
       (let [e (peek ems)]
+        ;; (println (:env e))
         ;; Remove task from work stack *before* running it!
         (swap! exec update :work pop)
         (do-emission! exec e))

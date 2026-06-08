@@ -24,29 +24,31 @@
 
 (def te (atom nil))
 
-(defn env-updater [env]
-  (fn [l]
-    (reset! te l)
-    (let [[sym value] l]
-      (assert (ast/symbolic? sym) sym)
-      (println "rewalking " value)
-      (sys/start! {(ast/xkey :return)
-                   (fn [value]
-                     (println "received" value)
-                     (swap! env ns/ns-intern (ast/symbol sym) value)
-                     nil)}
-                  value)
-      nil)))
-
-(defn go!
-  ([f] (i/walk {} (ast/immediate f)))
-  ([f conts] (sys/start! conts (ast/immediate f))))
+(declare base-conts)
 
 (defn cable [cmap]
   (into {} (map (fn [[k v]] [(ast/xkey k) v])) cmap))
 
 (defn with-return [ccs cb]
   (merge ccs (cable {:return cb})))
+
+(defn env-updater [env]
+  (fn [l]
+    (reset! te l)
+    (let [[sym value] l]
+      (assert (ast/symbolic? sym) sym)
+      (println "rewalking " value)
+      (sys/start! (with-return base-conts
+                    (fn [value]
+                      (println "received" value)
+                      (swap! env ns/ns-intern (ast/symbol sym) value)
+                      nil))
+                  value)
+      nil)))
+
+(defn go!
+  ([f] (i/walk {} (ast/immediate f)))
+  ([f conts] (sys/start! conts (ast/immediate f))))
 
 (def base-conts
   (cable {:env     (env-updater the-env)

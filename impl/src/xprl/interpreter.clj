@@ -21,6 +21,17 @@
       #(walk % (first xs)))
     (return! env acc)))
 
+(defn walk-emission* [env msgs acc]
+  (if (seq msgs)
+    (with-return env #(walk-emission* env (rest msgs) (conj acc %))
+      (fn [env]
+        (let [[ch msg] (first msgs)]
+          (with-return env (fn [k] [k msg]) #(walk % ch)))))
+    (return! env acc)))
+
+(defn walk-emission [cenv {:keys [env msgs]}]
+  (with-return env #(ast/emission env %) #(walk-emission* % msgs [])))
+
 ;; REVIEW: What is the point of turning this into an emission?
 ;;
 ;; Yes, the fact that the message passing and invocation are isomorphic is of
@@ -70,7 +81,7 @@
     (ast/immediate? f)   (with-return env #(eval env %) #(walk % (:form f)))
     (ast/application? f) (with-return env #(apply env % (:tail f)) #(walk % (:head f)))
     (ast/coll? f)        (walk-coll env f (ast/empty f))
-    (ast/μ? f)           (return! env (update f :body walk))
+    ;; (ast/μ? f)           (return! env (update f :body (partial walk env)))
     (ast/emission? f)    f
     true                 (return! env f)))
 

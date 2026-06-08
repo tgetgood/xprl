@@ -37,7 +37,6 @@
                                   "\nReceived: " '~args " = " tail#))))]
        (build-extern ensure# return# error#))))
 
-
 (defmacro defextern [mac args & more]
   `(def ~mac (extern ~args ~@more)))
 
@@ -121,15 +120,18 @@
   :ensure (and (ast/symbolic? (first args))
                (if (= 3 (count args)) (ast/symbolic? (second args)) true))
   :return (let [[name param body] (if (= 3 (count args)) args (into [nil] args))
-                id                (gensym "μ-param-")
-                recid             (gensym "μ-recur-")
-                param             (ast/symbol param)
-                body              (if (nil? name)
-                       body
-                       (let [name (ast/symbol name)]
-                         (env/walk-capture name (ast/input name recid) body)))
-                body              (env/walk-capture param (ast/input param id) body)]
-            (i/with-return env #(ast/μ id recid name param %) #(i/walk % body))))
+
+                id    (gensym "μ-param-")
+                recid (gensym "μ-recur-")
+                param (ast/symbol param)
+                env   (with-meta {} {:freeze true :parent env})
+                body  (if (nil? name)
+                        body
+                        (let [name (ast/symbol name)]
+                          (env/walk-capture name (ast/input name recid) body)))
+                body  (env/walk-capture param (ast/input param id) body)]
+            (i/with-return env #(i/return! env (ast/μ id recid name param %))
+              #(i/walk % body))))
 
 (defextern emit [env kvs]
   :ensure (every? ast/keyword? (map first kvs))
