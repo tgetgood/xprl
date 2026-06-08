@@ -6,6 +6,22 @@
    [xprl.interpreter :as i]
    [xprl.ns :as ns]))
 
+(defn build-extern [testfn returnfn errorfn]
+  (fn [env self args]
+    (i/return! env
+      (try
+        (cond
+          (testfn env args)      (returnfn env args)
+          (ast/incomplete? args) (ast/application self args)
+          true                   (errorfn self args))
+        (catch Throwable e
+          (debug/trace!
+            (with-out-str
+              (binding [ast/*verbose* true]
+                (ast/inspect (ast/application self args)))))
+          (let [msg (str e ":\n" (.getMessage e) "\n" self " " args)]
+            (ast/emission env [[(ast/xkey :error) msg]])))))))
+
 (defmacro extern [args & kws]
   (let [kws (apply hash-map kws)]
     (assert (and (contains? kws :ensure) (contains? kws :return))
@@ -19,28 +35,7 @@
                              (str "Type mismatch in " (:name head#)
                                   "\nExpected: " ~(str (:ensure kws))
                                   "\nReceived: " '~args " = " tail#))))]
-       (fn [env# self# args#]
-         (try
-           (let [args# (if (vector? args#) args# (i/walk env# args#))]
-             (if (vector? args#)
-               (let [args# (if (ensure# env# args#)
-                             args# (i/walk env# args#))]
-                 (if (ensure# env# args#)
-                   (let [v# (return# env# args#)]
-                     (if (ast/emission? v#)
-                       v#
-                       (ast/emission env# [[(ast/xkey :return) v#]])))
-                   (if (ast/incomplete? args#)
-                     (ast/application self# args#)
-                     (error# self# args#))))
-               (ast/application self# args#)))
-           (catch Throwable e#
-             (debug/trace!
-              (with-out-str
-                (binding [ast/*verbose* true]
-                  (ast/inspect (ast/application self# args#)))))
-             (let [msg# (str e# ":\n" (.getMessage e#) "\n" self# " " args#)]
-               (ast/emission env# {(ast/xkey :error) [msg#]}))))))))
+       (build-extern ensure# return# error#))))
 
 
 (defmacro defextern [mac args & more]
@@ -129,14 +124,12 @@
                 id                (gensym "μ-param-")
                 recid             (gensym "μ-recur-")
                 param             (ast/symbol param)
-                body (if (nil? name)
+                body              (if (nil? name)
                        body
                        (let [name (ast/symbol name)]
-                         (env/walk-capture name (ast/input name recid) body)))]
-            (->> body
-                 (env/walk-capture param (ast/input param id))
-                 (i/walk env)
-                 (ast/μ id recid name param))))
+                         (env/walk-capture name (ast/input name recid) body)))
+                body              (env/walk-capture param (ast/input param id) body)]
+            (i/with-return env #(ast/μ id recid name param %) #(i/walk % body))))
 
 (defextern emit [env kvs]
   :ensure (every? ast/keyword? (map first kvs))
@@ -149,7 +142,7 @@
 ;; noops always walk their tail because the effect of a noop is network based,
 ;; not semantic.
 (defn noop [env self args]
-  (ast/application self (i/walk env args)))
+  (assert false "unimplemented"))
 
 (def special
   "things that would traditionally be special forms."
