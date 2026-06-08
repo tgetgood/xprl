@@ -11,7 +11,9 @@
     (f env)))
 
 (defn return! {:style/indent 1} [env v]
-  (ast/emission env [[(ast/xkey :return) v]]))
+  (if (ast/emission? v)
+    v
+    (ast/emission env [[(ast/xkey :return) v]])))
 
 (defn walk-coll [env xs acc]
   (if (seq xs)
