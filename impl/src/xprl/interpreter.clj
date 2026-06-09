@@ -11,11 +11,11 @@
 
 (deftracefn apply [env head tail]
   (cond
-    (ast/μ? head)        (let [bindings {(:id head) tail, (:rec head) head}]
-                           (walk env (env/invoke bindings (:body head))))
-    (ast/external? head) (ast/call env head tail)
-
-    true (throw (RuntimeException. (str head " is not applicable!")))))
+    (ast/μ? head)          (let [bindings {(:id head) tail, (:rec head) head}]
+                             (walk env (env/invoke bindings (:body head))))
+    (ast/external? head)   (ast/call env head tail)
+    (ast/incomplete? head) (ast/application head tail)
+    true                   (throw (RuntimeException. (str head " is not applicable!")))))
 
 (deftracefn resolve [env f]
   (cond
@@ -31,13 +31,14 @@
     (ast/coll? f)       (into (ast/empty f) (map #(walk env (ast/immediate %))) f)
     (ast/pair? f)       (apply env (walk env (ast/immediate (:head f))) (:tail f))
     (ast/symbolic? f)   (resolve env f)
+    (ast/incomplete? f) (ast/immediate f)
     true                f))
 
 (deftracefn walk* [env f]
   (cond
     (ast/immediate? f)   (eval env (walk env (:form f)))
     (ast/application? f) (apply env (walk env (:head f)) (:tail f))
-    (ast/coll? f)        (into (ast/empty f) (partial walk env) f)
+    (ast/coll? f)        (into (ast/empty f) (map (partial walk env)) f)
     (ast/μ? f)           (update f :body (partial walk env))
     (ast/emission? f)    (update f :msgs (partial walk-emission env))
     true                 f))

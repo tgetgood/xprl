@@ -27,7 +27,11 @@
 (declare base-conts)
 
 (defn cable [cmap]
-  (into {} (map (fn [[k v]] [(ast/xkey k) v])) cmap))
+  (into {} (map (fn [[k f]]
+                  [(ast/xkey k) (fn [x]
+                                  ;; (println "rewalking\n" x "\n=>\n" (i/walk base-conts x))
+                                  (f (i/walk base-conts x)))]))
+        cmap))
 
 (defn with-return [ccs cb]
   (merge ccs (cable {:return cb})))
@@ -37,13 +41,7 @@
     (reset! te l)
     (let [[sym value] l]
       (assert (ast/symbolic? sym) sym)
-      (println "rewalking " value)
-      (sys/start! (with-return base-conts
-                    (fn [value]
-                      (println "received" value)
-                      (swap! env ns/ns-intern (ast/symbol sym) value)
-                      nil))
-                  value)
+      (swap! env ns/ns-intern (ast/symbol sym) value)
       nil)))
 
 (defn go!

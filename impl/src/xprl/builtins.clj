@@ -8,18 +8,19 @@
 
 (defn build-extern [testfn returnfn errorfn]
   (fn [env self args]
-    (try
-      (cond
-        (testfn env args)      (returnfn env args)
-        (ast/incomplete? args) (ast/application self args)
-        true                   (errorfn self args))
-      (catch Throwable e
-        (debug/trace!
-          (with-out-str
-            (binding [ast/*verbose* true]
-              (ast/inspect (ast/application self args)))))
-        (let [msg (str e ":\n" (.getMessage e) "\n" self " " args)]
-          (ast/emission env [[(ast/xkey :error) msg]]))))))
+    (let [args (if (testfn env args) args (i/walk env args))]
+      (try
+        (cond
+          (testfn env args)      (returnfn env args)
+          (ast/incomplete? args) (ast/application self args)
+          true                   (errorfn self args))
+        (catch Throwable e
+          (debug/trace!
+            (with-out-str
+              (binding [ast/*verbose* true]
+                (ast/inspect (ast/application self args)))))
+          (let [msg (str e ":\n" (.getMessage e) "\n" self " " args)]
+            (ast/emission env [[(ast/xkey :error) msg]])))))))
 
 (defmacro extern [args & kws]
   (let [kws (apply hash-map kws)]
@@ -135,7 +136,7 @@
 
 (defextern emit [env kvs]
   :ensure (every? ast/keyword? (map first kvs))
-  :return (ast/emission env kvs))
+  :return (i/walk env (ast/emission env kvs)))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]
