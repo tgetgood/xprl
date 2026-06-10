@@ -37,7 +37,7 @@
     (ast/incomplete? f) (ast/immediate f)
     true                f))
 
-(deftracefn walk [env f]
+(deftracefn walk* [env f]
   (cond
     (ast/immediate? f)   (eval env (walk env (:form f)))
     (ast/application? f) (apply env (walk env (:head f)) (:tail f))
@@ -46,4 +46,4 @@
     (ast/emission? f)    (update f :msgs (partial walk-emission env))
     true                 f))
 
-;; (def walk (memoize walk*))
+(def walk (memoize walk*))
