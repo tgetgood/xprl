@@ -30,14 +30,18 @@
 (defn walk-capture [sym input form]
   (let [walk (partial walk-capture sym input)]
     (walk-cond form walk
+      ;; Indeed, this is broken both ways...
+      (ast/input? form)    (if (bound? form)
+                             (update form :binding walk)
+                             (if (= (ast/symbol form) sym)
+                               input
+                               form))
       ;; FIXME: If we're creating nested μs from the outside in, then we'll need
       ;; to clobber inputs in narrower contexts. That's correct, but there might
       ;; be cases where it leads to problems.
       (ast/symbolic? form) (if (= (ast/symbol form) sym)
                              input
-                             (if (and (ast/input? form) (bound? form))
-                               (update form :binding walk)
-                               form))
+                             form)
       (ast/μ? form)        (if (or (= sym (:param form)) (= sym (:name form)))
                              form
                              (update form :body walk)))))
