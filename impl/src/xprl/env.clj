@@ -30,15 +30,17 @@
 (defn walk-capture [sym input form]
   (let [walk (partial walk-capture sym input)]
     (walk-cond form walk
-      ;; Indeed, this is broken both ways...
+      ;; If we're creating nested μs from the outside in, then we'll need
+      ;; to clobber captured inputs in narrower contexts.
+      ;;
+      ;; However, once a symbol is bound, that binding is permanent and it
+      ;; cannot be recaptured. This should be obvious once you think it through,
+      ;; but I've already had to think it through from scratch twice...
       (ast/input? form)    (if (bound? form)
                              (update form :binding walk)
                              (if (= (ast/symbol form) sym)
                                input
                                form))
-      ;; FIXME: If we're creating nested μs from the outside in, then we'll need
-      ;; to clobber inputs in narrower contexts. That's correct, but there might
-      ;; be cases where it leads to problems.
       (ast/symbolic? form) (if (= (ast/symbol form) sym)
                              input
                              form)
