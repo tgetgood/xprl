@@ -77,7 +77,7 @@
 ;;;; fine for cond, so it's not recursion. I'm clueless. But I hate lingering
 ;;;; unknowns. This probably indicates a deep bug somewhere that I need to track
 ;;;; down.
-#_(defμ let* x
+(defμ let* x
   (let1 bindings ~(nth* ~x 1)
          ~(let1 body ~(nth* ~x 2)
                 ~(if (empty?* ~bindings)
@@ -85,7 +85,7 @@
                    (let1 ~(nth* ~bindings 1) ~(nth* ~bindings 2)
                          ~(let* ~(rest* ~(rest* ~bindings)) ~body))))))
 
-(def let*
+#_(def let*
   (μ let* x
      ~(let1 bindings ~(nth* ~x 1)
             ~(let1 body ~(nth* ~x 2)

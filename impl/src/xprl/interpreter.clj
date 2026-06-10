@@ -4,6 +4,9 @@
             [xprl.debug :refer [deftracefn]]
             [xprl.env :as env]))
 
+(defn re [& strs]
+  (throw (RuntimeException. ^String (clojure.core/apply str strs))))
+
 (declare walk)
 
 (defn walk-emission [env msgs]
@@ -15,7 +18,7 @@
                              (walk env (env/invoke bindings (:body head))))
     (ast/external? head)   (ast/call env head tail)
     (ast/incomplete? head) (ast/application head tail)
-    true                   (throw (RuntimeException. (str head " is not applicable!")))))
+    true                   (re head " is not applicable!")))
 
 (deftracefn resolve [env f]
   (cond
@@ -23,8 +26,8 @@
                       (walk env (env/binding f))
                       (ast/immediate f))
     (ast/ref? f)    (:binding f)
-    (ast/symbol? f) (ast/immediate f)
-    true            (assert false "unreachable!!")))
+    (ast/symbol? f) (re "Unbound symbol: " f) #_(ast/immediate f)
+    true            (re "unreachable!!")))
 
 (deftracefn eval [env f]
   (cond
@@ -34,7 +37,7 @@
     (ast/incomplete? f) (ast/immediate f)
     true                f))
 
-(deftracefn walk* [env f]
+(deftracefn walk [env f]
   (cond
     (ast/immediate? f)   (eval env (walk env (:form f)))
     (ast/application? f) (apply env (walk env (:head f)) (:tail f))
@@ -43,4 +46,4 @@
     (ast/emission? f)    (update f :msgs (partial walk-emission env))
     true                 f))
 
-(def walk (memoize walk*))
+;; (def walk (memoize walk*))

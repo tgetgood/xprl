@@ -80,8 +80,11 @@
        (let [v# (do ~@body)]
          (when *execution-trace*
            (record! ~input v# {:op ~(keyword name)}))
-         (trace! "---" ~(str name) "in"  (build-env ~input)
-                 "\n---\n" ~input "\n-->\n" v# "\n---")
+         (trace! "---" ~(str name)
+                 "in"  (build-env ~input)
+                 "\n---\n" ~input "\n-->\n"
+                 ;; (build-env v#) "\n--\n"
+                 v# "\n---")
          v#))))
 
 ;; REVIEW: A more useful debugging tool might be to store a map of all
