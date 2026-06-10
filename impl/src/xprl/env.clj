@@ -61,8 +61,8 @@
                             (update form :binding walk)
                             form))
       (ast/μ? form)     (if (or (= find (:id form)) (= find (:recid form)))
-                      form
-                      (update form :body walk)))))
+                          form
+                          (update form :body walk)))))
 
 (defn rename-inputs [bindings]
   (into {} (map (fn [[k v]] [k (gensym (str k "-"))])) bindings))
