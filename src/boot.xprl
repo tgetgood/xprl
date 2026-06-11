@@ -72,11 +72,6 @@
 
 ;;;;; destructuring
 
-;;;; FIXME: Why in the name of dirt doesn't this work? There's no difference in
-;;;; the expansion, and yet names are not captured properly. `defμ` works just
-;;;; fine for cond, so it's not recursion. I'm clueless. But I hate lingering
-;;;; unknowns. This probably indicates a deep bug somewhere that I need to track
-;;;; down.
 (defμ let* x
   (let1 bindings ~(nth* ~x 1)
          ~(let1 body ~(nth* ~x 2)
@@ -85,24 +80,14 @@
                    (let1 ~(nth* ~bindings 1) ~(nth* ~bindings 2)
                          ~(let* ~(rest* ~(rest* ~bindings)) ~body))))))
 
-#_(def let*
-  (μ let* x
-     ~(let1 bindings ~(nth* ~x 1)
-            ~(let1 body ~(nth* ~x 2)
-                   ~(if (empty?* ~bindings)
-                      body
-                      (let1 ~(nth* ~bindings 1) ~(nth* ~bindings 2)
-                            ~(let* ~(rest* ~(rest* ~bindings)) ~body)))))))
-
-(def let-map
-  (μ let-map x
-     ~(let1 bindings ~(nth* ~x 1)
-           ~(let1 body ~(nth* ~x 2)
-                  ~(if (empty?* ~bindings)
-                     body
-                     (let1 kv ~(first* ~bindings)
-                           ~(let1 ~(nth* ~kv 1) ~(nth* ~kv 2)
-                                  ~(let-map ~(rest* ~bindings) ~body))))))))
+(defμ let-map x
+  (let1 bindings ~(nth* ~x 1)
+        ~(let1 body ~(nth* ~x 2)
+               ~(if (empty?* ~bindings)
+                  body
+                  (let1 kv ~(first* ~bindings)
+                        ~(let1 ~(nth* ~kv 1) ~(nth* ~kv 2)
+                               ~(let-map ~(rest* ~bindings) ~body)))))))
 
 (def destructure-map
   (μ mp
