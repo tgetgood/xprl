@@ -52,7 +52,9 @@
 
 (def walk-capture (memoize walk-capture*))
 
-(defn walk-bind [bindings form]
+(declare walk-bind)
+
+(defn walk-bind* [bindings form]
   (let [walk (partial walk-bind bindings)]
     (walk-cond form walk
       (ast/input? form) (if (contains? bindings (:id form))
