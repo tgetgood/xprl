@@ -27,7 +27,9 @@
 
 ;; REVIEW: Three separate tree walkers probably indicates something wrong.
 
-(defn walk-capture [sym input form]
+(declare walk-capture)
+
+(defn walk-capture* [sym input form]
   (let [walk (partial walk-capture sym input)]
     (walk-cond form walk
       ;; If we're creating nested μs from the outside in, then we'll need
@@ -48,6 +50,8 @@
                              form
                              (update form :body walk)))))
 
+(def walk-capture (memoize walk-capture*))
+
 (defn walk-bind [bindings form]
   (let [walk (partial walk-bind bindings)]
     (walk-cond form walk
@@ -57,6 +61,8 @@
                             (update form :binding walk)
                             form))
       (ast/μ? form)     (update form :body walk))))
+
+(def walk-bind (memoize walk-bind*))
 
 (defn walk-rename [find replace form]
   (let [walk (partial walk-rename find replace)]
@@ -73,8 +79,10 @@
 (defn rename-inputs [bindings]
   (into {} (map (fn [[k v]] [k (gensym (str k "-"))])) bindings))
 
-(defn invoke [bindings form]
+(defn invoke* [bindings form]
   (let [renames (rename-inputs bindings)
         binds   (into {} (map (fn [[k v]] [(get renames k) v])) bindings)]
     (->> (reduce (fn [acc [k v]] (walk-rename k v acc)) form renames)
          (walk-bind binds))))
+
+(def invoke (memoize invoke*))
