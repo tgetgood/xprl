@@ -10,13 +10,9 @@
 
 (def counter (atom 0))
 
-(defn print! [args]
-  (apply println args)
-  (println))
-
 (defmacro trace! [& args]
   `(when *verbose*
-     (apply println [~@args])
+     (println ~@args)
      (println)))
 
 (defn provenance [x]
@@ -58,32 +54,34 @@
   ([form] (causes *index-key* form))
   ([k form] (get-in @index [k form])))
 
-(defn build-env [form]
+(defn env
+  "Walks an expression and builds a map of all parameter bindings. Recurs into
+  the bindings themselves."
+  [form]
   (cond
-    (ast/immediate? form)   (build-env (:form form))
-    (ast/application? form) (merge (build-env (:head form)) (build-env (:tail form)))
-    (ast/pair? form)        (merge (build-env (:head form)) (build-env (:tail form)))
-    (ast/μ? form)           (build-env (:body form))
-    (ast/emission? form)    (build-env (:msgs form))
-    (ast/coll? form)        (reduce merge {} (map build-env form))
+    (ast/immediate? form)   (env (:form form))
+    (ast/application? form) (merge (env (:head form)) (env (:tail form)))
+    (ast/pair? form)        (merge (env (:head form)) (env (:tail form)))
+    (ast/μ? form)           (env (:body form))
+    (ast/emission? form)    (env (:msgs form))
+    (ast/coll? form)        (reduce merge {} (map env form))
     (ast/input? form)       (merge
-                             (if (env/bound? form) (build-env (:binding form)) {})
+                             (if (env/bound? form) (env (:binding form)) {})
                              {form (if (env/bound? form) (env/binding form) :unbound)})
     true                    {}))
 
 ;; TODO: Now if I could only reverse these before printing, it would be a lot
 ;; easier to read...
 (defmacro deftracefn [name args & body]
-  (let [env   (first args)
-        input (if (= 2 (count args)) (second args) (into [] (rest args)))]
+  (let [input (if (= 2 (count args)) (second args) (into [] (rest args)))]
     `(defn ~name ~args
        (let [v# (do ~@body)]
          (when *execution-trace*
            (record! ~input v# {:op ~(keyword name)}))
          (trace! "---" ~(str name)
-                 "in"  (build-env ~input)
+                 ;; "in"  (env ~input)
                  "\n---\n" ~input "\n-->\n"
-                 ;; (build-env v#) "\n--\n"
+                 ;; (env v#) "\n--\n"
                  v# "\n---")
          v#))))
 
