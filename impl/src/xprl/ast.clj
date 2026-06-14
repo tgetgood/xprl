@@ -9,6 +9,7 @@
     empty
     list
     list?
+    bound?
     ref
     seq
     seq?
@@ -86,28 +87,40 @@
   (->Ref sym local))
 
 
-(defrecord LooseEnd [sym id]
+(defrecord Captured [sym id]
   Object
   (toString [_]
     (str sym "->(" id ")")))
 
-(defn input? [x]
-  (instance? LooseEnd x))
+(defn captured? [x]
+  (instance? Captured x))
 
-(defn input [sym id]
-  (->LooseEnd sym id))
+(defn capture [sym id]
+  (->Captured sym id))
+
+(defrecord Bound [sym id binding]
+  Object
+  (toString [_]
+    (str sym "<" id ">")))
+
+(defn bound? [x]
+  (instance? Bound x))
+
+(defn bind [{:keys [sym id]} binding]
+  (->Bound sym id binding))
 
 
 (defn symbolic? [x]
-  (or (symbol? x) (ref? x) (input? x)))
+  (or (symbol? x) (ref? x) (captured? x) (bound? x)))
 
 (defn symbol [x]
   (cond
-    (string? x) (symbol-cache x)
-    (symbol? x) x
-    (input? x)  (:sym x)
-    (ref? x)    (:sym x)
-    true        (throw (RuntimeException.
+    (string? x)   (symbol-cache x)
+    (symbol? x)   x
+    (captured? x) (:sym x)
+    (bound? x)    (:sym x)
+    (ref? x)      (:sym x)
+    true          (throw (RuntimeException.
                         (str "Can't create symbol from " (type x))))))
 
 (defn unique-symbol [x]
@@ -288,8 +301,11 @@
 (ps Ref)
 (pps Ref)
 
-(ps LooseEnd)
-(pps LooseEnd)
+(ps Captured)
+(pps Captured)
+
+(ps Bound)
+(pps Bound)
 
 (ps Wire)
 (pps Wire)

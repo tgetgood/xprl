@@ -22,12 +22,11 @@
 
 (deftracefn resolve [env f]
   (cond
-    (ast/input? f)  (if (env/bound? f)
-                      (walk env (env/binding f))
-                      (ast/immediate f))
-    (ast/ref? f)    (:binding f)
-    (ast/symbol? f) (ast/immediate f)
-    true            (error "unreachable!!")))
+    (ast/bound? f)    (walk env (:binding f))
+    (ast/ref? f)      (:binding f)
+    (ast/captured? f) (ast/immediate f)
+    (ast/symbol? f)   (ast/immediate f)
+    true              (error "unreachable!!")))
 
 (deftracefn eval [env f]
   (cond
