@@ -51,64 +51,68 @@
        dot
        (new ~t names#))))
 
-;; Keywords are values, which is to say they're context free
-(defrecord Keyword [names]
-  Object
-  (toString [_]
-    (transduce (interpose ".") str ":" names)))
+(defn cname [ct type]
+  (clojure.core/symbol (if ct ct (str/lower-case type))))
 
-(defn keyword? [k]
-  (instance? Keyword k))
+(defn pname [p type]
+  (clojure.core/symbol (if p p (str (str/lower-case type) "?"))))
+
+(defmacro defxprl
+  {:style/indent :defn}
+  [type members {:keys [str constructor predicate print pprint]}]
+  `(do
+     (defrecord ~type ~members
+       Object
+       (toString [_#]
+         ~str))
+
+     ~(when (not= :none constructor)
+        `(defn ~(cname constructor type) ~members
+           (new ~type ~@members)))
+
+     (defn ~(pname predicate type) [x#]
+       (instance? ~type x#))
+
+     ~(when (not= :none print)
+        (if print
+          `(defmethod print-method ~type [{:keys ~members} ^Writer w#]
+             (~print w#))
+          `(defmethod print-method ~type [o# ^Writer w#]
+             (.write w# (str o#)))))
+
+     ~(when (not= :none pprint)
+        (if pprint
+          `(defmethod pp/simple-dispatch ~type [{:keys ~members}]
+             ~pprint)
+          `(defmethod pp/simple-dispatch ~type [o#]
+             (pp/write-out (clojure.core/symbol (str o#))))))))
+
+(defxprl Keyword [names]
+  {:str         (transduce (interpose ".") str ":" names)
+   :constructor :none
+   :pprint      (pp/write-out (clojure.core/keyword
+                               (transduce (interpose ".") str "" names)))})
 
 (def keyword
   (memoize (fn [s] (named Keyword s))))
 
-(defrecord Symbol [names]
-  Object
-  (toString [_]
-    (transduce (interpose ".") str "" names)))
+(defxprl Symbol [names]
+  {:str         (transduce (interpose ".") str "" names)
+   :constructor :none})
 
 (def symbol-cache
   (memoize (fn [s] (named Symbol s))))
 
-(defn symbol? [s]
-  (instance? Symbol s))
+(defxprl Ref [sym binding]
+  {:str (str sym "^" (when *verbose* (str "<" binding ">")))})
 
-(defrecord Ref [sym binding]
-  Object
-  (toString [_]
-    (str sym "^" (when *verbose* (str "<" binding ">")))))
+(defxprl Captured [sym id]
+  {:str         (str sym "->(" id ")")
+   :constructor capture})
 
-(defn ref? [x]
-  (instance? Ref x))
-
-(defn ref [sym local]
-  (assert (symbol? sym))
-  (->Ref sym local))
-
-
-(defrecord Captured [sym id]
-  Object
-  (toString [_]
-    (str sym "->(" id ")")))
-
-(defn captured? [x]
-  (instance? Captured x))
-
-(defn capture [sym id]
-  (->Captured sym id))
-
-(defrecord Bound [sym id binding]
-  Object
-  (toString [_]
-    (str sym "<" id ">")))
-
-(defn bound? [x]
-  (instance? Bound x))
-
-(defn bind [{:keys [sym id]} binding]
-  (->Bound sym id binding))
-
+(defxprl Bound [sym id binding]
+  {:str         (str sym "<" id ">")
+   :constructor bind})
 
 (defn symbolic? [x]
   (or (symbol? x) (ref? x) (captured? x) (bound? x)))
@@ -123,42 +127,21 @@
     true          (throw (RuntimeException.
                         (str "Can't create symbol from " (type x))))))
 
-(defn unique-symbol [x]
-  (symbol (str (gensym (symbol x)))))
+(defxprl Immediate [form]
+  {:str    (str "~" form)
+   :pprint (do (pp/write-out "~")
+               (pp/write-out form))})
+
+(defxprl Emission [env msgs]
+  {:str    (str "#E" msgs)
+   :print  (fn [^Writer w]
+             (.write w "#E")
+             (print-method msgs w))
+   :pprint (do (pp/write-out (symbol "#E"))
+               (pp/simple-dispatch msgs))})
 
 (defn elements [l]
   l)
-
-;; A SyncVal is basically a wire that can only ever receive one element and so
-;; the stream end is just a value. I don't see a benefit here of separating the
-;; read and write ends, so we just use one value.
-;;
-;; REVIEW: I don't want the api to be too different re wires.
-(defrecord SyncVal [key])
-
-(defn sv
-  ([] (sv "sync-val-"))
-  ([tag] (->SyncVal (gensym tag))))
-
-(defn sv? [x]
-  (instance? SyncVal x))
-
-(defn svs [task]
-  (into #{} (filter sv?) (concat (:waiting task) (:args task))))
-
-
-(defrecord Wire [name connections]
-  Object
-  (toString [_]
-    (str ">--(" name ")-->")))
-
-(defn wire [name]
-  ;; REVIEW: We'll start by trying immutable wires.
-  (->Wire name (atom {})))
-
-(defn wire? [x]
-  (instance? Wire x))
-
 
 (defn list [xs]
   (into [] xs))
@@ -179,102 +162,47 @@
   (or (list? x) (map? x) (set? x)))
 
 
-(defrecord Pair [head tail]
-  Object
-  (toString [_]
-    (str "(" (str head) " "
-         (if (list? tail)
-           (transduce (comp (map str) (interpose " ")) str "" (elements tail))
-           (str ". " (str tail)))
-         ")")))
+(defxprl Pair [head tail]
+  {:str    (str "(" (str head) " "
+             (if (list? tail)
+               (transduce (comp (map str) (interpose " ")) str "" (elements tail))
+               (str ". " (str tail)))
+             ")")
+   :print  :none
+   :pprint :none})
 
-(defn pair [head tail]
-  (->Pair head tail))
+(defxprl Application [head tail]
+  {:str    (str "#" (str (pair head tail)))
+   :pprint (do (.write ^Writer *out* "#")
+               (pp/simple-dispatch (pair head tail)))})
 
-(defn pair? [x]
-  (instance? Pair x))
-
-(defrecord Immediate [form]
-  Object
-  (toString [_]
-    (str "~" form)))
-
-(defn immediate [form]
-  (->Immediate form))
-
-(defn immediate? [x]
-  (instance? Immediate x))
-
-
-(defrecord Application [head tail]
-  Object
-  (toString [_]
-    (str "#" (str (pair head tail)))
-    #_(if (and (= "#F[nth*]" (str head)) (int? (last tail)))
-      (str "|" (first tail) "|_" (last tail))
-      (str "#" (str (pair head tail))))))
-
-(defn application [head tail]
-  (->Application head tail))
-
-(defn application? [x]
-  (instance? Application x))
-
-
-(defrecord Mu [id rec name param body]
-  Object
-  (toString [_]
-    (str "(#μ " param " " body ")")))
+(defxprl Mu [id rec name param body]
+  {:str (str "(#μ " param " " body ")")
+   :constructor :none
+   :pprint (pp/pprint-logical-block
+            :prefix "(" :suffix ")"
+            (pp/write-out (symbol "#μ"))
+            (format-pair (symbol "#μ") [param body]))})
 
 (defn μ [id rec name param body]
   (assert (symbol? param))
   (assert (or (nil? name) (symbol name)))
   (->Mu id rec name param body))
 
-(defn μ? [x]
-  (instance? Mu x))
-
-
-(defrecord Extern [name fn]
-  Object
-  (toString [_]
-    (str "#F[" name "]")))
-
-(defn extern [name fn]
-  (->Extern name fn))
-
-(defn external? [x]
-  (instance? Extern x))
+(defxprl Extern [name fn]
+  {:str    (str "#F[" name "]")
+   :print  (fn [^Writer w]
+            (.write w "#F[")
+            (.write w (str name))
+            (.write w "]"))
+   :pprint (pp/pprint-logical-block
+            :prefix "#F[" :suffix "]"
+            (pp/write-out name))})
 
 (defn call
   "Invokes primitive `f` with args `t` in `env`."
   [env f t]
   ((:fn f) env f t))
-
-
-(defrecord Context [chs form]
-  Object
-  (toString [_]
-    (str "#Ctx" form)))
-
-(defn ctx [channels form]
-  (->Context channels form))
-
-(defn ctx? [x]
-  (instance? Context x))
-
-
-(defrecord Emission [env msgs]
-  Object
-  (toString [_]
-    (str "#E" msgs)))
-
-(defn emission {:style/indent [1]} [env kvs]
-  (->Emission env kvs))
-
-(defn emission? [x]
-  (instance? Emission x))
-
 
 ;;;;; Pretty Printing
 ;;
@@ -282,6 +210,8 @@
 ;; it out of the way.
 
 ;; Boilerplate reducer.
+;;; Symbol
+
 (defmacro ps [type]
   `(defmethod print-method ~type [o# ^Writer w#]
      (.write w# (str o#))))
@@ -290,32 +220,8 @@
   `(defmethod pp/simple-dispatch ~type [o#]
      (pp/write-out (clojure.core/symbol (str o#)))))
 
-;;; Symbol
-
 (ps Dot)
 (pps Dot)
-
-(ps Symbol)
-(pps Symbol)
-
-(ps Ref)
-(pps Ref)
-
-(ps Captured)
-(pps Captured)
-
-(ps Bound)
-(pps Bound)
-
-(ps Wire)
-(pps Wire)
-
-;;; Keyword
-
-(ps Keyword)
-
-(defmethod pp/simple-dispatch Keyword [o]
-  (pp/write-out (clojure.core/keyword (subs (str o) 1))))
 
 ;;; Pair
 
@@ -379,54 +285,6 @@
      (do
        (.write ^Writer *out* " . ")
        (pp/write-out tail)))))
-
-;;; Immediate
-
-(ps Immediate)
-
-(defmethod pp/simple-dispatch Immediate [i]
-  (.write ^Writer *out* "~")
-  (pp/write-out (:form i)))
-
-;;; Application
-
-(ps Application)
-
-(defmethod pp/simple-dispatch Application [{:keys [head tail]}]
-  (.write ^Writer *out* "#")
-  (pp/simple-dispatch (pair head tail)))
-
-;;; μ
-
-(ps Mu)
-
-(defmethod pp/simple-dispatch Mu [{:keys [param body]}]
-  (pp/pprint-logical-block
-   :prefix "(" :suffix ")"
-   (pp/write-out (symbol "#μ"))
-   (format-pair (symbol "#μ") [param body])))
-
-;;; Externs
-
-(defmethod print-method Extern [{:keys [name]} ^Writer w]
-  (.write w "#F[")
-  (.write w (str name))
-  (.write w "]"))
-
-(defmethod pp/simple-dispatch Extern [{:keys [name]}]
-  (pp/pprint-logical-block
-   :prefix "#F[" :suffix "]"
-   (pp/write-out name)))
-
-;;; Emission
-
-(defmethod print-method Emission [{:keys [msgs]} ^Writer w]
-  (.write w "#E")
-  (print-method msgs w))
-
-(defmethod pp/simple-dispatch Emission [{:keys [msgs]}]
-  (pp/write-out (symbol "#E"))
-  (pp/simple-dispatch msgs))
 
 ;;;;; Inspection
 
