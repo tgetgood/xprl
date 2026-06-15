@@ -62,7 +62,7 @@
   (go! (:form (r/read (r/string-reader s) @the-env)) base-conts))
 
 (defn iev [s]
-  (ast/inspect (go! (:form (r/read (r/string-reader s) @the-env)))))
+  (debug/inspect (go! (:form (r/read (r/string-reader s) @the-env)))))
 
 (defn loadfile [envatom fname]
   (println "\nloading:" fname "\n")
@@ -86,10 +86,10 @@
   `(ns/lookup @the-env (ast/symbol ~(clojure.core/name n))))
 
 (defmacro inspect [n]
-  `(ast/inspect (gs ~n)))
+  `(debug/inspect (gs ~n)))
 
 (defn check [s]
-  (ast/inspect (:form (r/read (r/string-reader s) @the-env))))
+  (debug/inspect (:form (r/read (r/string-reader s) @the-env))))
 
 (defn test []
   ;; FIXME: This testrunner is synchronous, so it cannot test message passing.

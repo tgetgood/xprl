@@ -1,6 +1,7 @@
 (ns xprl.debug
   (:require [xprl.ast :as ast]
-            [xprl.env :as env]))
+            [xprl.env :as env])
+  (:import [java.io Writer]))
 
 (def ^:dynamic *verbose* false)
 
@@ -84,15 +85,102 @@
                  v# "\n---")
          v#))))
 
-;; REVIEW: A more useful debugging tool might be to store a map of all
-;; transitions that occur during interpretation.
-;;
-;; Interpretation isn't actually an ordered process. It's a set of
-;; (theoretically) reversible transformations that we search until we reach a
-;; value. Thus printing out the sequence of things that happen is misleading in
-;; some ways.
-;;
-;; Of course it sometimes helps to be able to trace the execution of the current
-;; implementation, but that could likely be better accomplished by keeping the
-;; set of all transforms performed and just following the paths in which we're
-;; interested.
+;;;;; Inspection
+
+(defn spacer [^Writer w level]
+  (dorun (map #(.write w ^String %) (take level (repeat "| ")))))
+
+(defprotocol Inspectable
+  (insp [form w level]))
+
+(extend-protocol Inspectable
+  Object
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "V[")
+    (.write w (str form))
+    (.write w "]\n"))
+
+  xprl.ast.Pair
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "P\n")
+    (insp (:head form) w (inc level))
+    (insp (:tail form) w (inc level)))
+
+  xprl.ast.Immediate
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "I\n")
+    (insp (:form form) w (inc level)))
+
+  xprl.ast.Symbol
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "S[")
+    (.write w (str form))
+    (.write w "]\n"))
+
+  xprl.ast.Ref
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "R[")
+    (.write w (str (:sym form)))
+    (.write w "]\n")
+    (when *verbose*
+      (insp (:binding form) w (inc level))))
+
+  xprl.ast.Application
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "A\n")
+    (insp (:head form) w (inc level))
+    (insp (:tail form) w (inc level)))
+
+  clojure.lang.PersistentArrayMap
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "M\n")
+    (dorun (map #(insp % w (inc level)) form)))
+
+  clojure.lang.MapEntry
+  (insp [[k v] ^Writer w level]
+    (insp k w level)
+    (spacer w level)
+    (.write w "=>\n")
+    (insp v w level)
+    (spacer w level)
+    (.write w "-\n"))
+
+  clojure.lang.PersistentVector
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "L\n")
+    (dorun (map #(insp % w (inc level)) form)))
+
+  xprl.ast.Extern
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "F[")
+    (.write w ^String (:name form))
+    (.write w "]\n"))
+
+  xprl.ast.Mu
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "μ\n")
+    (insp (:param form) w (inc level))
+    (insp (:body form) w (inc level)))
+
+  xprl.ast.Emission
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "E\n")
+    (loop [kvs (flatten (:msgs form))]
+      (when (<= 2 (count kvs))
+        (insp (first kvs) w (inc level))
+        (insp (second kvs) w (inc level))
+        (recur (drop 2 kvs))))))
+
+(defn inspect [x]
+  (insp x *out* 0))

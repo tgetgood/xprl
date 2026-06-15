@@ -112,7 +112,10 @@
 
 (defxprl Bound [sym id binding]
   {:str         (str sym "<" id ">")
-   :constructor bind})
+   :constructor none})
+
+(defn bind [{:keys [sym id]} binding]
+  (->Bound sym id binding))
 
 (defn symbolic? [x]
   (or (symbol? x) (ref? x) (captured? x) (bound? x)))
@@ -173,16 +176,14 @@
 
 (defxprl Application [head tail]
   {:str    (str "#" (str (pair head tail)))
-   :pprint (do (.write ^Writer *out* "#")
+   :pprint (do (pp/write-out "#")
                (pp/simple-dispatch (pair head tail)))})
 
 (defxprl Mu [id rec name param body]
   {:str (str "(#μ " param " " body ")")
    :constructor :none
-   :pprint (pp/pprint-logical-block
-            :prefix "(" :suffix ")"
-            (pp/write-out (symbol "#μ"))
-            (format-pair (symbol "#μ") [param body]))})
+   :predicate μ?
+   :pprint :none})
 
 (defn μ [id rec name param body]
   (assert (symbol? param))
@@ -190,14 +191,11 @@
   (->Mu id rec name param body))
 
 (defxprl Extern [name fn]
-  {:str    (str "#F[" name "]")
-   :print  (fn [^Writer w]
-            (.write w "#F[")
-            (.write w (str name))
-            (.write w "]"))
-   :pprint (pp/pprint-logical-block
-            :prefix "#F[" :suffix "]"
-            (pp/write-out name))})
+  {:str       (str "#F[" name "]")
+   :predicate external?
+   :pprint    (pp/pprint-logical-block
+               :prefix "#F[" :suffix "]"
+               (pp/write-out name))})
 
 (defn call
   "Invokes primitive `f` with args `t` in `env`."
@@ -286,117 +284,13 @@
        (.write ^Writer *out* " . ")
        (pp/write-out tail)))))
 
-;;;;; Inspection
+;; Mu
 
-(defn spacer [^Writer w level]
-  (dorun (map #(.write w ^String %) (take level (repeat "| ")))))
-
-(defprotocol Inspectable
-  (insp [form w level]))
-
-(extend-protocol Inspectable
-  Object
-  (insp [form ^Writer w level]
-    (spacer w level)
-    (.write w "V[")
-    (.write w (str form))
-    (.write w "]\n"))
-
-  Pair
-  (insp [form ^Writer w level]
-    (spacer w level)
-    (.write w "P\n")
-    (insp (:head form) w (inc level))
-    (insp (:tail form) w (inc level)))
-
-  Immediate
-  (insp [form ^Writer w level]
-    (spacer w level)
-    (.write w "I\n")
-    (insp (:form form) w (inc level)))
-
-  Symbol
-  (insp [form ^Writer w level]
-    (spacer w level)
-    (.write w "S[")
-    (.write w (str form))
-    (.write w "]\n"))
-
-  Ref
-  (insp [form ^Writer w level]
-    (spacer w level)
-    (.write w "R[")
-    (.write w (str (:sym form)))
-    (.write w "]\n")
-    (when *verbose*
-      (insp (:binding form) w (inc level))))
-
-  Application
-  (insp [form ^Writer w level]
-    (spacer w level)
-    (.write w "A\n")
-    (insp (:head form) w (inc level))
-    (insp (:tail form) w (inc level)))
-
-  clojure.lang.PersistentArrayMap
-  (insp [form ^Writer w level]
-    (spacer w level)
-    (.write w "M\n")
-    (dorun (map #(insp % w (inc level)) form)))
-
-  clojure.lang.MapEntry
-  (insp [[k v] ^Writer w level]
-    (insp k w level)
-    (spacer w level)
-    (.write w "=>\n")
-    (insp v w level)
-    (spacer w level)
-    (.write w "-\n"))
-
-  clojure.lang.PersistentVector
-  (insp [form ^Writer w level]
-    (spacer w level)
-    (.write w "L\n")
-    (dorun (map #(insp % w (inc level)) form)))
-
-  Extern
-  (insp [form ^Writer w level]
-    (spacer w level)
-    (.write w "F[")
-    (.write w ^String (:name form))
-    (.write w "]\n"))
-
-  Mu
-  (insp [form ^Writer w level]
-    (spacer w level)
-    (.write w "μ\n")
-    (insp (:param form) w (inc level))
-    (insp (:body form) w (inc level)))
-
-  Context
-  (insp [{:keys [chs form]} ^Writer w level]
-    (spacer w level)
-    (.write w "Ctx")
-    (when *verbose*
-      (.write w "[")
-      (run! #(.write w (str %)) (interpose " " (sort-by :names (keys chs))))
-      (.write w "]"))
-    (.write w "\n")
-    (when form
-      (insp form w (inc level))))
-
-  Emission
-  (insp [form ^Writer w level]
-    (spacer w level)
-    (.write w "E\n")
-    (loop [kvs (flatten (elements (:msgs form)))]
-      (when (<= 2 (count kvs))
-        (insp (first kvs) w (inc level))
-        (insp (second kvs) w (inc level))
-        (recur (drop 2 kvs))))))
-
-(defn inspect [x]
-  (insp x *out* 0))
+(defmethod pp/simple-dispatch Mu [{:keys [param body]}]
+  (pp/pprint-logical-block
+   :prefix "(" :suffix ")"
+   (pp/write-out (symbol "#μ"))
+   (format-pair (symbol "#μ") [param body])))
 
 ;;;;; Sugar
 
