@@ -26,31 +26,6 @@
 
 (def ^:dynamic *verbose* false)
 
-(defrecord Dot []
-  Object
-  (toString [_] "."))
-
-(defonce dot (->Dot))
-
-(defn dot? [x]
-  (instance? Dot x))
-
-(defn invalid-name? [s]
-  (boolean (re-find #"^\.|\.\.|\.$" s)))
-
-(defn split-symbolic [s t]
-  (cond
-    (= s ".")             dot
-    (invalid-name? s)     (assert false (str s " is not a valid name for " t))
-    (str/includes? s ".") (str/split s #"\.")
-    true                  [s]))
-
-(defmacro named [t s]
-  `(let [names# (split-symbolic ~s ~t)]
-     (if (= names# dot)
-       dot
-       (new ~t names#))))
-
 (defn cname [ct type]
   (clojure.core/symbol (if ct ct (str/lower-case type))))
 
@@ -86,6 +61,28 @@
              ~pprint)
           `(defmethod pp/simple-dispatch ~type [o#]
              (pp/write-out (clojure.core/symbol (str o#))))))))
+
+(defxprl Dot []
+  {:str "."
+   :constructor :none})
+
+(defonce dot (->Dot))
+
+(defn invalid-name? [s]
+  (boolean (re-find #"^\.|\.\.|\.$" s)))
+
+(defn split-symbolic [s t]
+  (cond
+    (= s ".")             dot
+    (invalid-name? s)     (assert false (str s " is not a valid name for " t))
+    (str/includes? s ".") (str/split s #"\.")
+    true                  [s]))
+
+(defmacro named [t s]
+  `(let [names# (split-symbolic ~s ~t)]
+     (if (= names# dot)
+       dot
+       (new ~t names#))))
 
 (defxprl Keyword [names]
   {:str         (transduce (interpose ".") str ":" names)
@@ -206,20 +203,6 @@
 ;;
 ;; This comprises so much messy logic that I'm going to dump it all here to keep
 ;; it out of the way.
-
-;; Boilerplate reducer.
-;;; Symbol
-
-(defmacro ps [type]
-  `(defmethod print-method ~type [o# ^Writer w#]
-     (.write w# (str o#))))
-
-(defmacro pps [type]
-  `(defmethod pp/simple-dispatch ~type [o#]
-     (pp/write-out (clojure.core/symbol (str o#)))))
-
-(ps Dot)
-(pps Dot)
 
 ;;; Pair
 
