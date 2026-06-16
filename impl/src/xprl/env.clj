@@ -81,11 +81,9 @@
 (defn fixed? [form]
   (cond
     (ast/bound? form)       true
-    ;; REVIEW: This could potentially introduce errors if a deep meta program
-    ;; clobbers a namespace binding. I can probably test that by sticking a "x"
-    ;; into to core definitions...
     (ast/ref? form)         true
-    (ast/symbolic? form)    false
+    (ast/symbol? form)      true
+    (ast/captured? form)    false
     (ast/immediate? form)   (fixed? (:form form))
     (ast/application? form) (and (fixed? (:head form)) (fixed? (:tail form)))
     (ast/pair? form)        (and (fixed? (:head form)) (fixed? (:tail form)))
