@@ -177,10 +177,10 @@
                (pp/simple-dispatch (pair head tail)))})
 
 (defxprl Mu [id rec name param body]
-  {:str (str "(#μ " param " " body ")")
+  {:str         (str "(#μ " param " " body ")")
    :constructor :none
-   :predicate μ?
-   :pprint :none})
+   :predicate   μ?
+   :pprint      :none})
 
 (defn μ [id rec name param body]
   (assert (symbol? param))
@@ -204,7 +204,7 @@
 ;; This comprises so much messy logic that I'm going to dump it all here to keep
 ;; it out of the way.
 
-;;; Pair
+;; Pair
 
 (defmethod print-method Pair [o ^Writer w]
   (.write w "(")
