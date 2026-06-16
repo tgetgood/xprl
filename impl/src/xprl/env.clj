@@ -77,3 +77,19 @@
          (walk-bind binds))))
 
 (def invoke (cache/weak-memo invoke*))
+
+(defn fixed? [form]
+  (cond
+    (ast/bound? form)       true
+    ;; REVIEW: This could potentially introduce errors if a deep meta program
+    ;; clobbers a namespace binding. I can probably test that by sticking a "x"
+    ;; into to core definitions...
+    (ast/ref? form)         true
+    (ast/symbolic? form)    false
+    (ast/immediate? form)   (fixed? (:form form))
+    (ast/application? form) (and (fixed? (:head form)) (fixed? (:tail form)))
+    (ast/pair? form)        (and (fixed? (:head form)) (fixed? (:tail form)))
+    (ast/μ? form)           (fixed? (:body form))
+    (ast/emission? form)    (fixed? (:msgs form))
+    (ast/coll? form)        (every? fixed? form)
+    true                    true))
