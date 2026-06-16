@@ -1,6 +1,7 @@
 (ns xprl.env
   (:require [clojure.set :as set]
-            [xprl.ast :as ast]))
+            [xprl.ast :as ast]
+            [xprl.cache :as cache]))
 
 (defmacro walk-cond
   "Separate tree traversal from the important logic."
@@ -40,7 +41,7 @@
                              form
                              (update form :body walk)))))
 
-(def walk-capture (memoize walk-capture*))
+(def walk-capture (cache/weak-memo walk-capture*))
 
 (declare walk-bind)
 
@@ -53,7 +54,7 @@
                              form)
       (ast/μ? form)        (update form :body walk))))
 
-(def walk-bind (memoize walk-bind*))
+(def walk-bind (cache/weak-memo walk-bind*))
 
 (defn walk-rename [find replace form]
   (let [walk (partial walk-rename find replace)]
@@ -75,4 +76,4 @@
     (->> (reduce (fn [acc [k v]] (walk-rename k v acc)) form renames)
          (walk-bind binds))))
 
-(def invoke (memoize invoke*))
+(def invoke (cache/weak-memo invoke*))
