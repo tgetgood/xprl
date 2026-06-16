@@ -129,7 +129,7 @@
 
 (defxprl Immediate [form]
   {:str    (str "~" form)
-   :pprint (do (pp/write-out "~")
+   :pprint (do (.write *out* "~")
                (pp/write-out form))})
 
 (defxprl Emission [env msgs]
@@ -173,7 +173,7 @@
 
 (defxprl Application [head tail]
   {:str    (str "#" (str (pair head tail)))
-   :pprint (do (pp/write-out "#")
+   :pprint (do (.write *out* "#")
                (pp/simple-dispatch (pair head tail)))})
 
 (defxprl Mu [id rec name param body]
