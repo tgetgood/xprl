@@ -1,6 +1,7 @@
 (ns xprl.interpreter
   (:refer-clojure :exclude [resolve eval apply])
   (:require [xprl.ast :as ast]
+            [xprl.cache :as cache]
             [xprl.debug :refer [deftracefn]]
             [xprl.env :as env]))
 
@@ -46,4 +47,4 @@
     (ast/emission? f)    (update f :msgs (partial walk-emission env))
     true                 f))
 
-(def walk (memoize walk*))
+(def walk (cache/weak-memo walk*))
