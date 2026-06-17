@@ -11,11 +11,11 @@
 ;; REVIEW: `env` now refers to the cable. This is confusing.
 (defn send! [exec env k v]
   (if (contains? env k)
-    (let [v ((get env k) v)]
-      (when v
-        (if (ast/emission? v)
-          (enqueue! exec v)
-          (println "WARNING: dropping non-emission result:" v))))
+    (let [res ((get env k) v)]
+      (when res
+        (if (ast/emission? res)
+          (enqueue! exec res)
+          (println "WARNING: dropping non-emission result:" res))))
     (do (println env)
       (throw (RuntimeException. (str "Cannot send " v " to " k ". No such channel."))))))
 
