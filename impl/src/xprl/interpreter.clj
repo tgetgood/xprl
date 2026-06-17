@@ -9,12 +9,6 @@
 
 (declare walk)
 
-(defn simplify [env form]
-  (if (env/fixed? form)
-    (walk env form)
-    (env/walk-cond form (partial simplify env)
-      (ast/μ? form) (update form :body (partial simplify env)))))
-
 (defn walk-emission [env msgs]
   (into [] (map (fn [[k v]] [(walk env k) v])) msgs))
 

@@ -66,17 +66,3 @@
         binds   (into {} (map (fn [[k v]] [(get renames k) v])) bindings)]
     (->> (reduce (fn [acc [k v]] (walk-rename k v acc)) form renames)
          (walk-bind binds))))
-
-(defn fixed? [form]
-  (cond
-    (ast/bound? form)       true
-    (ast/ref? form)         true
-    (ast/symbol? form)      true
-    (ast/captured? form)    false
-    (ast/immediate? form)   (fixed? (:form form))
-    (ast/application? form) (and (fixed? (:head form)) (fixed? (:tail form)))
-    (ast/pair? form)        (and (fixed? (:head form)) (fixed? (:tail form)))
-    (ast/μ? form)           (fixed? (:body form))
-    (ast/emission? form)    (fixed? (:msgs form))
-    (ast/coll? form)        (every? fixed? form)
-    true                    true))
