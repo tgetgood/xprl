@@ -21,7 +21,7 @@
 
 (deftracefn apply [env head tail]
   (cond
-    (ast/μ? head)          (let [bindings {(:id head) (simplify env tail),
+    (ast/μ? head)          (let [bindings {(:id head) (walk env tail),
                                            (:rec head) head}]
                              (walk env (env/invoke bindings (:body head))))
     (ast/external? head)   (ast/call env head tail)
