@@ -1,7 +1,6 @@
 (ns xprl.env
   (:require [clojure.set :as set]
-            [xprl.ast :as ast]
-            [xprl.cache :as cache]))
+            [xprl.ast :as ast]))
 
 (defmacro walk-cond
   "Separate tree traversal from the important logic."
@@ -19,9 +18,7 @@
 
 ;; REVIEW: Three separate tree walkers probably indicates something wrong.
 
-(declare walk-capture)
-
-(defn walk-capture* [sym input form]
+(defn walk-capture [sym input form]
   (let [walk (partial walk-capture sym input)]
     (walk-cond form walk
       ;; If we're creating nested μs from the outside in, then we'll need
@@ -41,11 +38,7 @@
                              form
                              (update form :body walk)))))
 
-(def walk-capture (cache/weak-memo walk-capture*))
-
-(declare walk-bind)
-
-(defn walk-bind* [bindings form]
+(defn walk-bind [bindings form]
   (let [walk (partial walk-bind bindings)]
     (walk-cond form walk
       (ast/bound? form)    (update form :binding walk)
@@ -53,8 +46,6 @@
                              (ast/bind form (get bindings (:id form)))
                              form)
       (ast/μ? form)        (update form :body walk))))
-
-(def walk-bind (cache/weak-memo walk-bind*))
 
 (defn walk-rename [find replace form]
   (let [walk (partial walk-rename find replace)]
@@ -70,13 +61,11 @@
 (defn rename-inputs [bindings]
   (into {} (map (fn [[k v]] [k (gensym (str k "-"))])) bindings))
 
-(defn invoke* [bindings form]
+(defn invoke [bindings form]
   (let [renames (rename-inputs bindings)
         binds   (into {} (map (fn [[k v]] [(get renames k) v])) bindings)]
     (->> (reduce (fn [acc [k v]] (walk-rename k v acc)) form renames)
          (walk-bind binds))))
-
-(def invoke (cache/weak-memo invoke*))
 
 (defn fixed? [form]
   (cond
