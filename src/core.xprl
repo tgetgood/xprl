@@ -2,7 +2,6 @@
 
 (def count (wrap . count*))
 
-(def + (wrap . +*))
 (def - (wrap . -*))
 (def * (wrap . **))
 (def / (wrap . /*))

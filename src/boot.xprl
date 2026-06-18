@@ -13,7 +13,7 @@
       [:return def])
 
 ;; Test ns clobbering
-(def x 42)
+;; (def x 42)
 
 ;; "Wraps a μ or primitive that takes only literal values in a function that
 ;; evals its arguments."
@@ -179,6 +179,8 @@
 (def defn
   (μ x
      ~(def ~(nth* ~x 1) (fn . ~x))))
+
+(def + (wrap . +*))
 
 (defn inc [x]
   (+ x 1))
