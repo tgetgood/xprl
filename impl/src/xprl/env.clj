@@ -17,17 +17,14 @@
      true                     ~form ))
 
 ;; REVIEW: Three separate tree walkers probably indicates something wrong.
+;;
+;; And yet they're so subtley different that any attempt to unify them
+;; introduces bugs. This is simple enough so why fuck with it?
 
 (defn walk-capture [captures form]
   (let [walk (partial walk-capture captures)
         sym  (when (ast/symbolic? form) (ast/symbol form))]
     (walk-cond form walk
-      ;; If we're creating nested μs from the outside in, then we'll need
-      ;; to clobber captured inputs in narrower contexts.
-      ;;
-      ;; However, once a symbol is bound, that binding is permanent and it
-      ;; cannot be recaptured. This should be obvious once you think it through,
-      ;; but I've already had to think it through from scratch twice...
       (ast/bound? form)    (update form :binding walk)
       (ast/symbolic? form) (if (contains? captures sym)
                                 (get captures sym)
@@ -46,16 +43,18 @@
                              form)
       (ast/μ? form)        (update form :body walk))))
 
-(defn walk-rename [find replace form]
-  (let [walk (partial walk-rename find replace)]
+(defn walk-rename [smap form]
+  (let [walk (partial walk-rename smap)]
     (walk-cond form walk
       (ast/bound? form)    (update form :binding walk)
-      (ast/captured? form) (if (= find (:id form))
-                             (ast/capture (:sym form) replace)
+      (ast/captured? form) (if (contains? smap (:id form))
+                             (ast/capture (:sym form) (get smap (:id form)))
                              form)
-      (ast/μ? form)        (if (or (= find (:id form)) (= find (:recid form)))
-                          form
-                          (update form :body walk)))))
+      ;; Don't forget to stop when we hit a recursive call to the same fn!
+      (ast/μ? form)        (let [smap (dissoc smap (:id form) (:recid form))]
+                             (if (empty? smap)
+                               form
+                               (update form :body (partial walk-rename smap)))))))
 
 (defn rename-inputs [bindings]
   (into {} (map (fn [[k v]] [k (gensym (str k "-"))])) bindings))
@@ -63,5 +62,6 @@
 (defn invoke [bindings form]
   (let [renames (rename-inputs bindings)
         binds   (into {} (map (fn [[k v]] [(get renames k) v])) bindings)]
-    (->> (reduce (fn [acc [k v]] (walk-rename k v acc)) form renames)
+    (->> form
+         (walk-rename renames)
          (walk-bind binds))))
