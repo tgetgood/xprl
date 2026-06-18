@@ -18,8 +18,9 @@
 
 ;; REVIEW: Three separate tree walkers probably indicates something wrong.
 
-(defn walk-capture [sym input form]
-  (let [walk (partial walk-capture sym input)]
+(defn walk-capture [captures form]
+  (let [walk (partial walk-capture captures)
+        sym  (when (ast/symbolic? form) (ast/symbol form))]
     (walk-cond form walk
       ;; If we're creating nested μs from the outside in, then we'll need
       ;; to clobber captured inputs in narrower contexts.
@@ -27,16 +28,14 @@
       ;; However, once a symbol is bound, that binding is permanent and it
       ;; cannot be recaptured. This should be obvious once you think it through,
       ;; but I've already had to think it through from scratch twice...
-      (ast/captured? form) (if (= (ast/symbol form) sym)
-                                input
-                                form)
       (ast/bound? form)    (update form :binding walk)
-      (ast/symbolic? form) (if (= (ast/symbol form) sym)
-                             input
-                             form)
-      (ast/μ? form)        (if (or (= sym (:param form)) (= sym (:name form)))
-                             form
-                             (update form :body walk)))))
+      (ast/symbolic? form) (if (contains? captures sym)
+                                (get captures sym)
+                                form)
+      (ast/μ? form)        (let [caps (dissoc captures (:param form) (:name form))]
+                             (if (empty? caps)
+                               form
+                               (update form :body (partial walk-capture caps)))))))
 
 (defn walk-bind [bindings form]
   (let [walk (partial walk-bind bindings)]

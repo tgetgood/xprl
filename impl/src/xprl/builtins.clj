@@ -125,12 +125,10 @@
                 id    (gensym "μ-param-")
                 recid (gensym "μ-recur-")
                 param (ast/symbol param)
-                body  (if (nil? name)
-                       body
-                       (let [name (ast/symbol name)]
-                         (env/walk-capture name (ast/capture name recid) body)))]
+                caps  (merge {param (ast/capture param id)}
+                             (when name {name (ast/capture name recid)}))]
             (->> body
-                 (env/walk-capture param (ast/capture param id))
+                 (env/walk-capture caps)
                  (i/walk env)
                  (ast/μ id recid name param))))
 
