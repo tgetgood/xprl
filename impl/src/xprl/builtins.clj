@@ -122,6 +122,9 @@
                (if (= 3 (count args)) (ast/symbolic? (second args)) true))
   :return (let [[name param body] (if (= 3 (count args)) args (into [nil] args))
 
+                ;; HACK: I don't like languages that make the programmer solve a
+                ;; problem the implementor can't, but I am stuck...
+                _     (assert (not (ast/ref? param)) (str param " clobbers ns binding!!"))
                 id    (gensym "μ-param-")
                 recid (gensym "μ-recur-")
                 param (ast/symbol param)
