@@ -62,10 +62,10 @@
      ~(def ~(nth* ~x 1)
         (μ ~(nth* ~x 1) ~(nth* ~x 2) ~~(nth* ~x 3)))))
 
-(defμ ! x
-  (if (<* ~(nth* ~x 1) 2)
-     1
-     (** ~(nth* ~x 1) ~(! ~(-* ~(nth* ~x 1) 1)))))
+;; (defμ ! x
+;;   (if (<* ~(nth* ~x 1) 2)
+;;      1
+;;      (** ~(nth* ~x 1) ~(! ~(-* ~(nth* ~x 1) 1)))))
 
 (defμ cond body
   (when (<* 1 ~(count* ~body))

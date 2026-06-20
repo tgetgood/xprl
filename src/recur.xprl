@@ -2,7 +2,7 @@
 ;;
 ;; In fact we derive many such operators including the classic Ys.
 
-;; N.B.: This file goes through alternating phases of working and being a fork bomb.
+;; N.B.: This file goes through alternating phases of working and burning off eyebrows.
 
 (def Y
   (μ f
@@ -121,32 +121,21 @@
 
 (!6 . 10)
 
+;; Recursion without built in names!
 
-(def !body
-  (μ x
-     ~(if (<* ~x 2)
-        1
-        ;; FIXME: why does this need to be a proper list?
-        ;; It should be (! . ~...) for symmetry.
-        (** ~x ~(! ~(-* ~x 1))))))
-
-(def !7 (rec . ~(μ ! ~!body)))
-
-(!7 . 1)
-
-(!7 . 2)
-(!7 . 3)
-(!7 . 4)
-(!7 . 5)
-
-(!7 . 10)
-
-(def defrec2
+;; REVIEW: I still may go back to unnamed μs and use this instead. But it would
+;; have to make the language a lot better or simpler to be justified.
+(def defrec
   (μ x
      ~(def ~(nth* ~x 1)
-        (rec . ~(μ ~(nth* ~x 1) ~~(nth* ~x 2))))))
+        (rec . ~(μ ~(nth* ~x 1)
+                   ~(μ ~(nth* ~x 2)
+                       ~~(nth* ~x 3)))))))
 
-(defrec2 !8 !body)
+(defrec !8 x
+  (if (<* ~x 2)
+    1
+    (** ~x ~(!8 . ~(-* ~x 1)))))
 
 (!8 . 1)
 
