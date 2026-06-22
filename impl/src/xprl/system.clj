@@ -2,12 +2,18 @@
   (:require [xprl.ast :as ast]
             [xprl.executor :as exec]))
 
-(defn init! []
-  {:executors [(exec/create!)]})
+(defonce the-system (atom nil))
 
-;; FIXME: We should reuse the system, not recreate it for each form.
+(defn init! []
+  (compare-and-set! the-system nil {:executors [(exec/create!)]}))
+
+(defn seed! [env form]
+  (exec/seed! (first (:executors @the-system)) env form))
+
+(defn start-executors! []
+  (run! exec/start! (:executors @the-system)))
+
 (defn start! [cable form]
-  (let [sys (init!)]
-    (exec/seed! (first (:executors sys)) cable form)
-    (run! exec/start! (:executors sys))
-    sys))
+  (init!)
+  (seed! cable form)
+  (start-executors!))

@@ -1,11 +1,9 @@
 (ns xprl.executor
   (:require [xprl.ast :as ast]
-            [xprl.builtins :as builtins]
             [xprl.env :as env]
             [xprl.interpreter :as i]))
 
 (defn enqueue! [exec task]
-  (assert (ast/emission? task))
   (swap! exec update :work conj task))
 
 ;; REVIEW: `env` now refers to the cable. This is confusing.
@@ -27,19 +25,20 @@
          :index {}}))
 
 (defn seed! [exec cable form]
-  (let [e (i/walk cable form)]
-    (enqueue! exec (if (ast/emission? e)
-                     e
-                     (ast/emission cable [[(ast/xkey :return) e]])))))
+  (enqueue! exec [cable form]))
 
 (defn start! [exec]
-  (let [ems (:work @exec)]
-    ;; (println ems)
-    (when (seq ems)
-      ;; TODO: dosync for work stealing.
-      (let [e (peek ems)]
-        ;; (println (:env e))
-        ;; Remove task from work stack *before* running it!
-        (swap! exec update :work pop)
-        (do-emission! exec e))
-      (recur exec))))
+  (when-not (:running? @exec)
+    (let [ems (:work @exec)]
+      (if (seq ems)
+        ;; TODO: dosync for work stealing.
+        (let [[env form] (peek ems)]
+          ;; Remove task from work stack *before* running it!
+          (swap! exec update :work pop)
+          (let [res (i/walk env form)]
+            (do-emission! exec
+                          (if (ast/emission? res)
+                            res
+                            (ast/emission env [[(ast/xkey :return) res]]))))
+          (recur exec))
+        (swap! exec assoc :running? false)))))
