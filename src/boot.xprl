@@ -121,9 +121,13 @@
 ;;;;; definitions
 
 (defμ* fn x
-  (μ ~(nth* ~x 1) args
-      ~(let-map ~(destructure ~(nth* ~x 2) ~~args)
-         ~~(nth* ~x 3))))
+  (if (=* 3 ~(count* ~x))
+    (μ ~(nth* ~x 1) args
+       ~(let-map ~(destructure ~(nth* ~x 2) ~~args)
+          ~~(nth* ~x 3)))
+    (μ args
+       ~(let-map ~(destructure ~(nth* ~x 1) ~~args)
+          ~~(nth* ~x 2)))))
 
 ;;; This would make life a lot nicer...
 
@@ -135,10 +139,11 @@
 
 (defμ fn2 [params body]
   (μ args
-     ~(let-map ~(destructure ~params ~~args)
+     ~(let-map ~(destructure ~params ~args)
         ~~body)))
 
-(defμ fn3 [name params body])
+
+#_(defμ fn3 [name params body])
 
 ;; (defμ fn args
 ;;   (let1 indirect ~(nth* [error fn2 fn3] ~(count* ~args))
@@ -195,3 +200,11 @@
 
 ;; (defμ net conts
 ;;   (emit-all :exec ~conts))
+
+(defn map [f xs]
+  (net
+   (f (first xs))
+   (map f (rest xs))))
+
+(defn filter [p xs]
+  (map (fn [x] (when (p x) x)) xs))
