@@ -120,6 +120,13 @@
 
 ;;;;; definitions
 
+(defμ* fn x
+  (μ ~(nth* ~x 1) args
+      ~(let-map ~(destructure ~(nth* ~x 2) ~~args)
+         ~~(nth* ~x 3))))
+
+;;; This would make life a lot nicer...
+
 (defμ* defμ x
   (def ~(nth* ~x 1)
      (μ args
@@ -130,11 +137,6 @@
   (μ args
      ~(let-map ~(destructure ~params ~~args)
         ~~body)))
-
-(defμ* fn x
-  (μ ~(nth* ~x 1) args
-      ~(let-map ~(destructure ~(nth* ~x 2) ~~args)
-         ~~(nth* ~x 3))))
 
 (defμ fn3 [name params body])
 

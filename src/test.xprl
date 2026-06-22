@@ -86,3 +86,9 @@
 ;; ((fn ! [n] (if (< n 2) 1 (* n (! (- n 1))))) 5) 120
 
 ;; ((fn x (((fn x x) . +) x ((fn x (+ x 1)) . 2))) . 5)       8
+
+;;; Emission edge cases
+
+;; This is the big one, returning nothing really means nothing is returned!
+;; Thinking about it, this really fucks with the notion of length, doesn't it?
+[(when false 4) 5] #_=> [5]
