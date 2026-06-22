@@ -57,7 +57,7 @@
   (μ x
      ~((μ ~(nth* ~x 1) ~(nth* ~x 3)) . ~(nth* ~x 2))))
 
-(def defμ
+(def defμ*
   (μ x
      ~(def ~(nth* ~x 1)
         (μ ~(nth* ~x 1) ~(nth* ~x 2) ~~(nth* ~x 3)))))
@@ -67,7 +67,7 @@
 ;;      1
 ;;      (** ~(nth* ~x 1) ~(! ~(-* ~(nth* ~x 1) 1)))))
 
-(defμ cond body
+(defμ* cond body
   (when (<* 1 ~(count* ~body))
     (if ~(nth* ~body 1)
       ~(nth* ~body 2)
@@ -75,7 +75,7 @@
 
 ;;;;; destructuring
 
-(defμ let* x
+(defμ* let* x
   (let1 bindings ~(nth* ~x 1)
          ~(let1 body ~(nth* ~x 2)
                 ~(if (empty?* ~bindings)
@@ -83,7 +83,7 @@
                    (let1 ~(nth* ~bindings 1) ~(nth* ~bindings 2)
                          ~(let* ~(rest* ~(rest* ~bindings)) ~body))))))
 
-(defμ let-map x
+(defμ* let-map x
   (let1 bindings ~(nth* ~x 1)
         ~(let1 body ~(nth* ~x 2)
                ~(if (empty?* ~bindings)
@@ -96,30 +96,7 @@
   (μ mp
      ~(emit :error "not implemented")))
 
-
-;; HACK:
-(defμ destructure xy
-  (cond
-    (symbol?* ~(nth* ~xy 1)) {(nth* ~xy 1) (nth* ~xy 2)}
-    (empty?* ~(nth* ~xy 1))  {}
-    (empty?* ~(nth* ~xy 2))    (emit :error "pattern mismatch")
-
-    (dot?* ~(first* ~(nth* ~xy 1)))
-    (destructure ~(first* ~(rest* ~(nth* ~xy 1))) ~(nth* ~xy 2))
-
-    (list?* ~(nth* ~xy 1))
-    (merge
-     (destructure ~(first* ~(nth* ~xy 1)) ~(first* ~(nth* ~xy 2)))
-     (destructure ~(rest* ~(nth* ~xy 1)) ~(rest* ~(nth* ~xy 2))))
-
-    (map?* ~(nth* ~xy 1)) (merge
-                           (destructure-map ~(first* ~(nth* ~xy 1)) ~(first* ~(nth* ~xy 2)))
-                           (destructure ~(rest* ~(nth* ~xy 1)) ~(rest* ~(nth* ~xy 2))))
-
-    true (emit :error ~(str* "Cannot destructure: " ~(nth* ~xy 1) ", " ~(nth* ~xy 2)))))
-
-;; original
-#_(defμ destructure xy
+(defμ* destructure xy
   (let* [params ~(nth* ~xy 1)
           args  ~(nth* ~xy 2)]
      ~(cond
@@ -143,23 +120,23 @@
 
 ;;;;; definitions
 
-#_(def defμ
-  (μ x
-     ~(def ~(nth* ~x 1)
-        (μ args
-           ~(let-map ~(destructure ~(nth* ~x 2) ~args)
-              ~~(nth* ~x 3))))))
+(defμ* defμ x
+  (def ~(nth* ~x 1)
+     (μ args
+        ~(let-map ~(destructure ~(nth* ~x 2) ~args)
+           ~~(nth* ~x 3)))))
 
-;; (defμ fn2 [params body]
-;;   (μ args
-;;      ~(let-map ~(destructure ~params ~~args)
-;;         ~~body)))
+(defμ fn2 [params body]
+  (μ args
+     ~(let-map ~(destructure ~params ~~args)
+        ~~body)))
 
-(def fn
-  (μ x
-     ~(μ ~(nth* ~x 1) args
-          ~(let-map ~(destructure ~(nth* ~x 2) ~~args)
-             ~~(nth* ~x 3)))))
+(defμ* fn x
+  (μ ~(nth* ~x 1) args
+      ~(let-map ~(destructure ~(nth* ~x 2) ~~args)
+         ~~(nth* ~x 3))))
+
+(defμ fn3 [name params body])
 
 ;; (defμ fn args
 ;;   (let1 indirect ~(nth* [error fn2 fn3] ~(count* ~args))
