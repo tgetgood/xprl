@@ -4,7 +4,8 @@
    [xprl.debug :as debug]
    [xprl.env :as env]
    [xprl.interpreter :as i]
-   [xprl.ns :as ns]))
+   [xprl.ns :as ns]
+   [xprl.system :as sys]))
 
 (defn build-extern [testfn returnfn errorfn]
   (fn [env self args]
@@ -139,6 +140,13 @@
   :ensure (every? ast/keyword? (map first kvs))
   :return (i/walk env (ast/emission env kvs)))
 
+(defextern net [env forms]
+  :ensure (ast/list? forms)
+  :return (do
+            (println "net" forms)
+            (run! (fn [form] (sys/seed! env form)) forms)
+            (ast/emission env [])))
+
 (defn macros [m]
   (reduce (fn [acc [k f]]
             (assoc acc (ast/symbol k) (ast/extern k f))) {} m))
@@ -158,9 +166,9 @@
     "count*"        count*
     "empty?*"       empty?*
     "emit"          emit
+    "net"           net
     "wire"          noop
-    "with-channels" noop
-    "net"           noop}))
+    "with-channels" noop}))
 
 ;;;;; The Ur context from which all programs derive.
 ;;
