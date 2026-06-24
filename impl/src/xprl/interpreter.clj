@@ -9,6 +9,8 @@
 
 (declare walk)
 
+;; I don't have any concrete cases where you ~can't~ walk the message of an
+;; emission. I need to be more rigourous about collecting counter examples.
 (defn walk-emission [env msgs]
   (into [] (map (fn [[k v]] [(walk env k) v])) msgs))
 
@@ -43,5 +45,5 @@
     (ast/application? f) (apply env (walk env (:head f)) (:tail f))
     (ast/coll? f)        (into (ast/empty f) (map (partial walk env)) f)
     (ast/μ? f)           (update f :body (partial walk env))
-    (ast/emission? f)    (update f :msgs (partial walk-emission env))
+    (ast/emission? f)    (update f :msgs (partial walk env))
     true                 f))
