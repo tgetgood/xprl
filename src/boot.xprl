@@ -204,6 +204,7 @@
 (defn map [f xs]
   (net
    (f (first xs))
+   ;; FIXME: `rest` must short circuit if there are no more elements.
    (map f (rest xs))))
 
 (defn filter [p xs]
