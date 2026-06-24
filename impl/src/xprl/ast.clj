@@ -140,6 +140,9 @@
    :pprint (do (pp/write-out (symbol "#E"))
                (pp/simple-dispatch msgs))})
 
+(defxprl Net [env forms]
+  {:str (str "#N::" forms)})
+
 (defn elements [l]
   l)
 

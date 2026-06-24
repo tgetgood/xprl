@@ -142,10 +142,7 @@
 
 (defextern net [env forms]
   :ensure (ast/list? forms)
-  :return (do
-            (println "net" forms)
-            (run! (fn [form] (sys/seed! env form)) forms)
-            (ast/emission env [])))
+  :return (ast/net env (i/walk env forms)))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]

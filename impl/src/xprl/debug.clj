@@ -65,6 +65,7 @@
     (ast/pair? form)        (merge (env (:head form)) (env (:tail form)))
     (ast/μ? form)           (env (:body form))
     (ast/emission? form)    (env (:msgs form))
+    (ast/net? form)         (env (:forms form))
     (ast/coll? form)        (reduce merge {} (map env form))
     (ast/bound? form)       (merge {form (:binding form)} (env (:binding form)))
     (ast/captured? form)    {form :unbound}

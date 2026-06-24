@@ -36,9 +36,11 @@
           ;; Remove task from work stack *before* running it!
           (swap! exec update :work pop)
           (let [res (i/walk env form)]
-            (do-emission! exec
-                          (if (ast/emission? res)
-                            res
-                            (ast/emission env [[(ast/xkey :return) res]]))))
+            (if (ast/net? res)
+              (run! #(enqueue! exec [(:env res) (ast/immediate %)]) (:forms res))
+              (do-emission! exec
+                            (if (ast/emission? res)
+                              res
+                              (ast/emission env [[(ast/xkey :return) res]])))))
           (recur exec))
         (swap! exec assoc :running? false)))))

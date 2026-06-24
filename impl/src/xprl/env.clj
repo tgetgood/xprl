@@ -13,6 +13,7 @@
      (ast/pair? ~form)        (-> ~form (update :head ~walk) (update :tail ~walk))
      (ast/coll? ~form)        (into (ast/empty ~form) (map ~walk) ~form)
      (ast/emission? ~form)    (update ~form :msgs ~walk)
+     (ast/net? ~form)         (update ~form :forms ~walk)
      ~@cases
      true                     ~form ))
 
