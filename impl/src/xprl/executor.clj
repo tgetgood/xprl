@@ -7,19 +7,14 @@
   (swap! exec update :work conj task))
 
 ;; REVIEW: `env` now refers to the cable. This is confusing.
-(defn send! [exec env k v]
+(defn send! [exec env [k v]]
   (if (contains? env k)
-    (let [res ((get env k) v)]
-      (when res
-        (if (ast/emission? res)
-          (enqueue! exec res)
-          (println "WARNING: dropping non-emission result:" res))))
+    ((get env k) v)
     (do (println env)
       (throw (RuntimeException. (str "Cannot send " v " to " k ". No such channel."))))))
 
-(defn do-emission! [exec {:keys [env msgs]}]
-  (println msgs)
-  (run! (fn [[k v]] (send! exec env k v)) msgs))
+(defn do-emission! [exec env msgs]
+  (run! (partial send! exec env) msgs))
 
 (defn create! []
   (atom {:work  []
@@ -32,10 +27,10 @@
   (when form
     (if (ast/net? form)
       (run! #(enqueue! exec [(:env form) (ast/immediate %)]) (:forms form))
-      (do-emission! exec
+      (do-emission! exec env
                     (if (ast/emission? form)
-                      form
-                      (ast/emission env [[(ast/xkey :return) form]]))))))
+                      (:msgs form)
+                      [[(ast/xkey :return) form]])))))
 
 (defn start! [exec]
   (when-not (:running? @exec)
