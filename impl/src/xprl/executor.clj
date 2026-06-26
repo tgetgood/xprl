@@ -18,6 +18,7 @@
       (throw (RuntimeException. (str "Cannot send " v " to " k ". No such channel."))))))
 
 (defn do-emission! [exec {:keys [env msgs]}]
+  (println msgs)
   (run! (fn [[k v]] (send! exec env k v)) msgs))
 
 (defn create! []
@@ -27,6 +28,15 @@
 (defn seed! [exec cable form]
   (enqueue! exec [cable form]))
 
+(defn process-walked [exec env form]
+  (when form
+    (if (ast/net? form)
+      (run! #(enqueue! exec [(:env form) (ast/immediate %)]) (:forms form))
+      (do-emission! exec
+                    (if (ast/emission? form)
+                      form
+                      (ast/emission env [[(ast/xkey :return) form]]))))))
+
 (defn start! [exec]
   (when-not (:running? @exec)
     (let [ems (:work @exec)]
@@ -35,12 +45,8 @@
         (let [[env form] (peek ems)]
           ;; Remove task from work stack *before* running it!
           (swap! exec update :work pop)
-          (let [res (i/walk env form)]
-            (if (ast/net? res)
-              (run! #(enqueue! exec [(:env res) (ast/immediate %)]) (:forms res))
-              (do-emission! exec
-                            (if (ast/emission? res)
-                              res
-                              (ast/emission env [[(ast/xkey :return) res]])))))
+          ;; This should block the thread until it goes to sleep
+          (i/ret-> env #(i/walk % form) (partial process-walked exec env))
+          ;; At which point we find something else to do
           (recur exec))
         (swap! exec assoc :running? false)))))

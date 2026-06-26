@@ -9,19 +9,23 @@
 
 (defn build-extern [testfn returnfn errorfn]
   (fn [env self args]
-    (let [args (if (testfn env args) args (i/walk env args))]
-      (try
-        (cond
-          (testfn env args)      (returnfn env args)
-          (ast/incomplete? args) (ast/application self args)
-          true                   (errorfn self args))
-        (catch Throwable e
-          (debug/trace!
-            (with-out-str
-              (binding [ast/*verbose* true]
-                (debug/inspect (ast/application self args)))))
-          (let [msg (str e ":\n" (.getMessage e) "\n" self " " args)]
-            (ast/emission env [[(ast/xkey :error) msg]])))))))
+    (try
+      (i/ret-> env
+        #(if (testfn env args) (i/return % args) (i/walk % args))
+        (fn [args]
+          (cond
+            (testfn env args)      (let [v (returnfn env args)]
+                                     (when-not (nil? v)
+                                       (i/return env v)))
+            (ast/incomplete? args) (i/return env (ast/application self args))
+            true                   (errorfn self args))))
+      (catch Throwable e
+        (debug/trace!
+          (with-out-str
+            (binding [ast/*verbose* true]
+              (debug/inspect (ast/application self args)))))
+        (let [msg (str e ":\n" (.getMessage e) "\n" self " " args)]
+          (ast/emission env [[(ast/xkey :error) msg]]))))))
 
 (defmacro extern [args & kws]
   (let [kws (apply hash-map kws)]
@@ -37,7 +41,6 @@
                                   "\nExpected: " ~(str (:ensure kws))
                                   "\nReceived: " '~args " = " tail#))))]
        (build-extern ensure# return# error#))))
-
 
 (defmacro defextern [mac args & more]
   `(def ~mac (extern ~args ~@more)))
@@ -131,10 +134,9 @@
                 param (ast/symbol param)
                 caps  (merge {param (ast/capture param id)}
                              (when name {name (ast/capture name recid)}))]
-            (->> body
-                 (env/walk-capture caps)
-                 (i/walk env)
-                 (ast/μ id recid name param))))
+            (i/ret-> env
+              #(i/walk % (env/walk-capture caps body))
+              #(i/return env (ast/μ id recid name param %)))))
 
 (defextern emit [env kvs]
   :ensure (every? ast/keyword? (map first kvs))
@@ -142,7 +144,7 @@
 
 (defextern net [env forms]
   :ensure (ast/list? forms)
-  :return (ast/net env (i/walk env forms)))
+  :return (i/ret-> env #(i/walk env forms) #(ast/net env %)))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]

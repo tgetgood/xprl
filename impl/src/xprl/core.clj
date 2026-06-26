@@ -27,11 +27,7 @@
 (declare base-conts)
 
 (defn cable [cmap]
-  (into {} (map (fn [[k f]]
-                  [(ast/xkey k) (fn [x]
-                                  ;; (println "rewalking\n" x "\n=>\n" (i/walk base-conts x))
-                                  (f (i/walk base-conts x)))]))
-        cmap))
+  (into {} (map (fn [[k f]] [(ast/xkey k) f])) cmap))
 
 (defn with-return [ccs cb]
   (merge ccs (cable {:return cb})))
