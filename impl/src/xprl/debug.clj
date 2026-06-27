@@ -74,17 +74,22 @@
 ;; TODO: Now if I could only reverse these before printing, it would be a lot
 ;; easier to read...
 (defmacro deftracefn [name args & body]
-  (let [input (if (= 2 (count args)) (second args) (into [] (rest args)))]
+  (let [env   (first args)
+        input (if (= 2 (count args)) (second args) (into [] (rest args)))]
     `(defn ~name ~args
-       (let [v# (do ~@body)]
-         (when *execution-trace*
-           (record! ~input v# {:op ~(keyword name)}))
-         (trace! "---" ~(str name)
-                 ;; "in"  (env ~input)
-                 "\n---\n" ~input "\n-->\n"
-                 ;; (env v#) "\n--\n"
-                 v# "\n---")
-         v#))))
+       (let [~env (assoc ~env (ast/xkey :return)
+                         (fn [v#]
+                           (when *execution-trace*
+                             (record! ~input v# {:op ~(keyword name)}))
+                           (trace! "---" ~(str name)
+                                   ;; "in"  (env ~input)
+                                   "\n---\n" ~input "\n-->\n"
+                                   ;; (env v#) "\n--\n"
+                                   v# "\n---")
+                           (let [ret# (get ~env (ast/xkey :return))]
+                             (assert (fn? ret#) (str "no :return in:\n" ~env ))
+                             (ret# v#))))]
+         ~@body))))
 
 ;;;;; Inspection
 

@@ -103,17 +103,20 @@
           (if (= :eof form1)
             'EOF
             (do
-              (println "Evaluating: " form1)
-              (let [res (go! form1 #_base-conts)
-                    exp form2 #_(go! form2 #_base-conts)]
-                (println "---")
-                (when (not= res exp)
-                  ;; TODO: colour.
-                  (println "!!!!!!!!!!!!!!!FAILURE!!!!!!!!!!!!\n---"))
-                (println "result:   " res)
-                (println "expected: " exp)
-                (println)
-                (recur reader)))))))))
+              (i/ret-> base-conts
+                (fn [ccs]
+                  (println "Evaluating: " form1)
+                  (go! form1 ccs))
+                (fn [res]
+                  (let [exp form2 #_(go! form2 #_base-conts)]
+                    (println "---")
+                    (when (not= res exp)
+                      (println "\033[41m!!!!!!!!!!!!!!!FAILURE!!!!!!!!!!!!\033[0m\n---"))
+
+                    (println "result:   " res)
+                    (println "expected: " exp)
+                    (println))))
+              (recur reader))))))))
 
 (def p debug/provenance)
 
