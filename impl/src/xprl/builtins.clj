@@ -36,12 +36,14 @@
     `(let [ensure# (fn [& x#] (when (vector? (second x#)) (let [~args x#] ~(:ensure kws))))
            return# (fn [~@args] ~(:return kws))
            error#  (fn [head# tail#]
-                     (throw (RuntimeException.
-                             ;; TODO: pass on line and col info from reader.
-                             ;; As is it's long lost by this point...
-                             (str "Type mismatch in " (:name head#)
+                     (let [msg# (str "Type mismatch in " (:name head#)
                                   "\nExpected: " ~(str (:ensure kws))
-                                  "\nReceived: " '~args " = " tail#))))]
+                                  "\nReceived: " '~args " = " tail#)]
+                       ;; TODO: pass on line and col info from reader.
+                       ;; As is it's long lost by this point...
+                       (binding [*out* *err*]
+                         (println msg#))
+                       (throw (RuntimeException. msg#))))]
        (build-extern ensure# return# error#))))
 
 (defmacro defextern [mac args & more]
