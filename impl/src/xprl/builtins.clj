@@ -23,6 +23,8 @@
         (debug/trace!
           (with-out-str
             (binding [ast/*verbose* true]
+              (println (str e ":\n" (.getMessage e) "\n" self " " args))
+              ;; (.printStackTrace e)
               (debug/inspect (ast/application self args)))))
         (let [msg (str e ":\n" (.getMessage e) "\n" self " " args)]
           (ast/emission env [[(ast/xkey :error) msg]]))))))
