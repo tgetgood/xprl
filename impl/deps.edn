@@ -1,2 +1,3 @@
-{:deps     {org.clojure/clojure                      {:mvn/version "1.12.0"}}
- :paths    ["src"]}
+{:deps    {org.clojure/clojure {:mvn/version "1.12.0"}}
+ :paths   ["src"]
+ :aliases {:main {:jvm-opts ["-Xss16m"]}}}
