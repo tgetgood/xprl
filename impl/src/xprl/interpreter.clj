@@ -2,32 +2,27 @@
   (:refer-clojure :exclude [resolve eval apply])
   (:require [xprl.ast :as ast]
             [xprl.debug :refer [deftracefn]]
+            [xprl.emission :as emit :refer [return ret->]]
             [xprl.env :as env]))
 
 (defn error [& strs]
   (throw (RuntimeException. ^String (clojure.core/apply str strs))))
 
-(def ret (ast/xkey :return))
-
-(defn return {:style/indent 1} [env x]
-  (let [retfn (get env ret)]
-    (assert (fn? retfn) (str "Cannot return " x ". No destination."))
-    ;; REVIEW: I skip the executor for local returns because it's simple and
-    ;; I'm afraid of everything grinding to a halt if I don't. This could be
-    ;; premature optimisation and I should look here first if there are weird
-    ;; bugs.
-    (retfn x)))
-
-(defn with-return [env retfn]
-  (assoc env ret retfn))
-
-(defn ret-> {:style/indent [1]} [env inner outer]
-  (inner (with-return env outer)))
-
 (declare walk)
 
 (defn walk-coll [env xs acc]
-  (if (seq xs) ; FIXME: serial walk for simplicity. Do better. Eventually.
+  (let [acc (transient acc)]
+    (when (seq xs)
+      (loop [[x & xs] xs]
+        (ret-> env #(walk % x) #(conj! acc %))
+        (when (seq xs)
+          (recur xs))))
+    (return env (persistent! acc)))
+
+  ;; FIXME: walking each element should be independent of the rest. That is to
+  ;; say that if one doesn't return, the rest should be allowed to act.
+  ;; REVIEW: Does this mean I need to watch for closing on channels?
+  #_(if (seq xs) ; FIXME: serial walk for simplicity. Do better. Eventually.
     (ret-> env #(walk % (first xs)) #(walk-coll env (rest xs) (conj acc %)))
     (return env acc)))
 
@@ -59,14 +54,15 @@
                           #(apply env % (:tail f)))
     (ast/symbolic? f)   (resolve env f)
     (ast/incomplete? f) (return env (ast/immediate f))
-    true                (return env f)) )
+    true                (return env f)))
 
 (deftracefn walk [env f]
+  (assert (not (empty? env)))
   (cond
     (ast/immediate? f)   (ret-> env #(walk % (:form f)) #(eval env %))
     (ast/application? f) (ret-> env #(walk % (:head f)) #(apply env % (:tail f)))
     (ast/coll? f)        (walk-coll env f (ast/empty f))
     (ast/μ? f)           (ret-> env #(walk % (:body f)) #(return env (assoc f :body %)))
-    (ast/emission? f)    (ret-> env #(walk % (:msgs f)) #(return env (assoc f :msgs %)))
+    (ast/emission? f)    (ret-> env #(walk % (:msgs f)) #(emit/do-emission! env f %))
     true                 (return env f))
   nil) ; make sure we can't accidentally rely on a return value

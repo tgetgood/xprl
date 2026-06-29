@@ -2,6 +2,7 @@
   (:require
    [xprl.ast :as ast]
    [xprl.debug :as debug]
+   [xprl.emission :as emit]
    [xprl.env :as env]
    [xprl.interpreter :as i]
    [xprl.ns :as ns]
@@ -10,14 +11,14 @@
 (defn build-extern [testfn returnfn errorfn]
   (fn [env self args]
     (try
-      (i/ret-> env
-        #(if (testfn env args) (i/return % args) (i/walk % args))
+      (emit/ret-> env
+        #(if (testfn env args) (emit/return % args) (i/walk % args))
         (fn [args]
           (cond
             (testfn env args)      (let [v (returnfn env args)]
                                      (when-not (nil? v)
-                                       (i/return env v)))
-            (ast/incomplete? args) (i/return env (ast/application self args))
+                                       (emit/return env v)))
+            (ast/incomplete? args) (emit/return env (ast/application self args))
             true                   (errorfn self args))))
       (catch Throwable e
         (debug/trace!
@@ -136,11 +137,12 @@
                 id    (gensym "μ-param-")
                 recid (gensym "μ-recur-")
                 param (ast/symbol param)
-                caps  (merge {param (ast/capture param id)}
+                pcap  (ast/capture param id)
+                caps  (merge {param pcap}
                              (when name {name (ast/capture name recid)}))]
-            (i/ret-> env
+            (emit/ret-> (emit/cut env pcap)
               #(i/walk % (env/walk-capture caps body))
-              #(i/return env (ast/μ id recid name param %)))))
+              #(emit/return env (ast/μ id recid name param %)))))
 
 (defextern emit [env kvs]
   :ensure (every? ast/keyword? (map first kvs))
@@ -148,7 +150,7 @@
 
 (defextern net [env forms]
   :ensure (ast/list? forms)
-  :return (i/ret-> env #(i/walk env forms) #(ast/net env %)))
+  :return (emit/ret-> env #(i/walk env forms) #(ast/net env %)))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]

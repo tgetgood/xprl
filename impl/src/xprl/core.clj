@@ -4,6 +4,7 @@
    [xprl.ast :as ast]
    [xprl.builtins :as builtins]
    [xprl.debug :as debug]
+   [xprl.emission :as emit]
    [xprl.env :as env]
    [xprl.executor :as exec]
    [xprl.interpreter :as i]
@@ -49,11 +50,19 @@
 
 (defn go!
   ([f] (go! f base-conts))
-  ([f conts] (sys/start! conts (ast/immediate f))))
+  ([f conts]
+   (try
+     (sys/start! conts (ast/immediate f))
+     (catch Throwable e
+       (binding [*out* *err*]
+         (println e)
+         ;;(.printStackTrace e)
+         )))))
 
 (defn ev [s]
-  (go! (:form (r/read (r/string-reader s) @the-env)) ))
+  (go! (:form (r/read (r/string-reader s) @the-env))))
 
+;; FIXME: This won't work with cps.
 (defn iev [s]
   (debug/inspect (go! (:form (r/read (r/string-reader s) @the-env)))))
 
@@ -100,7 +109,7 @@
           (if (= :eof form1)
             'EOF
             (do
-              (i/ret-> base-conts
+              (emit/ret-> base-conts
                 (fn [ccs]
                   (println "Evaluating: " form1)
                   (go! form1 ccs))
