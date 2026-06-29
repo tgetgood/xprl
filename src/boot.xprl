@@ -94,7 +94,7 @@
 
 (def destructure-map
   (μ mp
-     ~(emit :error "not implemented")))
+     ~(emit [:error "not implemented"])))
 
 (defμ* destructure xy
   (let* [params ~(nth* ~xy 1)
@@ -102,7 +102,7 @@
      ~(cond
         (symbol?* ~params) {params args}
         (empty?* ~params)  {}
-        (empty?* ~args)    (emit :error "pattern mismatch")
+        (empty?* ~args)    (emit [:error "pattern mismatch"])
 
         (dot?* ~(first* ~params))
         (destructure ~(first* ~(rest* ~params)) ~args)
@@ -116,7 +116,7 @@
                          (destructure-map ~(first* ~params) ~(first* ~args))
                          (destructure ~(rest* ~params) ~(rest* ~args)))
 
-        true (emit :error ~(str* "Cannot destructure: " ~params ", " ~args)))))
+        true (emit [:error ~(str* "Cannot destructure: " ~params ", " ~args)]))))
 
 ;;;;; definitions
 
