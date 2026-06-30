@@ -17,7 +17,8 @@
 (defn process-walked [exec env form]
   (when form
     (if (ast/net? form)
-      (run! #(enqueue! exec [(:env form) (ast/immediate %)]) (:forms form))
+      (let [env (merge env (:env form))]
+        (run! #(enqueue! exec [env (ast/immediate %)]) (:forms form)))
       (do
         ;; (println "stiching return value: " form)
         (assert (contains? env emit/ret) (str "Cannot return " form ". No destination."))

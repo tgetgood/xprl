@@ -17,14 +17,7 @@
         (ret-> env #(walk % x) #(conj! acc %))
         (when (seq xs)
           (recur xs))))
-    (return env (persistent! acc)))
-
-  ;; FIXME: walking each element should be independent of the rest. That is to
-  ;; say that if one doesn't return, the rest should be allowed to act.
-  ;; REVIEW: Does this mean I need to watch for closing on channels?
-  #_(if (seq xs) ; FIXME: serial walk for simplicity. Do better. Eventually.
-    (ret-> env #(walk % (first xs)) #(walk-coll env (rest xs) (conj acc %)))
-    (return env acc)))
+    (return env (persistent! acc))))
 
 (deftracefn apply [env head tail]
   (cond
@@ -62,7 +55,9 @@
     (ast/immediate? f)   (ret-> env #(walk % (:form f)) #(eval env %))
     (ast/application? f) (ret-> env #(walk % (:head f)) #(apply env % (:tail f)))
     (ast/coll? f)        (walk-coll env f (ast/empty f))
-    (ast/μ? f)           (ret-> env #(walk % (:body f)) #(return env (assoc f :body %)))
+    (ast/μ? f)           (ret-> (emit/cut env ::test)
+                           #(walk % (:body f))
+                           #(return env (assoc f :body %)))
     (ast/emission? f)    (ret-> env #(walk % (:msgs f)) #(emit/do-emission! env f %))
     true                 (return env f))
   nil) ; make sure we can't accidentally rely on a return value

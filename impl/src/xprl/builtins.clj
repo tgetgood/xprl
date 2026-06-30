@@ -112,11 +112,15 @@
 
 (defextern first* [_ [x]]
   :ensure (ast/coll? x)
+  ;; the empty list has no first element, so there's nothing to return.
   :return (first x))
 
 (defextern rest* [_ [x]]
   :ensure (ast/coll? x)
-  :return (into [] (rest x)))
+  ;; But the ~rest~ of the empty list, i.e. everything but the first element of
+  ;; the empty list is still the empty list because there's nothing to remove.
+  ;; So I think this is correct as is.
+  :return (vec (rest x)))
 
 (defextern count* [_ [x]]
   :ensure (ast/coll? x)
@@ -138,8 +142,7 @@
                 recid (gensym "μ-recur-")
                 param (ast/symbol param)
                 pcap  (ast/capture param id)
-                caps  (merge {param pcap}
-                             (when name {name (ast/capture name recid)}))]
+                caps  (merge {param pcap} (when name {name (ast/capture name recid)}))]
             (emit/ret-> (emit/cut env pcap)
               #(i/walk % (env/walk-capture caps body))
               #(emit/return env (ast/μ id recid name param %)))))
@@ -150,7 +153,7 @@
 
 (defextern net [env forms]
   :ensure (ast/list? forms)
-  :return (emit/ret-> env #(i/walk env forms) #(ast/net env %)))
+  :return (emit/ret-> env #(i/walk % forms) #(emit/return env (ast/net env %))))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]
