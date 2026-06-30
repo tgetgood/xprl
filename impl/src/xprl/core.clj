@@ -41,11 +41,13 @@
       (swap! env ns/ns-intern (ast/symbol sym) value)
       nil)))
 
+(defonce ta (atom nil))
 (def base-conts
   (cable {:env     (env-updater the-env)
           :return  (fn [v] (when (not (nil? v)) (println "=>> " v)))
           :unbound #(println "WARNING message on unbound channel:" %)
           :log     #(println "LOG:" %)
+          :test    #(reset! ta %)
           :error   #(binding [*out* *err*] (println %))}))
 
 (defn go!
@@ -59,8 +61,10 @@
          ;;(.printStackTrace e)
          )))))
 
-(defn ev [s]
-  (go! (:form (r/read (r/string-reader s) @the-env))))
+(defn ev
+  ([s] (go! (:form (r/read (r/string-reader s) @the-env))))
+  ([s cb] (go! (:form (r/read (r/string-reader s) @the-env))
+               (emit/with-return base-conts #(emit/return base-conts (cb %))))))
 
 ;; FIXME: This won't work with cps.
 (defn iev [s]

@@ -178,6 +178,15 @@
     (insp (:param form) w (inc level))
     (insp (:body form) w (inc level)))
 
+  xprl.ast.Net
+  (insp [form ^Writer w level]
+    (spacer w level)
+    (.write w "N\n")
+    (loop [forms (:forms form)]
+      (when (seq form)
+        (insp (first forms) w (inc level))
+        (recur (rest forms)))))
+
   xprl.ast.Emission
   (insp [form ^Writer w level]
     (spacer w level)
