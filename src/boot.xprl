@@ -25,6 +25,7 @@
 (def first (wrap . first*))
 (def rest (wrap . rest*))
 (def empty? (wrap . empty?*))
+(def not (wrap . not*))
 (def merge (wrap . merge*))
 
 ;;;;; branching
@@ -121,13 +122,11 @@
 ;;;;; definitions
 
 (defμ* fn x
-  (if (=* 3 ~(count* ~x))
-    (μ ~(nth* ~x 1) args
-       ~(let-map ~(destructure ~(nth* ~x 2) ~~args)
-          ~~(nth* ~x 3)))
-    (μ args
-       ~(let-map ~(destructure ~(nth* ~x 1) ~~args)
-          ~~(nth* ~x 2)))))
+  (let* [named? ~(=* 3 ~(count* ~x))
+         params ~(if named? (nth* ~x 2) (nth* ~x 1))
+         body   ~(if named? (nth* ~x 3) (nth* ~x 2))]
+    ~(μ ~(when named? (nth* ~x 1)) args
+        ~(let-map ~(destructure ~params ~~args) ~~body))))
 
 ;;; This would make life a lot nicer...
 
@@ -205,7 +204,6 @@
   (when (not (empty? xs))
     (net
      (f (first xs))
-     ;; FIXME: `rest` must short circuit if there are no more elements.
      (map f (rest xs)))))
 
 (defn filter [p xs]

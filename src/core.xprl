@@ -10,7 +10,6 @@
 (def < (wrap . <*))
 (def = (wrap . =*))
 
-(def not (wrap . not*))
 
 (def symbol? (wrap . symbol?*))
 (def map? (wrap . map?*))

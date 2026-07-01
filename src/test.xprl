@@ -89,8 +89,8 @@
 
 ;;; Sequences
 
-(map inc [1 2 3])          [2 3 4]
-(filter even? [1 2 3 4])   [2 4]
+;; (map inc [1 2 3])          [2 3 4]
+;; (filter even? [1 2 3 4])   [2 4]
 
 ;;; Emission edge cases
 
