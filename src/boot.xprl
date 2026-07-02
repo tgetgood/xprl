@@ -113,11 +113,9 @@
          (destructure ~(first* ~params) ~(first* ~args))
          (destructure ~(rest* ~params) ~(rest* ~args)))
 
-        (map?* ~params) (merge
-                         (destructure-map ~(first* ~params) ~(first* ~args))
-                         (destructure ~(rest* ~params) ~(rest* ~args)))
+        (map?* ~params) (destructure-map ~params ~args)
 
-        true (emit [:error ~(str* "Cannot destructure: " ~params ", " ~args)]))))
+        true (emit [:error ~(str* "Cannot destructure: " ~params " =/= " ~args)]))))
 
 ;;;;; definitions
 
@@ -136,29 +134,6 @@
         ~(let-map ~(destructure ~(nth* ~x 2) ~args)
            ~~(nth* ~x 3)))))
 
-(defμ fn2 [params body]
-  (μ args
-     ~(let-map ~(destructure ~params ~args)
-        ~~body)))
-
-
-#_(defμ fn3 [name params body])
-
-;; (defμ fn args
-;;   (let1 indirect ~(nth* [error fn2 fn3] ~(count* ~args))
-;;         ~(~indirect . ~args)))
-
-#_(def fn
-  (μ args
-     (let1 named? ~(symbol?* ~(first* ~args))
-           ~(let1 methods ~(if named? (rest* ~args) ~args)
-                  ~(let1 defs (if (map?* ~(first* ~methods))
-                                (nth* ~methods 1)
-                                {(nth* ~methods 1) (nth* ~methods 2)})
-                         ~(μ ~(when named? (first* ~args)) fn-args
-                             ~(let1 dispatch ~(match ~defs ~fn-args)
-                                    ~(dispatch . ~fn-args))))))))
-
 (def defn
   (μ x
      ~(def ~(nth* ~x 1) (fn . ~x))))
@@ -168,37 +143,8 @@
 (defn inc [x]
   (+ x 1))
 
-;; ;;;;; streams
-
-;; (def return-stream
-;;   (μ [form]
-;;      ~(let* [[st ch] ~(wire)]
-;;         ~(net
-;;           ~(with-channels {:return ch} ~form)
-;;           st))))
-
-;; (defn map*
-;;   {[f xs]    (emit :return ~(f (first xs))
-;;                    :exec ~(map* f (rest xs)))
-;;    [f xs ys] (emit :return ~(f (first xs) (first ys))
-;;                    :exec ~(map* f (rest xs) (rest ys)))})
-
-;; (defμ map args
-;;   (return-stream ~(map* . ~args)))
-
-;; (defn repeat [x]
-;;   (emit :return ~x :exec ~(repeat x)))
-
-;; (defn interleave [s1 s2]
-;;   (emit :return ~(first s1)
-;;         :return ~(first s2)
-;;         :exec ~(interleave (rest s1) (rest s2))))
-
-;; (defμ emit-all [ch [x . xs]]
-;;   (emit :ch ~x :exec ~(emit-all ch xs)))
-
-;; (defμ net conts
-;;   (emit-all :exec ~conts))
+;;;;; Squiggol
+;; FIXME: This is unusable as a concept for the time being.
 
 (defn map [f xs]
   (when (not (empty? xs))
