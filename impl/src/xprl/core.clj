@@ -98,8 +98,6 @@
   (debug/inspect (:form (r/read (r/string-reader s) @the-env))))
 
 (defn test []
-  ;; FIXME: This testrunner is synchronous, so it cannot test message passing.
-  ;; Most of the tests failing as of now need message passing to run.
   (reload! test-setup)
   (binding [debug/*execution-trace* false]
     (let [retwrap (fn [f] (ast/pair (ast/symbol "emit")

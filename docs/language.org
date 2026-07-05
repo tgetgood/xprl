@@ -48,6 +48,19 @@ This is largely an aid to my own memory so bear with me.
 
    This (f x y z) is identical to (f . [x y z]).
 
+   Notably this means that we don't need to assume that functions take lists of
+   parameters. Languages that assume functions to take a list of paramters must
+   resort to a kludge like =(fn [& args] ...)= if they want to support binding
+   all passed values to a single name, whereas in xprl we can just write
+   =(fn args ...)= and args will be bound to whatever the tail of the invoking
+   expression is.
+
+   Note that this is true even if the tail is not a list at all:
+   =(f . {:x 3 :y 5})= and =(f . 3.14)= are perfectly well defined and don't box
+   or coerce their tails into lists.
+
+   Coercion could be implemented, but I have, as yet, no use for it.
+
    The =.= can be interpreted in a functional sense as =apply=, or in an actor
    sense as =send=. It turns out they're both equivalent with the right
    underlying abstractions.
@@ -79,8 +92,8 @@ This is largely an aid to my own memory so bear with me.
 
      ;; That is, the pair whose head is the symbol `+` and whose tail is the
      ;; vector of *symbols* `[x y]`. The symbols x and y are bound to 4 and 5
-     ;; respectively, but we're still trying to add symbols, rather than their
-     ;; referrents, which is an error.
+     ;; respectively, but we're still talking about adding symbols, rather than
+     ;; their referrents, which would be an error were we to try and do it.
    #+END_SRC
 
    μ doesn't define a macro. A μ is first class: they can be passed and returned
@@ -102,9 +115,9 @@ This is largely an aid to my own memory so bear with me.
    The answer to the hanging question of the last section is that there is a
    syntactic expression that "means" =eval=.
 
-   In reality it means "evaluate the following expression as soon as you have
-   all of the information required to do so", which will remain ambiguous until
-   we get into the details of the AST.
+   In reality it means "evaluate the following expression at some point after
+   you have all of the information required to do so", which will remain
+   ambiguous until we get into the details of the AST.
 
    That syntax is the tilde =~=.
 
@@ -171,18 +184,19 @@ This is largely an aid to my own memory so bear with me.
    exactly what will and will not be evaluated. We actually have much more scope
    for compiler optimisations than typical languages, but that's a whole other
    discussion.
-** An Exception
+** An Exception?
    One final note: I said above that there is *no* implicit evaluation. You've
    probably noticed in my examples that everything typed into the repl *is*
-   automatically evaluated. The same holds for the code reader =loadfile=. This
-   is a convenience that once again makes code that acts as expected look
-   normal. Also there's no point entering code into a repl unless you want it to
-   be evaluated, so it seems like the right thing to do.
+   automatically evaluated. The same holds for the code reader =loadfile=.
 
-   μs are, of course, free to evaluate their arguments when and as they see fit.
-   =def= adds an evaluation to the beginning of its body, for instance. I think
-   that's the right thing to do as well, but it adds a bit of asymmetry to the
-   definition of metaprogramming operations like =fn= and =wrap=.
+   This isn't really an exception since =def= and =loadfile= are μs and are free
+   to evaluate their arguments when and as they see fit.
+
+   The low level language where you need to track evaluation by hand is very
+   powerful, but hard to use. Higher level constructs attempt to provide an
+   intuitive functional programming style so that you don't have to worry about
+   the highlights and hazards of metaprogramming when you aren't
+   metaprogramming.
 * Reduction and the AST
   As covered in the previous section, whether or not an expression will ever be
   evaluated — that is whether a given expression is code or data — is expressed
@@ -230,17 +244,17 @@ This is largely an aid to my own memory so bear with me.
 
    =~(f . tail)= ⇒ =#(~f . tail)=
 
-   Thus ~(f x y) -> #(~f x y) which applies [x y] to whatever the symbol =f= is
-   bound to. The μ to which f is bound might in turn choose to evaluate (lookup)
-   x and y to do something with them.
+   Which applies [x y] to whatever the symbol =f= is bound to. The μ to which f
+   is bound might in turn choose to evaluate (lookup) x and y to do something
+   with them.
 
    The second thing we need to do is create actual μ objects. I don't believe
    its possible to implement μ in this language, so we need an escape hatch
    to define primitives.
 
-   Let =μ= be bound to the primitive =#F[μ]= — =#F= denotes "primitive function"
-   even though they aren't always functions, it's a legacy name that might
-   change one day — then we have
+   Let =μ= be bound to the primitive =#F[μ]= — =#F= denotes an "external
+   function" even though they aren't generally functions. I'm leaning towards
+   just "extern" as a less inaccurate name.
 
    =~(μ params body)= ⇒ =#(#F[μ] params body)=
 
@@ -282,6 +296,8 @@ This is largely an aid to my own memory so bear with me.
    down. They simplify an expression without necessarily evaluating it. If
    there's sufficient information, then reduction will fully interpret an
    expression, but in general there will be arguments that aren't known yet.
+
+   FIXME: The rest of this is very dated.
 
    There's a special case of applying arguments which is just β-reduction:
 
@@ -414,7 +430,7 @@ This is largely an aid to my own memory so bear with me.
   can change what it means. Thus we don't need hygienic macros.
 
   But even though metaprogramming is safer and first class, it's still often
-  difficult to get right. So judicious is still required.
+  difficult to get right. So judicious use is still required.
 * Pipes, Channels, and Streams
   In this language channels and streams are two sides of the same phenomenon.
   I'm calling that phenomenon a pipe for lack of creative inspiration.
@@ -423,11 +439,11 @@ This is largely an aid to my own memory so bear with me.
   addresses in actor languages or objects in OO languages. They act similarly to
   write only channels in a CSP style language.
 
-  A stream is a lazy, potentially unbounded, sequential data structure. A stream
-  is a value, but it might not yet be known. Reading the first element off of a
-  stream will return it if it is known right now, or it will park and wait for a
-  value if it isn't. Calling =rest= on a stream returns the stream consisting of
-  all but the first element and never parks.
+  A stream is an immutable, lazy, potentially unbounded, sequential data
+  structure. A stream is a value, but it might not yet be known. Reading the
+  first element off of a stream will return it if it is known right now, or it
+  will park and wait for a value if it isn't. Calling =rest= on a stream returns
+  the stream consisting of all but the first element and never parks.
 
   A pipe consists of one stream and one channel. Writes to the channel realise
   the next element of the stream. Thus calling =first= on a stream is equivalent
@@ -510,8 +526,8 @@ This is largely an aid to my own memory so bear with me.
 
   So we can still perform side effects, but those side effects must exist as
   pure data (messages) sent to the things that actually bang on the world. Those
-  messages can be logged, replayed, or even filtered. That makes a big
-  difference.
+  messages can be logged, replayed, filtered, or even intercepted to sandbox a
+  component. That makes a big difference.
 
   The continuation map doesn't exist as a first class thing from within the
   language. Rather it is maintained by the runtime and can be modified in a
@@ -548,6 +564,8 @@ This is largely an aid to my own memory so bear with me.
   So if you want a consistent view, put messages in a queue and process them in
   serial. It's not that hard.
 * Ordering
+  - Note taken on [2026-07-02 Thu 14:05] \\
+    FIXME: This whole section is defunct.
   I said above that you can't control the order in which things happen. Of
   course if that were strictly true you wouldn't be able to coordinate anything.
 
@@ -607,9 +625,9 @@ This is largely an aid to my own memory so bear with me.
          (last state))))
   #+END_SRC
 
-  =map= takes to elements of each of its input streams one at a time, so by
-  priming =state= with an initial value, we can ensure that it's always one step
-  ahead of the input stream =xs=.
+  =map= takes elements of each of its input streams one at a time, so by priming
+  =state= with an initial value, we can ensure that it's always one step ahead
+  of the input stream =xs=.
 
   We're back at clojure's initial lazy seq api which works so well with the
   =->>= macro. We could overload map, filter, etc, and have transducer syntax,
@@ -719,6 +737,9 @@ This is largely an aid to my own memory so bear with me.
 
    Hardly a trivial problem, but there's real opportunity here.
 ** Work stealing
+   - Note taken on [2026-07-03 Fri 10:16] \\
+     The system this addresses is currently in flux and so this is not likely to
+     reflect reality.
    The work stealing implementation is based on Cilk, but immutability
    simplifies a lot of things.
 
@@ -781,6 +802,9 @@ This is largely an aid to my own memory so bear with me.
   the thing I'm describing takes. The code is a much better description, but
   that changes too fast.
 ** Receivers                                                     :receivers:
+   - Note taken on [2026-07-03 Fri 10:15] \\
+     I no longer make a distinction between μ and ν, but everything said here about
+     receivers still applies to μs.
    A receiver is (surprise!) a thing that receives messages. You might think of
    it as a lambda, but it would be better to think of it as a first class macro,
    but even that isn't quire right. See :reflection: and :metaprogramming: for
@@ -859,10 +883,10 @@ This is largely an aid to my own memory so bear with me.
    Packages aren't a natural thing. They're an abstraction to help us
    organise. Ultimately it's the things symbols point to that have
    versions. I'll refer to a thing referred to by a symbol as a code unit, for
-   lack of a better term. It could be a μ or a ν, it could be literal data. I
-   don't think there's much else it could be. Of course even a function is sent
-   as literal data + context of evaluation (also literal data) + possible
-   analysis and compile cache + possible cache of ready to execute binary for a
+   lack of a better term. It could be a μ, it could be literal data. I don't
+   think there's much else it could be. Of course even a function is sent as
+   literal data + context of evaluation (also literal data) + possible analysis
+   and compile cache + possible cache of ready to execute binary for a
    given arch.
 
    The immutability of code units makes caching the outputs of compilers and
