@@ -1,0 +1,86 @@
+(defn open-file [fname]
+  ;; TODO: check  file exists and whatnot
+  (let [chars (pipe)]
+    (emit :system.file.open {:filename fname :out chars} :return chars)))
+
+(defn load-form [env form]
+  (interpreter.walk (ns.bind (ast.immediate form) env)))
+
+(defn load-ns-from-file [fname]
+  (let [forms (reader.read (open-file fname))
+        ns    (pipe ns.empty)
+        envch (pipe)]
+    ;; Create the ns accumulator
+    ;; interpret each form with the current accumulated ns
+    ;; extend ns as appropriate as each form is interpreted
+    ;; When all forms have been interpreted, return the final ns.
+    (net
+     (with-channels {:ns ns}
+       (map (fn [ns [sym val]]
+              (if (contains? ns sym)
+                (emit :error (str "Cannot redefine symbol " sym))
+                (emit :ns (assoc ns sym val))))))
+     (with-channels {:env envch}
+       (map load-form ns forms)))))
+
+;; The above almost works, but what happens if the interpretation of a form
+;; doesn't result in exactly one message to :env?
+;;
+;; If the form being interpreted defines nothing then the loader stalls. If it
+;; defines multiple things then we end up out of sync and won't see all the
+;; bindings we might need.
+;;
+;; Instead we need a way to say "the most recent ns available". This is
+;; inherently racy, but it's also necessary.
+
+;; What about something like:
+
+(defn last-ready [pipe]
+  (if (ready? pipe)
+    (if (ready? (rest pipe))
+      (most-recent (rest pipe))
+      (first pipe))
+    (emit :error (str pipe " has no elements."))))
+
+;; Where `ready?` is non parking and returns true if (first pipe) will not park.
+
+;; Or maybe something like
+
+(defn interpret [ns form]
+  (let [env (pipe)]
+    (net
+     (reduce (fn [ns [sym val]] (assoc ns sym val)) ns env)
+     (with-channels {:env env :return system.print-stdout}
+       (load-form ns form)))))
+
+(defn load-ns [fname]
+  (let [forms (reader.read (file.open fname))]
+    (reduce interpret empty-ns forms)))
+
+;; This requires scope on pipes so that channels are closed and streams
+;; finalised when there are no more processes which can write to the channel.
+;; GC/finalisers are not an option since the read half needs to remain in scope.
+;;
+;; So should I separate the two ends again? I don't think so. I think it will
+;; need some sort of bookkeeping around with-channels and net. Need the think
+;; about that some more.
+
+;; On a somewhat related note I'm going to need to walk the network graph to
+;; figure out data dependencies before code is run.
+;;
+;; `map` is stateless and in principle you can run the various steps
+;; concurrently, but there are often data dependencies between the steps as in
+;; `reduce` (which is implemented in terms of `map`).
+;;
+;; When deciding what work to steal, it's important to steal work that can make
+;; progress immediately and not simply shuffle a single threaded workload
+;; between cores.
+;;
+;; I also want to use simd and the gpu whenever that makes sense.
+
+(defn start-repl! []
+  ;; FIXME: where do we bind the cable?
+  (->> system.stdin
+       open
+       (map reader.read)
+       (reduce interpret empty-ns)))
