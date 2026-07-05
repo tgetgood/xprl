@@ -148,8 +148,9 @@
               #(emit/return env (ast/μ id recid name param %)))))
 
 (defextern emit [env kvs]
-  :ensure (every? ast/keyword? (map first kvs))
-  :return (i/walk env (ast/emission env kvs)))
+  :ensure (and (even? (count kvs))
+               (every? ast/keyword? (map first (partition 2 kvs))))
+  :return (i/walk env (ast/emission env (into [] (map vec) (partition 2 kvs)))))
 
 (defextern net [env forms]
   :ensure (ast/list? forms)

@@ -97,5 +97,5 @@
 ;; This is the big one, returning nothing really means nothing is returned!
 ;; Thinking about it, this really fucks with the notion of length, doesn't it?
 [(when false 4) 5]                 #_=> [5]
-[(emit [:return 1]) 5]             #_=> [1 5]
-[(emit [:return 1] [:return 2]) 5] #_=> [1 2 5]
+[(emit :return 1) 5]             #_=> [1 5]
+[(emit :return 1 :return 2) 5] #_=> [1 2 5]

@@ -8,9 +8,9 @@
 ;;
 ;; From these two system primitives, I'm going to try to bootstrap an interpreter.
 
-(emit [:env [def ~(μ x ~(emit [:env [~(nth* ~x 1) ~~(nth* ~x 2)]]
-                              [:return ~(nth* ~x 1)]))]]
-      [:return def])
+(emit :env [def ~(μ x ~(emit :env [~(nth* ~x 1) ~~(nth* ~x 2)]
+                             :return ~(nth* ~x 1)))]
+      :return def)
 
 ;; Test ns clobbering
 ;; (def x 42)
@@ -95,7 +95,7 @@
 
 (def destructure-map
   (μ mp
-     ~(emit [:error "not implemented"])))
+     ~(emit :error "not implemented")))
 
 (defμ* destructure xy
   (let* [params ~(nth* ~xy 1)
@@ -103,7 +103,7 @@
      ~(cond
         (symbol?* ~params) {params args}
         (empty?* ~params)  {}
-        (empty?* ~args)    (emit [:error "pattern mismatch"])
+        (empty?* ~args)    (emit :error "pattern mismatch")
 
         (dot?* ~(first* ~params))
         (destructure ~(first* ~(rest* ~params)) ~args)
@@ -115,7 +115,7 @@
 
         (map?* ~params) (destructure-map ~params ~args)
 
-        true (emit [:error ~(str* "Cannot destructure: " ~params " =/= " ~args)]))))
+        true (emit :error ~(str* "Cannot destructure: " ~params " =/= " ~args)))))
 
 ;;;;; definitions
 
