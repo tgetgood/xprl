@@ -72,15 +72,10 @@
 
 (defn loadfile [envatom fname]
   (println "\nloading:" fname "\n")
-  (loop [reader (r/file-reader fname)]
-    (let [env    @envatom
-          reader (r/read reader)
-          form   (:form reader)]
-      (if (= :eof form)
-        'EOF
-        (do
-          (go! env form base-conts)
-          (recur reader)))))
+  (loop [forms (r/read-file fname)]
+    (when (seq forms)
+      (go! @envatom (first forms) base-conts)
+      (recur (rest forms))))
   envatom)
 
 (defn reload! [fnames]
@@ -100,31 +95,21 @@
 (defn test []
   (reload! test-setup)
   (binding [debug/*execution-trace* false]
-    (let [retwrap (fn [f] (ast/pair (ast/symbol "emit")
-                                    [(ast/xkey :return) (ast/immediate f)]))]
-      (println "\nStarting tests:\n")
-      (loop [reader (r/file-reader testxprl)]
-        (let [reader (r/read reader)
-              form1  (:form reader)
-              reader (r/read reader)
-              form2  (:form reader)]
-          (if (= :eof form1)
-            'EOF
-            (do
-              (emit/ret-> base-conts
-                (fn [ccs]
-                  (println "Evaluating: " form1)
-                  (go! @the-env form1 ccs))
-                (fn [res]
-                  (let [exp form2 #_(go! form2 #_base-conts)]
-                    (println "---")
-                    (when (not= res exp)
-                      (println "\033[41m!!!!!!!!!!!!!!!FAILURE!!!!!!!!!!!!\033[0m\n---"))
+    (println "\nStarting tests:\n")
+    (run! (fn [[test expect]]
+            (emit/ret-> base-conts
+              (fn [ccs]
+                (println "Evaluating: " test)
+                (go! @the-env test ccs))
+              (fn [result]
+                (println "---")
+                (when (not= result expect)
+                  (println "\033[41m!!!!!!!!!!!!!!!FAILURE!!!!!!!!!!!!\033[0m\n---"))
 
-                    (println "result:   " res)
-                    (println "expected: " exp)
-                    (println))))
-              (recur reader))))))))
+                (println "result:   " result)
+                (println "expected: " expect)
+                (println))))
+          (partition 2 (r/read-file testxprl)))))
 
 (def p debug/provenance)
 

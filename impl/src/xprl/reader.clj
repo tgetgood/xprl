@@ -275,10 +275,7 @@
   (s/rename-keys (read* reader) {:result :form}))
 
 (defn read-file
-  "Reads all forms from file `fname` and returns then in a vector.
-  Note that this does not set the context and so the returned forms cannot be
-  evaluated if they contain any unbound symbols.
-  Only really useful for testing the reader."
+  "Reads all forms from file `fname` and returns then in a vector. "
   [fname]
   (loop [results []
          reader  (file-reader fname)]
