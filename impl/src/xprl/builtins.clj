@@ -133,19 +133,20 @@
 (defextern μ [env args]
   :ensure (and (ast/symbolic? (first args))
                (if (= 3 (count args)) (ast/symbolic? (second args)) true))
-  :return (let [[name param body] (if (= 3 (count args)) args (into [nil] args))
-
-                ;; HACK: I don't like languages that make the programmer solve a
-                ;; problem the implementor can't, but I am stuck...
-                _     (assert (not (ast/ref? param)) (str param " clobbers ns binding!!"))
-                id    (gensym "μ-param-")
-                recid (gensym "μ-recur-")
-                param (ast/symbol param)
-                pcap  (ast/capture param id)
-                caps  (merge {param pcap} (when name {name (ast/capture name recid)}))]
-            (emit/ret-> (emit/cut env pcap)
-              #(i/walk % (env/walk-capture caps body))
-              #(emit/return env (ast/μ id recid name param %)))))
+  :return (let [[name param body] (if (= 3 (count args)) args (into [nil] args))]
+            ;; HACK: I don't like languages that make the programmer solve a
+            ;; problem the implementor can't, but I am stuck...
+            (when (ast/ref? param)
+              (emit/error! env (str "μ parameter " param " clobbers ns binding!! "
+                                    "This will cause obscure and horrid behaviour.")))
+            (let [id    (gensym "μ-param-")
+                  recid (gensym "μ-recur-")
+                  param (ast/symbol param)
+                  pcap  (ast/capture param id)
+                  caps  (merge {param pcap} (when name {name (ast/capture name recid)}))]
+              (emit/ret-> (emit/cut env pcap)
+                #(i/walk % (env/walk-capture caps body))
+                #(emit/return env (ast/μ id recid name param %))))))
 
 (defextern emit [env kvs]
   :ensure (and (even? (count kvs))

@@ -23,6 +23,9 @@
 (defn ret-> {:style/indent [1]} [env inner outer]
   (inner (with-return env outer)))
 
+(defn error! [env msg]
+  ((get env (ast/xkey :error)) msg))
+
 ;;;;; Splicing
 
 (defn cut "Create a 'spliced cable' from given cable."
