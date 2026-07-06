@@ -33,7 +33,7 @@
    :line   1})
 
 (defn clean-meta [r]
-  (dissoc r :token :until :result :reader :env))
+  (dissoc r :token :until :result :reader))
 
 (defn read1 [s]
   (let [next (.read ^PushbackReader (:reader s))]
@@ -118,7 +118,7 @@
     (= s "false") false
     :else         nil))
 
-(defn first-to-pass [s & fs]
+(defn first-to-pass {:style/indent 1} [s & fs]
   (loop [[f & fs] fs]
     (when f
       (let [v (f s)]
@@ -126,23 +126,9 @@
           (recur fs)
           v)))))
 
-(defn parse-symbol [{:keys [token env] :as r}]
-  ;; REVIEW: gensyms are never used at present. Will there be a future use for
-  ;; them? I suspect not, but I don't see harm in keeping them for the time
-  ;; being.
-  (let [s (ast/symbol token)]
-    (if (str/ends-with? token "#") ; `#` forces symbols to be local
-      s
-      (if-let [v (get env s)] ; if `s` is bound in `env`, that binding takes precedence.
-        (ast/ref s v)
-        s))))
-
 (defn interpret [r]
-  (let [s (:token r)]
-    (let [t (first-to-pass s parse-number parse-double parse-bool parse-keyword)]
-      (if (nil? t)
-        (parse-symbol r)
-        t))))
+  (first-to-pass (:token r)
+    parse-number parse-double parse-bool parse-keyword ast/symbol))
 
 (defn readimmediate [r]
   (update (read* r) :result ast/immediate))
@@ -285,8 +271,8 @@
       (recur o)
       (update o :result debug/with-provenance m))))
 
-(defn read [reader env]
-  (s/rename-keys (read* (assoc reader :env env)) {:result :form}))
+(defn read [reader]
+  (s/rename-keys (read* reader) {:result :form}))
 
 (defn read-file
   "Reads all forms from file `fname` and returns then in a vector.

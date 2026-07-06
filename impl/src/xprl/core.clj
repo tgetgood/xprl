@@ -51,10 +51,10 @@
           :error   #(binding [*out* *err*] (println %))}))
 
 (defn go!
-  ([f] (go! f base-conts))
-  ([f conts]
+  ([ns f] (go! ns f base-conts))
+  ([ns f conts]
    (try
-     (sys/start! conts (ast/immediate f))
+     (sys/start! conts (ast/immediate (ns/bind f ns)))
      (catch Throwable e
        (binding [*out* *err*]
          (println e)
@@ -62,24 +62,24 @@
          )))))
 
 (defn ev
-  ([s] (go! (:form (r/read (r/string-reader s) @the-env))))
-  ([s cb] (go! (:form (r/read (r/string-reader s) @the-env))
+  ([s] (go! @the-env (:form (r/read (r/string-reader s)))))
+  ([s cb] (go! @the-env (:form (r/read (r/string-reader s)))
                (emit/with-return base-conts #(emit/return base-conts (cb %))))))
 
 ;; FIXME: This won't work with cps.
 (defn iev [s]
-  (debug/inspect (go! (:form (r/read (r/string-reader s) @the-env)))))
+  (debug/inspect (go! @the-env (:form (r/read (r/string-reader s))))))
 
 (defn loadfile [envatom fname]
   (println "\nloading:" fname "\n")
   (loop [reader (r/file-reader fname)]
     (let [env    @envatom
-          reader (r/read reader env)
+          reader (r/read reader)
           form   (:form reader)]
       (if (= :eof form)
         'EOF
         (do
-          (go! form base-conts)
+          (go! env form base-conts)
           (recur reader)))))
   envatom)
 
@@ -95,7 +95,7 @@
   `(debug/inspect (gs ~n)))
 
 (defn check [s]
-  (debug/inspect (:form (r/read (r/string-reader s) @the-env))))
+  (debug/inspect (:form (r/read (r/string-reader s)))))
 
 (defn test []
   (reload! test-setup)
@@ -104,9 +104,9 @@
                                     [(ast/xkey :return) (ast/immediate f)]))]
       (println "\nStarting tests:\n")
       (loop [reader (r/file-reader testxprl)]
-        (let [reader (r/read reader @the-env)
+        (let [reader (r/read reader)
               form1  (:form reader)
-              reader (r/read reader @the-env)
+              reader (r/read reader)
               form2  (:form reader)]
           (if (= :eof form1)
             'EOF
@@ -114,7 +114,7 @@
               (emit/ret-> base-conts
                 (fn [ccs]
                   (println "Evaluating: " form1)
-                  (go! form1 ccs))
+                  (go! @the-env form1 ccs))
                 (fn [res]
                   (let [exp form2 #_(go! form2 #_base-conts)]
                     (println "---")
@@ -143,4 +143,4 @@
      ~x))
 
 (defn read-string [s]
-  (:form (r/read (r/string-reader s) @the-env)))
+  (:form (r/read (r/string-reader s))))
