@@ -42,6 +42,7 @@
       nil)))
 
 (defonce ta (atom nil))
+
 (def base-conts
   (cable {:env     (env-updater the-env)
           :return  (fn [v] (when (not (nil? v)) (println "=>> " v)))
@@ -66,16 +67,13 @@
   ([s cb] (go! @the-env (:form (r/read (r/string-reader s)))
                (emit/with-return base-conts #(emit/return base-conts (cb %))))))
 
-;; FIXME: This won't work with cps.
 (defn iev [s]
-  (debug/inspect (go! @the-env (:form (r/read (r/string-reader s))))))
+  (emit/ret-> base-conts
+    #(go! @the-env (:form (r/read (r/string-reader s))) %) debug/inspect))
 
 (defn loadfile [envatom fname]
   (println "\nloading:" fname "\n")
-  (loop [forms (r/read-file fname)]
-    (when (seq forms)
-      (go! @envatom (first forms) base-conts)
-      (recur (rest forms))))
+  (run! #(go! @envatom % base-conts) (r/read-file fname))
   envatom)
 
 (defn reload! [fnames]
