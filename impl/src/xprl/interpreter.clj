@@ -42,9 +42,7 @@
 (deftracefn eval [env f]
   (cond
     (ast/coll? f)       (walk-coll env (map ast/immediate f) (ast/empty f))
-    (ast/pair? f)       (ret-> env
-                          #(walk % (ast/immediate (:head f)))
-                          #(apply env % (:tail f)))
+    (ast/pair? f)       (walk env (ast/application (ast/immediate (:head f)) (:tail f)))
     (ast/symbolic? f)   (resolve env f)
     (ast/incomplete? f) (return env (ast/immediate f))
     true                (return env f)))
