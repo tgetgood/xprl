@@ -1,0 +1,13 @@
+(defn eval [form]
+  (cond
+    (pair? form) (apply (walk (immediate (:head form)) ))
+    (coll?)))
+
+(defn walk [form]
+  (cond
+    (immediate? form)   (eval (walk (:form form)))
+    (application? form) (apply (walk (:head form) (:tail form)))
+    (coll? form)        (into (empty form) (map walk form)) ; `map*`?
+    (μ? form)           (update form :body (comp walk env.cut)) ; discard cable
+    (emission? form)    (emit.emit! (:env form) (walk (:msgs form)))
+    true                form))

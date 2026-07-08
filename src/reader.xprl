@@ -1,0 +1,34 @@
+;; I need to sort out how strings are organised.
+;; Characters:
+;; UTF-8 at the bottom?
+;; UTF-16 organised into trees with prefix compression?
+;;
+;; Text is a tree. Units are organised into characters, characters into (most of
+;; the time) words or syntactic units (lexical tokens) -> sentences/expressions
+;; -> paragraphs/top level forms -> namespaces/documents -> packages/whatever.
+;;
+;; This isn't meant to convey any connection between text and code, just that
+;; both are heirarchical and both can benefit from the right choice of
+;; datastructure.
+;;
+;; So what does a rope look like? Something like crockford's kim, maybe.
+;;
+;; What if we start with a string as a sequence of sequences of bytes, each
+;; subsequnce representing a code unit. If a number of units share a prefix,
+;; they can be grouped into a subsequence of shorter units with the shared
+;; prefix implied.
+;;
+;; Then ascii and basic mlp text will amortise to one and two bytes per
+;; character respectively. But at the cost of indirection overhead.
+
+;; How often will we indirect? Well, code in xprl that's constantly using μ and
+;; other latex style symbols might be a problem. But we might choose never to
+;; indirect if that's the case. Or we may choose to do a dynamic reencoding
+;; huffman style.
+;;
+;; Most documents use a small subset of the full space of possible characters.
+;; But we can't assume that those subsets overlap in any useful way with the
+;; preassigned subspaces which are more about language purity.
+;;
+;; So what the hell does this look like more concretely? I don't know. I have a
+;; lot of reading to do.

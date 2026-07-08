@@ -1,4 +1,4 @@
-(defn open-file [fname]
+(defn file.open [fname]
   ;; TODO: check  file exists and whatnot
   (let [chars (pipe)]
     (emit :system.file.open {:filename fname :out chars} :return chars)))
@@ -80,6 +80,17 @@
 
 (defn start-repl! []
   ;; FIXME: where do we bind the cable?
+  ;; Do we need to?
+  ;; We need to redirect :return for each form we interpret? What does it mean
+  ;; to return from an interpreter? In every language I can think of, it just
+  ;; means print out the thing returned. So we could just as well reroute
+  ;; :return before starting a repl.
+  ;;
+  ;; On that note, what's the right thing to do with return values when reading
+  ;; a file? Traditionally you print them as they come because each expression
+  ;; is a somewhat independent execution. But might it be better to gather all
+  ;; of the read/evalled pairs and return it (ordered map? how important is the
+  ;; order?).
   (->> system.stdin
        open
        (map reader.read)
