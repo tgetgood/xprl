@@ -3,21 +3,19 @@
     (immediate? form)
     (let [form (walk (:form form))]
       (cond
-        (pair? form) (walk (application (immediate (:head form)) (:tail form)))
-        (coll? form) (walk (map immediate form))
-        (symbolic? form)
-        (cond
-          (env.bound? form) (walk (env.binding form))
-          (ref? form)       (ns.binding form)
-          true              (immediate form))
-        true         form))
+        (pair? form)     (walk (application (immediate (:head form)) (:tail form)))
+        (coll? form)     (walk (map immediate form))
+        (symbolic? form) (cond
+                           (env.bound? form) (walk (env.binding form))
+                           (ref? form)       (ns.binding form)
+                           true              (immediate form))
+        true             form))
     (application? form)
     (let [head (walk (:head form))]
       (cond
         (μ? head)        (walk (env.invoke head (walk (:tail form))))
         (external? head) (call head (:tail form))
         true             (emit :error (str head " is not callable."))))
-    (apply (walk (:head form)) (:tail form))
     (coll? form)     (into (empty form) (map walk form)) ; `map*`?
     (μ? form)        (update form :body (comp walk env.cut)) ; discard cable
     (emission? form) (emit.emit! (:env form) (walk (:msgs form)))
