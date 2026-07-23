@@ -1684,21 +1684,41 @@ It's a big project. Be patient. Even I'm not holding my breath.
    Emacs is terrible. How is it that there's nothing better? VS code isn't
    better, it's just cooler. Aside from looking better, it's mostly inferior,
    but a few bits are pretty decent. LSP is not a good substitue for
-   slime/cider/rope, or any other deeply interactive editing experience.
+   slime/cider/rope, or any other deeply interactive editing experience. It's
+   just C# tooling abstracted to work to some extent with all languages.
+
+   I want a bona fide residential programming environment that merges the
+   editor, the program, and the language itself into a contiguous whole.
+
+   Of course we have to solve the smalltalk vm problem, by which I mean the blob
+   of arcane binary which is inscrutable execpt to itself, making version
+   control very difficult. Git just doesn't cut it. None of the current methods
+   really do.
+
+   What do you do if you are trying to modify self-insert-command and screw up?
+   In emacs you can just kill the server and go back to the state in the config.
+   What can you do if that config itself is part of the system that has been
+   bricked? Probably nothing.
+
+   I conjecture that tracking providence (context) all the way back from your
+   current state to the version of the language you started with (plus an empty
+   program), we can have a form of version control, or at the very least an
+   undo-tree. I expect it will be a lot more complicated than that sentence lets
+   on.
 ** Orchestration without Containerisation
    Why can't you write your own k8s?
 
    We need containers to ensure applications run correctly and safely because
    we're dealing with a leaning tower of shit from which we recoil and want to
    isolate ourselves. If we can get cleanly down to bedrock, why can't the
-   services running in a cluster be as light as unix processes?
+   services running in a cluster be as light or lighter than unix processes?
 
    Of course we can't do anything clean if we're depending on other people's
    code. And we need to be able to run third party code in a contained fashion.
    So maybe what I really mean is containers that can be compiled away to
    nothing under the right circumstances.
 ** Browser
-   The modern web browser is a monumental ball of crap that works shockingly
+   The modern web browser is a monumental ball of mud that works shockingly
    well, considering. What's actually important? What can we forget about?
 ** OS
    What's the difference between an OS and an orchestration system? Is one a
@@ -1706,7 +1726,7 @@ It's a big project. Be patient. Even I'm not holding my breath.
 
    What if the OS spans multiple devices? Think of your phone and laptop and
    personal cloudlet as not just being syncronised, but as different physical
-   aspects of the same thing, running each other's programs as appropriate.
+   windows into the same thing, running each other's programs as appropriate.
 
    Multi user computing is essentially dead. I'm sure somebody still does it,
    but there are far more computers than people in the world now and that isn't
