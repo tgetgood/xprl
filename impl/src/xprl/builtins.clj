@@ -1,6 +1,7 @@
 (ns xprl.builtins
   (:require
    [xprl.ast :as ast]
+   [xprl.continuation :as cont]
    [xprl.debug :as debug]
    [xprl.emission :as emit]
    [xprl.env :as env]
@@ -11,14 +12,14 @@
 (defn build-extern [testfn returnfn errorfn]
   (fn [env self args]
     (try
-      (emit/ret-> env
-        #(if (testfn env args) (emit/return % args) (i/walk % args))
+      (cont/ret-> env
+        #(if (testfn env args) (cont/return % args) (i/walk % args))
         (fn [args]
           (cond
             (testfn env args)      (let [v (returnfn env args)]
                                      (when-not (nil? v)
-                                       (emit/return env v)))
-            (ast/incomplete? args) (emit/return env (ast/application self args))
+                                       (cont/return env v)))
+            (ast/incomplete? args) (cont/return env (ast/application self args))
             true                   (errorfn self args))))
       (catch Throwable e
         (debug/trace!
@@ -110,17 +111,21 @@
   :ensure (and (vector? x) (int? i))
   :return (nth x (dec i)))
 
-(defextern first* [_ [x]]
-  :ensure (ast/coll? x)
+(defextern first* [env [x]]
+  :ensure (or (emit/stream? x) (ast/coll? x))
   ;; the empty list has no first element, so there's nothing to return.
-  :return (first x))
+  :return (if (emit/stream? x)
+            (emit/try-read! env x)
+            (first x)))
 
 (defextern rest* [_ [x]]
-  :ensure (ast/coll? x)
+  :ensure (or (emit/stream? x) (ast/coll? x))
   ;; But the ~rest~ of the empty list, i.e. everything but the first element of
   ;; the empty list is still the empty list because there's nothing to remove.
   ;; So I think this is correct as is.
-  :return (vec (rest x)))
+  :return (if (emit/stream? x)
+            (emit/next-stream x)
+            (vec (rest x))))
 
 (defextern count* [_ [x]]
   :ensure (ast/coll? x)
@@ -137,16 +142,16 @@
             ;; HACK: I don't like languages that make the programmer solve a
             ;; problem the implementor can't, but I am stuck...
             (when (ast/ref? param)
-              (emit/error! env (str "μ parameter " param " clobbers ns binding!! "
+              (cont/error! env (str "μ parameter " param " clobbers ns binding!! "
                                     "This will cause obscure and horrid behaviour.")))
             (let [id    (gensym "μ-param-")
                   recid (gensym "μ-recur-")
                   param (ast/symbol param)
                   pcap  (ast/capture param id)
                   caps  (merge {param pcap} (when name {name (ast/capture name recid)}))]
-              (emit/ret-> (emit/cut env pcap)
+              (cont/ret-> (emit/cut env pcap)
                 #(i/walk % (env/walk-capture caps body))
-                #(emit/return env (ast/μ id recid name param %))))))
+                #(cont/return env (ast/μ id recid name param %))))))
 
 (defextern emit [env kvs]
   :ensure (and (even? (count kvs))
@@ -155,7 +160,7 @@
 
 (defextern net [env forms]
   :ensure (ast/list? forms)
-  :return (emit/ret-> env #(i/walk % forms) #(emit/return env (ast/net env %))))
+  :return (cont/ret-> env #(i/walk % forms) #(cont/return env (ast/net env %))))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]

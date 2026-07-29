@@ -1,8 +1,9 @@
 (ns xprl.interpreter
   (:refer-clojure :exclude [resolve eval apply])
   (:require [xprl.ast :as ast]
+            [xprl.continuation :refer [return ret->]]
             [xprl.debug :refer [deftracefn]]
-            [xprl.emission :as emit :refer [return ret->]]
+            [xprl.emission :as emit]
             [xprl.env :as env]))
 
 (defn error [& strs]

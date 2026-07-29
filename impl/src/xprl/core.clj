@@ -3,6 +3,7 @@
   (:require
    [xprl.ast :as ast]
    [xprl.builtins :as builtins]
+   [xprl.continuation :as cont]
    [xprl.debug :as debug]
    [xprl.emission :as emit]
    [xprl.env :as env]
@@ -65,10 +66,10 @@
 (defn ev
   ([s] (go! @the-env (:form (r/read (r/string-reader s)))))
   ([s cb] (go! @the-env (:form (r/read (r/string-reader s)))
-               (emit/with-return base-conts #(emit/return base-conts (cb %))))))
+               (cont/with-return base-conts #(cont/return base-conts (cb %))))))
 
 (defn iev [s]
-  (emit/ret-> base-conts
+  (cont/ret-> base-conts
     #(go! @the-env (:form (r/read (r/string-reader s))) %) debug/inspect))
 
 (defn loadfile [envatom fname]
@@ -95,7 +96,7 @@
   (binding [debug/*execution-trace* false]
     (println "\nStarting tests:\n")
     (run! (fn [[test expect]]
-            (emit/ret-> base-conts
+            (cont/ret-> base-conts
               (fn [ccs]
                 (println "Evaluating: " test)
                 (go! @the-env test ccs))

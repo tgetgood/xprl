@@ -1,30 +1,36 @@
 (ns xprl.emission
   (:refer-clojure :exclude [bound?])
-  (:require [xprl.ast :as ast]))
+  (:require [xprl.ast :as ast]
+            [xprl.continuation :as cont])
+    (:import [java.util WeakHashMap]))
 
-;;;;; Dealing with return continuations
+;;;;; Wires
 
-;; lots of special cases...
+(defrecord Wire [id readers state])
 
-(def ret (ast/xkey :return))
+(defn wire? [x]
+  (instance? Wire x))
 
-(defn return {:style/indent 1} [env x]
-  (let [retfn (get env ret)]
-    (assert (fn? retfn) (str "Cannot return " x ". No destination."))
-    ;; REVIEW: I skip the executor for local returns because it's simple and
-    ;; I'm afraid of everything grinding to a halt if I don't. This could be
-    ;; premature optimisation and I should look here first if there are weird
-    ;; bugs.
-    (retfn x)))
+(defn new-wire []
+  (->Wire (gensym "wire-") (WeakHashMap.) (atom {:listeners {}
+                                                 :stream    []
+                                                 :offset    0})))
+(defrecord ReadRef [wire offset])
 
-(defn with-return [env retfn]
-  (assoc env ret retfn))
+(defn read-ref [wire offset]
+  (let [r (->ReadRef wire offset)]
+    (.put (:readers wire) r offset)
+    r))
 
-(defn ret-> {:style/indent [1]} [env inner outer]
-  (inner (with-return env outer)))
+(defn stream? [x]
+  (instance? ReadRef x))
 
-(defn error! [env msg]
-  ((get env (ast/xkey :error)) msg))
+(defn wire [& init]
+  (let [state (new-wire)]
+    (when (seq init)
+      (swap! (:state state) assoc :stream (vec init)))
+    ;; REVIEW: We're just going to say the record itself is a write ref for now.
+    [(read-ref state 0) state]))
 
 ;;;;; Splicing
 
@@ -41,10 +47,58 @@
   (::cut? cable))
 
 (defn clear [cable]
-  (dissoc cable ::cut? ::previous ::id ret))
+  (dissoc cable ::cut? ::previous ::id cont/ret))
 
 (defn captured? [cable]
   (::captured? cable))
+
+;;;;; Wire ops
+
+;; FIXME: I'm far from convinced these are threadsafe. delivery should be
+;; possible from multiple executors and reads should be as if it were immutable.
+;; But of course it isn't under the hood and that complicates things so much...
+
+(defn next-stream [rr]
+  (read-ref (:wire rr) (inc (:offset rr))))
+
+(defn prune! [wire]
+  (let [state     @(:state wire)
+        minoffset (first (sort (.values (:readers wire))))]
+    (when (< (:offset state) minoffset)
+      (let [newstate (-> state
+                         (assoc :offset minoffset)
+                         (update :stream #(into [] (drop (- minoffset (:offset state)) %))))]
+        (when-not (compare-and-set! (:state wire) state newstate)
+          ;; spin!
+          (recur wire))))))
+
+(defn try-read! [env rr]
+  (let [wire   @(:state (:wire rr))
+        offset (- (:offset rr) (:offset wire))]
+    (assert (not (neg? offset)) "Trying to read freed stream segment!")
+    (if (< offset (count (:stream wire)))
+      ;; if we have a value, return it
+      (cont/return env (nth (:stream wire) offset))
+      ;; otherwise park and wait
+      (let [w' (update wire :listeners update (:offset rr) (fnil conj []) env)]
+        (when-not (compare-and-set! (:state (:wire rr)) wire w')
+          ;; spin!
+          ;; REVIEW: I need these spinning cas ops for correctness, which
+          ;; probably means atoms are the wrong primitive.
+          (recur env rr))))))
+
+(defn drain-listeners! [wire offset value]
+  (let [ls (get (:listeners @(:state wire)) offset)]
+    (when (seq ls)
+      (swap! (:state wire) update :listeners dissoc offset)
+      {:destinations ls :value value})))
+
+(defn deliver! [wire v]
+  (let [state @(:state wire)
+        next  (update state :stream conj v)]
+    (if (compare-and-set! (:state wire) state next)
+      (drain-listeners! wire (+ (:offset next) (count (:stream next))) v)
+      (recur wire v))))
 
 ;;;;; Sending messages
 
@@ -54,7 +108,12 @@
 
 (defn send-1! [env [k v]]
   (if (contains? env k)
-    ((get env k) v)
+    (let [ch (get env k)]
+      (cond
+        (wire? ch) (deliver! ch v)
+        (fn? ch)   (ch v)
+        true       (throw (RuntimeException.
+                           (str "Bad channel type: " (type ch) " " ch)))))
     (do
       ;; (println env)
       ;; TODO: :unbound channel
@@ -72,6 +131,6 @@
       ;; the cable in any future context of evaluation.
       ;; But the cable always gets to decide whether the context is cut,
       ;; captured, etc., so sandboxing should still work as expected.
-      (cut? env)      (return env (ast/emission (clear env) msgs))
+      (cut? env)      (cont/return env (ast/emission (clear env) msgs))
       (captured? env) (send-captured! env msgs)
       true            (send! env msgs))))
