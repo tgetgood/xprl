@@ -162,6 +162,10 @@
   :ensure (ast/list? forms)
   :return (cont/ret-> env #(i/walk % forms) #(cont/return env (ast/net env %))))
 
+(defextern wire [env inits]
+  :ensure (ast/list? inits)
+  :return (apply emit/wire inits))
+
 (defn macros [m]
   (reduce (fn [acc [k f]]
             (assoc acc (ast/symbol k) (ast/extern k f))) {} m))
@@ -182,7 +186,7 @@
     "empty?*"       empty?*
     "emit"          emit
     "net"           net
-    "wire"          noop
+    "wire"          wire
     "with-channels" noop}))
 
 ;;;;; The Ur context from which all programs derive.
