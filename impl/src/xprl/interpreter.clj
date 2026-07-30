@@ -4,7 +4,8 @@
             [xprl.continuation :refer [return ret->]]
             [xprl.debug :refer [deftracefn]]
             [xprl.emission :as emit]
-            [xprl.env :as env]))
+            [xprl.env :as env]
+))
 
 (defn error [& strs]
   (throw (RuntimeException. ^String (clojure.core/apply str strs))))
@@ -57,6 +58,8 @@
     (ast/μ? f)           (ret-> (emit/cut env ::test)
                            #(walk % (:body f))
                            #(return env (assoc f :body %)))
-    (ast/emission? f)    (ret-> env #(walk % (:msgs f)) #(emit/do-emission! env f %))
+    (ast/emission? f)    (ret-> env
+                           #(walk % (:msgs f))
+                           #(emit/do-emission! (merge env (:env f)) %))
     true                 (return env f))
   nil) ; make sure we can't accidentally rely on a return value

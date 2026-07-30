@@ -5,6 +5,7 @@
    [xprl.debug :as debug]
    [xprl.emission :as emit]
    [xprl.env :as env]
+   [xprl.executor :as exec]
    [xprl.interpreter :as i]
    [xprl.ns :as ns]
    [xprl.system :as sys]))
@@ -160,11 +161,18 @@
 
 (defextern net [env forms]
   :ensure (ast/list? forms)
-  :return (cont/ret-> env #(i/walk % forms) #(cont/return env (ast/net env %))))
+  :return (cont/ret-> env #(i/walk % forms)
+                      (fn [forms]
+                        (run! (fn [f] (exec/enqueue! [env (ast/immediate f)]))
+                              (reverse forms)))))
 
 (defextern wire [env inits]
   :ensure (ast/list? inits)
   :return (apply emit/wire inits))
+
+(defextern with-channels [env [chmap body]]
+  :ensure (ast/map? chmap)
+  :return (cont/ret-> env #(i/walk % chmap) #(i/walk (merge env %) body)))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]
@@ -187,7 +195,7 @@
     "emit"          emit
     "net"           net
     "wire"          wire
-    "with-channels" noop}))
+    "with-channels" with-channels}))
 
 ;;;;; The Ur context from which all programs derive.
 ;;

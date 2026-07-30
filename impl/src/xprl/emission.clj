@@ -1,7 +1,8 @@
 (ns xprl.emission
   (:refer-clojure :exclude [bound?])
   (:require [xprl.ast :as ast]
-            [xprl.continuation :as cont])
+            [xprl.continuation :as cont]
+            [xprl.executor :as exec])
     (:import [java.util WeakHashMap]))
 
 ;;;;; Wires
@@ -88,10 +89,13 @@
           (recur env rr))))))
 
 (defn drain-listeners! [wire offset value]
-  (let [ls (get (:listeners @(:state wire)) offset)]
-    (when (seq ls)
+  (let [envs (get (:listeners @(:state wire)) offset)]
+    (when (seq envs)
       (swap! (:state wire) update :listeners dissoc offset)
-      {:destinations ls :value value})))
+      ;; N.B.: Don't eval these messages, just walk them, which will
+      ;; automatically send them on to the appropriate return continuation from
+      ;; the listener.
+      (run! #(exec/enqueue! [% value]) envs))))
 
 (defn deliver! [wire v]
   (let [state @(:state wire)
@@ -123,14 +127,13 @@
 (defn send! [env msgs]
   (run! (partial send-1! env) msgs))
 
-(defn do-emission! [env prev msgs]
-  (let [env (merge env (:env prev))] ; local env overrides
-    ;; (println env msgs)
-    (cond
-      ;; Capture any local continuations with the emission; they will override
-      ;; the cable in any future context of evaluation.
-      ;; But the cable always gets to decide whether the context is cut,
-      ;; captured, etc., so sandboxing should still work as expected.
-      (cut? env)      (cont/return env (ast/emission (clear env) msgs))
-      (captured? env) (send-captured! env msgs)
-      true            (send! env msgs))))
+(defn do-emission! [env msgs]
+  (println env)
+  (cond
+    ;; Capture any local continuations with the emission; they will override
+    ;; the cable in any future context of evaluation.
+    ;; But the cable always gets to decide whether the context is cut,
+    ;; captured, etc., so sandboxing should still work as expected.
+    (cut? env)      (cont/return env (ast/emission (clear env) msgs))
+    (captured? env) (send-captured! env msgs)
+    true            (send! env msgs)))
