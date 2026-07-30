@@ -124,7 +124,7 @@
   (run! (partial send-1! env) msgs))
 
 (defn do-emission! [env prev msgs]
-  (let [env (merge (:env prev) env)]
+  (let [env (merge env (:env prev))] ; local env overrides
     ;; (println env msgs)
     (cond
       ;; Capture any local continuations with the emission; they will override
