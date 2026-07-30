@@ -1,11 +1,12 @@
 (ns xprl.executor
   (:require [xprl.ast :as ast]
-            [xprl.env :as env]
-            [xprl.continuation :as cont]
-            [xprl.interpreter :as i]))
+            [xprl.continuation :as cont]))
 
-(defn enqueue! [exec task]
-  (swap! exec update :work conj task))
+(def ^:dynamic *the-executor* nil)
+
+(defn enqueue!
+  ([task] (enqueue! *the-executor* task))
+  ([exec task] (swap! exec update :work conj task)))
 
 (defn create! []
   (atom {:work  []
@@ -24,16 +25,18 @@
         (assert (contains? env cont/ret) (str "Cannot return " form ". No destination."))
         ((get env cont/ret) form)))))
 
-(defn start! [exec]
+(defn start! [exec walk]
   (when-not (:running? @exec)
-    (let [ems (:work @exec)]
-      (if (seq ems)
-        ;; TODO: dosync for work stealing.
-        (let [[env form] (peek ems)]
-          ;; Remove task from work stack *before* running it!
-          (swap! exec update :work pop)
-          ;; This should block the thread until it goes to sleep
-          (cont/ret-> env #(i/walk % form) (partial process-walked exec env))
-          ;; At which point we find something else to do
-          (recur exec))
-        (swap! exec assoc :running? false)))))
+    (binding [*the-executor* exec]
+      (loop []
+        (let [ems (:work @exec)]
+          (if (seq ems)
+            ;; TODO: dosync for work stealing.
+            (let [[env form] (peek ems)]
+              ;; Remove task from work stack *before* running it!
+              (swap! exec update :work pop)
+              ;; This should block the thread until it goes to sleep
+              (cont/ret-> env #(walk % form) (partial process-walked exec env))
+              ;; At which point we find something else to do
+              (recur))
+            (swap! exec assoc :running? false)))))))
