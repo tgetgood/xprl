@@ -29,7 +29,8 @@
                                 (walk env (env/invoke bindings (:body head)))))
     (ast/external? head)   (ast/call env head tail)
     (ast/incomplete? head) (return env (ast/application head tail))
-    true                   (error head " is not applicable!")))
+    true                   (error head " is not applicable!"))
+  nil)
 
 (deftracefn resolve [env f]
   (if (ast/bound? f)
@@ -39,7 +40,8 @@
         (ast/ref? f)      (:binding f)
         (ast/captured? f) (ast/immediate f)
         (ast/symbol? f)   (ast/immediate f)
-        true              (error "unreachable!!")))))
+        true              (error "unreachable!!"))))
+  nil)
 
 (deftracefn eval [env f]
   (cond
@@ -47,7 +49,8 @@
     (ast/pair? f)       (walk env (ast/application (ast/immediate (:head f)) (:tail f)))
     (ast/symbolic? f)   (resolve env f)
     (ast/incomplete? f) (return env (ast/immediate f))
-    true                (return env f)))
+    true                (return env f))
+  nil)
 
 (deftracefn walk [env f]
   (assert (not (empty? env)))
