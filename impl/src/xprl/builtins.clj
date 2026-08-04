@@ -161,10 +161,8 @@
 
 (defextern net [env forms]
   :ensure (ast/list? forms)
-  :return (cont/ret-> env #(i/walk % forms)
-                      (fn [forms]
-                        (run! (fn [f] (exec/enqueue! [env (ast/immediate f)]))
-                              (reverse forms)))))
+  :return (do (run! (fn [f] (exec/enqueue! [env (ast/immediate f)])) (reverse forms))
+              ::netified))
 
 (defextern wire [env inits]
   :ensure (ast/list? inits)
