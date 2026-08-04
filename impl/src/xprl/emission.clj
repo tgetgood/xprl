@@ -82,7 +82,8 @@
       (cont/return env (nth (:stream wire) offset))
       ;; otherwise park and wait
       (let [w' (update wire :listeners update (:offset rr) (fnil conj []) env)]
-        (when-not (compare-and-set! (:state (:wire rr)) wire w')
+        (if (compare-and-set! (:state (:wire rr)) wire w')
+          ::parked
           ;; spin!
           ;; REVIEW: I need these spinning cas ops for correctness, which
           ;; probably means atoms are the wrong primitive.
@@ -128,7 +129,6 @@
   (run! (partial send-1! env) msgs))
 
 (defn do-emission! [env msgs]
-  (println env)
   (cond
     ;; Capture any local continuations with the emission; they will override
     ;; the cable in any future context of evaluation.
