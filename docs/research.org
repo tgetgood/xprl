@@ -225,6 +225,8 @@
    - [ ] Theory of Parsing, Translation, and Compilation — Aho & Ullman
      This is a pretty old compiler book. I know so little I should start from
      the bottom I suppose.
+** hash trees
+   https://nesbitt.io/2026/07/07/content-addressing-in-package-managers.html
 ** Rabbit holes
   - [X] What Every Programmer Should Know About Memory
     https://www.akkadia.org/drepper/cpumemory.pdf
@@ -239,7 +241,7 @@
 
     This paper only reinforces my notion that with avx2/512 we should try and use
     the multiple kB of register space and avoid putting stuff in memory at all if
-    we don't need to. So much to the things you would normally push are just
+    we don't need to. So many of the things you would normally push are just
     arguments for future instructions. The real question is how well can I
     juggle?
 
