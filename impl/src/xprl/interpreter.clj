@@ -1,11 +1,11 @@
 (ns xprl.interpreter
   (:refer-clojure :exclude [resolve eval apply])
   (:require [xprl.ast :as ast]
-            [xprl.continuation :refer [return ret->]]
+            [xprl.continuation :as cont :refer [return ret-> with-return]]
             [xprl.debug :refer [deftracefn]]
             [xprl.emission :as emit]
             [xprl.env :as env]
-))
+            [xprl.executor :as exec]))
 
 (defn error [& strs]
   (throw (RuntimeException. ^String (clojure.core/apply str strs))))
@@ -13,13 +13,11 @@
 (declare walk)
 
 (defn walk-coll [env xs acc]
-  (let [acc (transient acc)]
-    (when (seq xs)
-      (loop [[x & xs] xs]
-        (ret-> env #(walk % x) #(conj! acc %))
-        (when (seq xs)
-          (recur xs))))
-    (return env (persistent! acc))))
+  (if (empty? xs)
+    (return env acc)
+    (let [acc (transient acc)]
+      (exec/on-complete! (fn [] (walk-coll env (rest xs) (persistent! acc))))
+      (cont/ret-> env #(walk % (first xs)) #(do (conj! acc %) nil)))))
 
 (deftracefn apply [env head tail]
   (cond
