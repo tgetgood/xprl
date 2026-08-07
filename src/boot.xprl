@@ -128,7 +128,9 @@
 
 ;;; This would make life a lot nicer...
 
-(defμ* defμ x
+;; somehow the inner `def` is emitting first, which makes this very wrong...
+
+#_(defμ* defμ x
   (def ~(nth* ~x 1)
      (μ args
         ~(let-map ~(destructure ~(nth* ~x 2) ~args)
