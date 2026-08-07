@@ -96,7 +96,7 @@
       ;; N.B.: Don't eval these messages, just walk them, which will
       ;; automatically send them on to the appropriate return continuation from
       ;; the listener.
-      (run! #(exec/enqueue! [% value]) envs))))
+      (run! #(exec/enqueue! (fn [] (cont/return % value))) envs))))
 
 (defn deliver! [wire v]
   (let [state @(:state wire)

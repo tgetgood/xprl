@@ -1,4 +1,5 @@
 (ns xprl.continuation
+  (:refer-clojure :exclude [merge])
   (:require [xprl.ast :as ast]))
 
 (def ret (ast/xkey :return))
@@ -16,6 +17,9 @@
 
 (defn with-return [env retfn]
   (assoc env ret retfn))
+
+(defn merge [env extras]
+  (clojure.core/merge env extras))
 
 (defn ret-> {:style/indent [1]} [env inner outer]
   (inner (with-return env outer)))

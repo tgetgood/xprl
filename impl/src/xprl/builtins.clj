@@ -161,7 +161,9 @@
 
 (defextern net [env forms]
   :ensure (ast/list? forms)
-  :return (do (run! (fn [f] (exec/enqueue! [env (ast/immediate f)])) (reverse forms))
+  :return (do
+            (run! (fn [f] (exec/enqueue! (fn [] (i/walk env (ast/immediate f)))))
+                  (reverse forms))
               ::netified))
 
 (defextern wire [env inits]
@@ -170,7 +172,7 @@
 
 (defextern with-channels [env [chmap body]]
   :ensure (ast/map? chmap)
-  :return (cont/ret-> env #(i/walk % chmap) #(i/walk (merge env %) body)))
+  :return (cont/ret-> env #(i/walk % chmap) #(i/walk (cont/merge env %) body)))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]
