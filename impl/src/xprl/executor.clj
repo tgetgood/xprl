@@ -3,34 +3,43 @@
   (:require [xprl.ast :as ast]
             [xprl.continuation :as cont]))
 
-(def ^:dynamic *the-executor* nil)
+(defn create! []
+  (atom {:work  []
+         :index {}}))
+
+(defonce ^:dynamic *the-executor* nil)
 
 (defn enqueue!
   ([task]
    (enqueue! *the-executor* task))
   ([exec task]
-   (swap! exec update :work conj task)))
+   (swap! exec update :work conj task)
+   nil))
 
-(defn create! []
-  (atom {:work  []
-         :index {}}))
+;; The executor "queue" is actually a stack, so this task acts as a barrier and
+;; will be executed exactly once when all work deriving from the current task is
+;; finished, but before moving on the the next task.
+;;
+;; At least that's the theory.
+(defn on-complete! [cb]
+  (enqueue! *the-executor* cb))
 
-(defn seed! [exec cable form]
-  (enqueue! exec [cable form]))
-
-(defn start! [exec walk]
-  (when-not (:running? @exec)
-    (binding [*the-executor* exec]
-      (loop []
+(defn run [exec]
+  (binding [*the-executor* exec]
+    (loop []
+      (try
         (let [ems (:work @exec)]
-          ;; (println ems)
           (if (seq ems)
             ;; TODO: dosync for work stealing.
-            (let [[env form] (peek ems)]
+            (let [task (peek ems)]
               ;; Remove task from work stack *before* running it!
               (swap! exec update :work pop)
               ;; This should block the thread until it goes to sleep
-              (walk env form)
-              ;; At which point we find something else to do
-              (recur))
-            (swap! exec assoc :running? false)))))))
+              (assert (fn? task) (str "Queued tasks must be functions of no args, not: " task))
+              (task))
+            (Thread/sleep 500)))
+        (catch Throwable e
+          (binding [*out* *err*]
+            (println e))))
+      ;; At which point we find something else to do
+      (recur))))

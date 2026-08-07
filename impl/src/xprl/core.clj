@@ -15,6 +15,8 @@
 
 (def the-env (atom builtins/base-env))
 
+(sys/start!)
+
 ;;;;; UI
 
 (def srcpath "../src/")
@@ -46,7 +48,7 @@
 
 (def base-conts
   (cable {:env     (env-updater the-env)
-          :return  (fn [v] (when (not (nil? v)) (println "=>> " v)))
+          :return  (fn [v] (when (not (nil? v)) (println "\n=>> " v)))
           :unbound #(println "WARNING message on unbound channel:" %)
           :log     #(println "LOG:" %)
           :test    #(reset! ta %)
@@ -56,7 +58,7 @@
   ([ns f] (go! ns f base-conts))
   ([ns f conts]
    (try
-     (sys/start! conts (ast/immediate (ns/bind f ns)))
+     (sys/seed! [(fn [] (i/walk conts (ast/immediate (ns/bind f ns))))])
      (catch Throwable e
        (binding [*out* *err*]
          (println e)
@@ -72,15 +74,26 @@
   (cont/ret-> base-conts
     #(go! @the-env (:form (r/read (r/string-reader s))) %) debug/inspect))
 
-(defn loadfile [envatom fname]
-  (println "\nloading:" fname "\n")
-  (run! #(go! @envatom % base-conts) (r/read-file fname))
-  envatom)
+(defn load-seq [envatom forms cb]
+  (if (seq forms)
+    (go! @envatom (first forms) (cont/with-return base-conts
+                                  (fn [res]
+                                    (cont/return base-conts res)
+                                    (load-seq envatom (rest forms) cb))))
+    (cb)))
 
-(defn reload! [fnames]
+(defn loadfile [envatom fname cb]
+  (println "\nloading:" fname "\n")
+  (load-seq envatom (r/read-file fname) cb))
+
+(defn reload-1 [fnames cb]
+  (if (seq fnames)
+    (loadfile the-env (first fnames) (fn [] (reload-1 (rest fnames) cb)))
+    (cb)))
+
+(defn reload! [fnames & [after]]
   (reset! the-env builtins/base-env)
-  (reduce loadfile the-env fnames)
-  :eof)
+  (reload-1 fnames (or after (fn [] (println :eof)))))
 
 (defmacro gs [n]
   `(ns/lookup @the-env (ast/symbol ~(clojure.core/name n))))
@@ -91,24 +104,29 @@
 (defn check [s]
   (debug/inspect (:form (r/read (r/string-reader s)))))
 
-(defn test []
-  (reload! test-setup)
-  (binding [debug/*execution-trace* false]
-    (println "\nStarting tests:\n")
-    (run! (fn [[test expect]]
-            (cont/ret-> base-conts
-              (fn [ccs]
-                (println "Evaluating: " test)
-                (go! @the-env test ccs))
-              (fn [result]
-                (println "---")
-                (when (not= result expect)
-                  (println "\033[41m!!!!!!!!!!!!!!!FAILURE!!!!!!!!!!!!\033[0m\n---"))
+(defn run-tests! [tests]
+  (when (seq tests)
+    (let [[test expect] (first tests)]
+      (cont/ret-> base-conts
+        (fn [ccs]
+          (println "Evaluating: " test)
+          (go! @the-env test ccs))
+        (fn [result]
+          (println "---")
+          (when (not= result expect)
+            (println "\033[41m!!!!!!!!!!!!!!!FAILURE!!!!!!!!!!!!\033[0m\n---"))
 
-                (println "result:   " result)
-                (println "expected: " expect)
-                (println))))
-          (partition 2 (r/read-file testxprl)))))
+          (println "result:   " result)
+          (println "expected: " expect)
+          (println)
+          (run-tests! (rest tests)))))))
+
+(defn test []
+  (reload! test-setup
+           (fn []
+             (binding [debug/*execution-trace* false]
+               (println "\nStarting tests:\n")
+               (run-tests! (partition 2 (r/read-file testxprl)))))))
 
 (def p debug/provenance)
 

@@ -8,17 +8,22 @@
 (defn init! []
   (compare-and-set! the-system nil {:executors [(exec/create!)]}))
 
-(defn seed! [env form]
-  (exec/seed! (first (:executors @the-system)) env form))
+;; The clj repl interacts with the executor threads by injecting work into the
+;; queue of one of theme. Whick? it doesn't matter, in principle. Just use the
+;; first for now.
+(defn seed! [tasks]
+  ;; Atomically add a set of tasks to make sure none start until all have been
+  ;; enqueued.
+  ;; REVIEW: turns out I don't actually have a use for this, so should I keep
+  ;; it? Nice to know the option is there, and it isn't really any more
+  ;; overengineered that the old version.
+  (swap! (first (:executors @the-system)) update :work #(into % tasks))
+  nil)
 
 (defn start-executors! []
-  ;; TODO: Start these in threads!
+  ;; Each executor owns a thread.
+  (run! #(.start (Thread. (fn run [] (exec/run %)))) (:executors @the-system)))
 
-  ;; We pass the interpreter to the executor to break a dependency cycle.
-  ;; This seems a little off...
-  (run! #(exec/start! % i/walk) (:executors @the-system)))
-
-(defn start! [cable form]
+(defn start! []
   (init!)
-  (seed! cable form)
   (start-executors!))
