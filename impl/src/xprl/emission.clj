@@ -7,21 +7,19 @@
 
 ;;;;; Wires
 
-(defrecord Wire [id readers state])
+(defrecord Wire [id state])
 
 (defn wire? [x]
   (instance? Wire x))
 
 (defn new-wire []
-  (->Wire (gensym "wire-") (WeakHashMap.) (atom {:listeners {}
-                                                 :stream    []
-                                                 :offset    0})))
+  (->Wire (gensym "wire-") (atom {:listeners {}
+                                  :stream    []
+                                  :offset    0})))
 (defrecord ReadRef [wire offset])
 
 (defn read-ref [wire offset]
-  (let [r (->ReadRef wire offset)]
-    (.put (:readers wire) r offset)
-    r))
+  (->ReadRef wire offset))
 
 (defn stream? [x]
   (instance? ReadRef x))
@@ -31,7 +29,7 @@
     (when (seq init)
       (swap! (:state state) assoc :stream (vec init)))
     ;; REVIEW: We're just going to say the record itself is a write ref for now.
-    [(read-ref state 0) state]))
+    state))
 
 ;;;;; Splicing
 
@@ -60,18 +58,7 @@
 ;; But of course it isn't under the hood and that complicates things so much...
 
 (defn next-stream [rr]
-  (read-ref (:wire rr) (inc (:offset rr))))
-
-(defn prune! [wire]
-  (let [state     @(:state wire)
-        minoffset (first (sort (.values (:readers wire))))]
-    (when (< (:offset state) minoffset)
-      (let [newstate (-> state
-                         (assoc :offset minoffset)
-                         (update :stream #(into [] (drop (- minoffset (:offset state)) %))))]
-        (when-not (compare-and-set! (:state wire) state newstate)
-          ;; spin!
-          (recur wire))))))
+  (update rr :offset inc))
 
 (defn try-read! [env rr]
   (let [wire   @(:state (:wire rr))
