@@ -17,7 +17,7 @@
   ;; REVIEW: turns out I don't actually have a use for this, so should I keep
   ;; it? Nice to know the option is there, and it isn't really any more
   ;; overengineered that the old version.
-  (swap! (first (:executors @the-system)) update :work #(into % tasks))
+  (exec/enqueue-all! (first (:executors @the-system)) tasks)
   nil)
 
 (defn start-executors! []

@@ -16,6 +16,10 @@
    (swap! exec update :work conj task)
    nil))
 
+(defn enqueue-all!
+  ([tasks] (enqueue-all! *the-executor* tasks))
+  ([exec tasks] (swap! exec update :work #(into % tasks))))
+
 ;; The executor "queue" is actually a stack, so this task acts as a barrier and
 ;; will be executed exactly once when all work deriving from the current task is
 ;; finished, but before moving on the the next task.
