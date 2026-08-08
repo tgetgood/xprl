@@ -80,9 +80,6 @@
   (let [envs (get (:listeners @(:state wire)) offset)]
     (when (seq envs)
       (swap! (:state wire) update :listeners dissoc offset)
-      ;; N.B.: Don't eval these messages, just walk them, which will
-      ;; automatically send them on to the appropriate return continuation from
-      ;; the listener.
       (run! #(exec/enqueue! (fn [] (cont/return % value))) envs))))
 
 (defn deliver! [wire v]
