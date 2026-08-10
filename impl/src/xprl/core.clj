@@ -65,8 +65,12 @@
          ;;(.printStackTrace e)
          )))))
 
+(def *x)
+
 (defn ev
-  ([s] (go! @the-env (:form (r/read (r/string-reader s)))))
+  ([s] (go! @the-env (:form (r/read (r/string-reader s)))
+            (cont/with-return base-conts
+              #(do (alter-var-root #'*x (constantly %)) (cont/return base-conts %)))))
   ([s cb] (go! @the-env (:form (r/read (r/string-reader s)))
                (cont/with-return base-conts #(cont/return base-conts (cb %))))))
 
