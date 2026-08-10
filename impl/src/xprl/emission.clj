@@ -7,29 +7,21 @@
 
 ;;;;; Wires
 
-(defrecord Wire [id state])
+(defrecord Wire [id offset state])
 
 (defn wire? [x]
   (instance? Wire x))
 
 (defn new-wire []
-  (->Wire (gensym "wire-") (atom {:listeners {}
-                                  :stream    []
-                                  :offset    0})))
-(defrecord ReadRef [wire offset])
-
-(defn read-ref [wire offset]
-  (->ReadRef wire offset))
-
-(defn stream? [x]
-  (instance? ReadRef x))
-
+  (->Wire (gensym "wire-") 0 (atom {:listeners {}
+                                    :stream    []
+                                    :offset    0})))
 (defn wire [& init]
-  (let [state (new-wire)]
+  (let [w (new-wire)]
     (when (seq init)
-      (swap! (:state state) assoc :stream (vec init)))
+      (swap! (:state w) assoc :stream (vec init)))
     ;; REVIEW: We're just going to say the record itself is a write ref for now.
-    state))
+    w))
 
 ;;;;; Splicing
 
@@ -57,24 +49,25 @@
 ;; possible from multiple executors and reads should be as if it were immutable.
 ;; But of course it isn't under the hood and that complicates things so much...
 
-(defn next-stream [rr]
-  (update rr :offset inc))
+(defn next-wire [w]
+  (update w :offset inc))
 
-(defn try-read! [env rr]
-  (let [wire   @(:state (:wire rr))
-        offset (- (:offset rr) (:offset wire))]
+(defn try-read! [env w]
+  (let [state  @(:state w)
+        offset (- (:offset w) (:offset state))]
+    (println state)
     (assert (not (neg? offset)) "Trying to read freed stream segment!")
-    (if (< offset (count (:stream wire)))
+    (if (< offset (count (:stream state)))
       ;; if we have a value, return it
-      (cont/return env (nth (:stream wire) offset))
+      (cont/return env (nth (:stream state) offset))
       ;; otherwise park and wait
-      (let [w' (update wire :listeners update (:offset rr) (fnil conj []) env)]
-        (if (compare-and-set! (:state (:wire rr)) wire w')
+      (let [w' (update state :listeners update (:offset w) (fnil conj []) env)]
+        (if (compare-and-set! (:state w) state w')
           ::parked
           ;; spin!
           ;; REVIEW: I need these spinning cas ops for correctness, which
           ;; probably means atoms are the wrong primitive.
-          (recur env rr))))))
+          (recur env w))))))
 
 (defn drain-listeners! [wire offset value]
   (let [envs (get (:listeners @(:state wire)) offset)]

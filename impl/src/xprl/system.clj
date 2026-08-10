@@ -11,13 +11,13 @@
 ;; The clj repl interacts with the executor threads by injecting work into the
 ;; queue of one of theme. Whick? it doesn't matter, in principle. Just use the
 ;; first for now.
-(defn seed! [tasks]
+(defn seed! [walkfn tasks]
   ;; Atomically add a set of tasks to make sure none start until all have been
   ;; enqueued.
   ;; REVIEW: turns out I don't actually have a use for this, so should I keep
   ;; it? Nice to know the option is there, and it isn't really any more
   ;; overengineered that the old version.
-  (exec/enqueue-all! (first (:executors @the-system)) tasks)
+  (exec/seed! (first (:executors @the-system)) walkfn tasks)
   nil)
 
 (defn start-executors! []

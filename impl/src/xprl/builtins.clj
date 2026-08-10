@@ -113,19 +113,19 @@
   :return (nth x (dec i)))
 
 (defextern first* [env [x]]
-  :ensure (or (emit/stream? x) (ast/coll? x))
+  :ensure (or (emit/wire? x) (ast/coll? x))
   ;; the empty list has no first element, so there's nothing to return.
-  :return (if (emit/stream? x)
+  :return (if (emit/wire? x)
             (emit/try-read! env x)
             (first x)))
 
 (defextern rest* [_ [x]]
-  :ensure (or (emit/stream? x) (ast/coll? x))
+  :ensure (or (emit/wire? x) (ast/coll? x))
   ;; But the ~rest~ of the empty list, i.e. everything but the first element of
   ;; the empty list is still the empty list because there's nothing to remove.
   ;; So I think this is correct as is.
-  :return (if (emit/stream? x)
-            (emit/next-stream x)
+  :return (if (emit/wire? x)
+            (emit/next-wire x)
             (vec (rest x))))
 
 (defextern count* [_ [x]]

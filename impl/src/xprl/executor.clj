@@ -20,6 +20,31 @@
   ([tasks] (enqueue-all! *the-executor* tasks))
   ([exec tasks] (swap! exec update :work #(into % tasks))))
 
+(defn reseed! [walk env]
+  (fn [x]
+    (cond
+      ;; We intentionally don't set the executor so that whomsoever stole this
+      ;; task gets its follow up work.
+      (ast/net? x)      (let [{:keys [env forms]} x]
+                          (enqueue-all!
+                           (mapv (fn [f] (fn [] (walk env (ast/immediate f))))
+                                 forms)))
+      (ast/emission? x) (throw (RuntimeException.
+                                "Emission escaped as data! This is an error!"))
+      true              (cont/return env x))))
+
+;; Seeding is special because these are truly "top level" even if the term is
+;; underdefined. So we can catch things like Nets and Emissions being sent up
+;; out of the "current program", which means something different.
+;;
+;; The outer scope is a different interpreter, after all.
+(defn seed! [exec walk tasks]
+  (enqueue-all!
+   exec
+   (mapv (fn [[env form]]
+           (fn [] (walk (cont/with-return env (reseed! walk env)) form)))
+         tasks)))
+
 (defn run-task [task]
   (cond
     (fn? task) (task)
