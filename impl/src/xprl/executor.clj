@@ -20,6 +20,11 @@
   ([tasks] (enqueue-all! *the-executor* tasks))
   ([exec tasks] (swap! exec update :work #(into % tasks))))
 
+(defn run-task [task]
+  (cond
+    (fn? task) (task)
+    true       (throw (RuntimeException. (str "Bad task type " (type task) ": " task)))))
+
 ;; The executor "queue" is actually a stack, so this task acts as a barrier and
 ;; will be executed exactly once when all work deriving from the current task is
 ;; finished, but before moving on the the next task.
@@ -39,8 +44,7 @@
               ;; Remove task from work stack *before* running it!
               (swap! exec update :work pop)
               ;; This should block the thread until it goes to sleep
-              (assert (fn? task) (str "Queued tasks must be functions of no args, not: " task))
-              (task))
+              (run-task task))
             (Thread/sleep 500)))
         (catch Throwable e
           (binding [*out* *err*]
