@@ -55,8 +55,8 @@
 ;;;;; simple primitive fns
 
 (defn call-primitive-fn
-  "given an external (clojure) function, returns an applicative wrapper to call
-  it from xprl."
+  "Given an external (clojure) function, returns a wrapper to call it from
+  xprl."
   [f]
   (extern [_ tail]
     :ensure (not (ast/incomplete? tail))
