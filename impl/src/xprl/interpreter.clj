@@ -62,5 +62,10 @@
     (ast/emission? f)    (ret-> env
                            #(walk % (:msgs f))
                            #(emit/do-emission! (merge env (:env f)) %))
+    (ast/net? f)         (let [w    (emit/wire)
+                               env' (with-return (:env f) w)]
+                           (exec/enqueue-all! (map #(with-meta (fn [] (walk env %))
+                                                      {:form %}) (:forms f)))
+                           (return env w))
     true                 (return env f))
   nil) ; make sure we can't accidentally rely on a return value
