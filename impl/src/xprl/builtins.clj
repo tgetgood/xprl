@@ -161,7 +161,7 @@
 
 (defextern net [env forms]
   :ensure (ast/list? forms)
-  :return (ast/net env (vec (reverse forms))))
+  :return (ast/net env (into [] (map ast/immediate (reverse forms)))))
 
 (defextern wire [env inits]
   :ensure (ast/list? inits)
