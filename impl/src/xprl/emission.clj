@@ -23,27 +23,7 @@
     ;; REVIEW: We're just going to say the record itself is a write ref for now.
     w))
 
-;;;;; Splicing
-
-(defn cut "Create a 'spliced cable' from given cable."
-  [cable id]
-  ;; TODO: What does this mean?
-  {::cut?     true
-   ;; REVIEW: I'm keeping the old cable due entirely to paranoia, aren't I?
-   ;; It's an attack surface I'm better off without.
-   ::previous cable
-   ::id       id})
-
-(defn cut? [cable]
-  (::cut? cable))
-
-(defn clear [cable]
-  (dissoc cable ::cut? ::previous ::id cont/ret))
-
-(defn captured? [cable]
-  (::captured? cable))
-
-;;;;; Wire ops
+;;; Wire ops
 
 ;; FIXME: I'm far from convinced these are threadsafe. delivery should be
 ;; possible from multiple executors and reads should be as if it were immutable.
@@ -63,7 +43,8 @@
       ;; otherwise park and wait
       (let [w' (update state :listeners update (:offset w) (fnil conj []) env)]
         (if (compare-and-set! (:state w) state w')
-          ::parked
+          nil
+          ;; ::parked
           ;; spin!
           ;; REVIEW: I need these spinning cas ops for correctness, which
           ;; probably means atoms are the wrong primitive.
@@ -76,11 +57,32 @@
       (run! #(exec/enqueue! (fn [] (cont/return % value))) envs))))
 
 (defn deliver! [wire v]
+  (println "delivering " v)
   (let [state @(:state wire)
         next  (update state :stream conj v)]
     (if (compare-and-set! (:state wire) state next)
       (drain-listeners! wire (+ (:offset next) (count (:stream next))) v)
       (recur wire v))))
+
+;;;;; Splicing
+
+(defn cut "Create a 'spliced cable' from given cable."
+  [cable id]
+  ;; TODO: What does this mean?
+  {::cut?     true
+   ;; REVIEW: I'm keeping the old cable due entirely to paranoia, aren't I?
+   ;; It's an attack surface I'm better off without.
+   ::previous cable
+   ::id       id})
+
+(defn cut? [cable]
+  (::cut? cable))
+
+(defn clear [cable]
+  (dissoc cable ::cut? ::previous ::id cont/ret))
+
+(defn captured? [cable]
+  (::captured? cable))
 
 ;;;;; Sending messages
 
