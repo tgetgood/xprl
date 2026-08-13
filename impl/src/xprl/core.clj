@@ -58,7 +58,7 @@
   ([ns f] (go! ns f base-conts))
   ([ns f conts]
    (try
-     (sys/seed! i/walk [[conts (ast/immediate (ns/bind f ns))]])
+     (sys/seed! [(fn [] (i/walk conts (ast/immediate (ns/bind f ns))))])
      (catch Throwable e
        (binding [*out* *err*]
          (println e)
