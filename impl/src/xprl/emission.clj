@@ -16,6 +16,7 @@
   (->Wire (gensym "wire-") 0 (atom {:listeners {}
                                     :stream    []
                                     :offset    0})))
+
 (defn wire [& init]
   (let [w (new-wire)]
     (when (seq init)

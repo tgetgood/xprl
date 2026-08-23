@@ -148,11 +148,14 @@
 ;;;;; Squiggol
 ;; FIXME: This is unusable as a concept for the time being.
 
-(defn map [f xs]
-  (when (not (empty? xs))
-    (net
-     (f (first xs))
-     (map f (rest xs)))))
+(defn map [f]
+  (fn [x]
+    (f x)))
 
-(defn filter [p xs]
-  (map (fn [x] (when (p x) x)) xs))
+(defn filter [p]
+  (fn [x]
+    (when (p x)
+      x)))
+
+(defn walk-coll [xs]
+  (into (empty xs) (map walk) xs))
