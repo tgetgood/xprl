@@ -38,7 +38,7 @@
 (defn last-ready [pipe]
   (if (ready? pipe)
     (if (ready? (rest pipe))
-      (most-recent (rest pipe))
+      (last-ready (rest pipe))
       (first pipe))
     (emit :error (str pipe " has no elements."))))
 
