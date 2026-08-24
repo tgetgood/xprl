@@ -15,12 +15,11 @@
 (defn walk-coll [env xs acc]
   (if (empty? xs)
     (return env acc)
-    (let [acc (transient acc)
-          s (gensym "??")]
+    (let [acc (transient acc)]
       (exec/enqueue!
        (exec/task
-        (cont/ret-> env #(walk % (first xs)) #(do (println "ret" % ":" s)(conj! acc %) nil))
-        (do (println "recur" s) (walk-coll env (rest xs) (persistent! acc))))))))
+        (cont/ret-> env #(walk % (first xs)) (conj! acc %) nil)
+        (walk-coll env (rest xs) (persistent! acc)))))))
 
 (deftracefn apply [env head tail]
   (cond
