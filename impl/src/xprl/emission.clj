@@ -55,7 +55,7 @@
   (let [envs (get (:listeners @(:state wire)) offset)]
     (when (seq envs)
       (swap! (:state wire) update :listeners dissoc offset)
-      (run! #(exec/enqueue! (fn [] (cont/return % value))) envs))))
+      (run! #(exec/enqueue! (exec/task (cont/return % value))) envs))))
 
 (defn deliver! [wire v]
   (println "delivering " v)

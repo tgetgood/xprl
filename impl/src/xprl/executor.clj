@@ -8,23 +8,66 @@
          :index {}}))
 
 (defonce ^:dynamic *the-executor* nil)
+(defonce ^:dynamic *current-task* (gensym "root-task-"))
+
+(defonce tasks (atom {*current-task* #{}}))
+
+(defmacro task
+  ([body]
+   `(with-meta (fn [] ~body)
+      {:parent *current-task* :id (gensym "task-") :body '~body}))
+  ;; FIXME: I'm only allowing completion handlers to be created when a task is
+  ;; created. It's trivial to just wrap tasks to add completion handlers, so I'm
+  ;; not losing generality, but this is the kind of language design shortcut
+  ;; that makes a language clunky.
+  ;; So: Is this necessary?
+  ([body on-complete]
+   (let [t `(task ~body)]
+     `(with-meta ~t (merge (meta ~t) {:on-complete (task ~on-complete)})))))
+
+;; TODO: If none of the ancestors of `task` have completion handlers, then
+;; there's no point indexing a task
+(defn index-task! [task]
+  (let [{:keys [parent id]} (meta task)]
+    (swap! tasks update parent (fnil conj #{}) id)
+    task))
 
 (defn enqueue!
   ([task]
    (enqueue! *the-executor* task))
   ([exec task]
-   (swap! exec update :work conj task)
+   (swap! exec update :work conj (index-task! task))
    nil))
+
+(defn deindex-task! [task]
+  (let [{:keys [parent id on-complete body]} (meta task)
+
+        index     @tasks
+        children  (disj (get index parent) id)
+        new-index (if (empty? children)
+                    (dissoc index parent)
+                    (assoc index parent children))]
+    (if (compare-and-set! tasks index new-index)
+      (when (empty? children)
+        (when on-complete
+          ;; (println "finished" body "starting" (:body (meta on-complete)) )
+          (enqueue! on-complete)))
+      ;; spin!
+      (recur task))))
 
 (defn enqueue-all!
   ([tasks] (enqueue-all! *the-executor* tasks))
-  ([exec tasks] (swap! exec update :work #(into % tasks))))
+  ([exec tasks] (swap! exec update :work #(into % (map index-task!) tasks))))
 
 (defn run-task [task]
   ;; (when (meta task) (println "run" (meta task)))
-  (cond
-    (fn? task) (task)
-    true       (throw (RuntimeException. (str "Bad task type " (type task) ": " task)))))
+  (binding [*current-task* (:id (meta task))]
+    ;; (println "running task" (meta task))
+    (cond
+      (fn? task) (task)
+      true       (throw (RuntimeException. (str "Bad task type " (type task) ": " task))))
+    ;; (println "cleaning up" (meta task))
+    (deindex-task! task)))
 
 ;; The executor "queue" is actually a stack, so this task acts as a barrier and
 ;; will be executed exactly once when all work deriving from the current task is
@@ -34,8 +77,8 @@
 ;;
 ;; It fails both in the face of parking and work stealing, so I need a better
 ;; theory.
-(defn on-complete! [cb]
-  (enqueue! *the-executor* cb))
+#_(defn on-complete! [task]
+  (enqueue! *the-executor* task))
 
 (defn run [exec]
   (binding [*the-executor* exec]

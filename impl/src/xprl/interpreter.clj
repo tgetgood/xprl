@@ -15,9 +15,12 @@
 (defn walk-coll [env xs acc]
   (if (empty? xs)
     (return env acc)
-    (let [acc (transient acc)]
-      (exec/on-complete! (fn [] (walk-coll env (rest xs) (persistent! acc))))
-      (cont/ret-> env #(walk % (first xs)) #(do (conj! acc %) nil)))))
+    (let [acc (transient acc)
+          s (gensym "??")]
+      (exec/enqueue!
+       (exec/task
+        (cont/ret-> env #(walk % (first xs)) #(do (println "ret" % ":" s)(conj! acc %) nil))
+        (do (println "recur" s) (walk-coll env (rest xs) (persistent! acc))))))))
 
 (deftracefn apply [env head tail]
   (cond
@@ -64,8 +67,8 @@
                            #(emit/do-emission! (merge env (:env f)) %))
     (ast/net? f)         (let [w    (emit/wire)
                                env' (with-return (:env f) w)]
-                           (exec/enqueue-all! (map #(with-meta (fn [] (walk env %))
-                                                      {:form %}) (:forms f)))
+                           (exec/enqueue-all!
+                            (map (fn [f] (exec/task (walk env f))) (:forms f) ))
                            (return env w))
     true                 (return env f))
   nil) ; make sure we can't accidentally rely on a return value

@@ -11,8 +11,8 @@
 ;; The clj repl interacts with the executor threads by injecting work into the
 ;; queue of one of theme. Which? it doesn't matter, in principle. Just use the
 ;; first for now.
-(defn seed! [tasks]
-  (exec/enqueue-all! (first (:executors @the-system)) tasks)
+(defn seed! [task]
+  (exec/enqueue! (first (:executors @the-system)) task)
   nil)
 
 (defn start-executors! []
