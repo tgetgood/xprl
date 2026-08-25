@@ -81,17 +81,6 @@
     ;; (println "cleaning up" (meta task))
     (deindex-task! task)))
 
-;; The executor "queue" is actually a stack, so this task acts as a barrier and
-;; will be executed exactly once when all work deriving from the current task is
-;; finished, but before moving on the the next task.
-;;
-;; At least that's the theory.
-;;
-;; It fails both in the face of parking and work stealing, so I need a better
-;; theory.
-#_(defn on-complete! [task]
-  (enqueue! *the-executor* task))
-
 (defn run [exec]
   (binding [*the-executor* exec]
     (loop []
