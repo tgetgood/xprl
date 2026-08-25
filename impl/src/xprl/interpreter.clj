@@ -18,8 +18,8 @@
     (let [acc (transient acc)]
       (exec/enqueue!
        (exec/task
-        (cont/ret-> env #(walk % (first xs)) (conj! acc %) nil)
-        (walk-coll env (rest xs) (persistent! acc)))))))
+        (fn [] (cont/ret-> env #(walk % (first xs)) #(do (conj! acc %) nil)))
+        (fn [] (walk-coll env (rest xs) (persistent! acc))))))))
 
 (deftracefn apply [env head tail]
   (cond
@@ -67,7 +67,7 @@
     (ast/net? f)         (let [w    (emit/wire)
                                env' (with-return (:env f) w)]
                            (exec/enqueue-all!
-                            (map (fn [f] (exec/task (walk env f))) (:forms f) ))
+                            (map (fn [f] (exec/task (fn [] (walk env f)))) (:forms f) ))
                            (return env w))
     true                 (return env f))
   nil) ; make sure we can't accidentally rely on a return value

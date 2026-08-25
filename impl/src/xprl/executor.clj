@@ -8,28 +8,31 @@
          :index {}}))
 
 (defonce ^:dynamic *the-executor* nil)
-(defonce ^:dynamic *current-task* (gensym "root-task-"))
+(defonce root-task (gensym "root-task-"))
+(defonce ^:dynamic *current-task* root-task)
 
-(defonce tasks (atom {*current-task* #{}}))
+(defonce tasks (atom {root-task {:id root-task :parent ::none :children #{}}}))
 
-(defmacro task
-  ([body]
-   `(with-meta (fn [] ~body)
-      {:parent *current-task* :id (gensym "task-") :body '~body}))
+(defn task
+  ([f] (task f nil))
   ;; FIXME: I'm only allowing completion handlers to be created when a task is
   ;; created. It's trivial to just wrap tasks to add completion handlers, so I'm
   ;; not losing generality, but this is the kind of language design shortcut
   ;; that makes a language clunky.
   ;; So: Is this necessary?
-  ([body on-complete]
-   (let [t `(task ~body)]
-     `(with-meta ~t (merge (meta ~t) {:on-complete (task ~on-complete)})))))
+  ([f on-complete]
+   (with-meta f
+     (merge {:parent *current-task* :id (gensym "task-")}
+            (when on-complete {:on-complete (task on-complete)})))))
 
 ;; TODO: If none of the ancestors of `task` have completion handlers, then
 ;; there's no point indexing a task
 (defn index-task! [task]
   (let [{:keys [parent id]} (meta task)]
-    (swap! tasks update parent (fnil conj #{}) id)
+    (println "indexing" id "<-" parent)
+    (swap! tasks #(-> %
+                      (update-in [parent :children] (fnil conj #{}) id)
+                      (assoc id (assoc (meta task) :children #{}))))
     task))
 
 (defn enqueue!
@@ -39,30 +42,39 @@
    (swap! exec update :work conj (index-task! task))
    nil))
 
-(defn deindex-task! [task]
-  (let [{:keys [parent id on-complete body]} (meta task)
-
-        index     @tasks
-        children  (disj (get index parent) id)
-        new-index (if (empty? children)
-                    (dissoc index parent)
-                    (assoc index parent children))]
-    (if (compare-and-set! tasks index new-index)
-      (when (empty? children)
-        (when on-complete
-          ;; (println "finished" body "starting" (:body (meta on-complete)) )
-          (enqueue! on-complete)))
-      ;; spin!
-      (recur task))))
-
 (defn enqueue-all!
   ([tasks] (enqueue-all! *the-executor* tasks))
   ([exec tasks] (swap! exec update :work #(into % (map index-task!) tasks))))
 
+(defn clear-finished [index id]
+  (let [{:keys [parent children on-complete]} (get index id)]
+    (cond
+      (= id root-task)  index
+      (empty? children) (do
+                          (println "deindexing" id)
+                          (let [i' (clear-finished (dissoc index id) parent)]
+                            (with-meta i' (update (meta i') :cbs conj on-complete))))
+      true              index)))
+
+(defn deindex-task! [task]
+  (println "completing" (:id (meta task)) "children:"
+           (get-in @tasks [(:id (meta task)) :children]))
+  (let [index  @tasks
+        index' (clear-finished index (:id (meta task)))]
+    (if (compare-and-set! tasks index (with-meta index' {}))
+      (when-let [completions (remove nil? (:cbs (meta index')))]
+        (when (seq completions)
+          ;;This has to be here since we DO NOT want to enqueue completion
+          ;;callbacks more than once.
+          (println "enqueue completions" (map meta completions))
+          (enqueue-all! completions)))
+      ;; spin!
+      (do (println "spin") (recur task)))))
+
 (defn run-task [task]
   ;; (when (meta task) (println "run" (meta task)))
   (binding [*current-task* (:id (meta task))]
-    ;; (println "running task" (meta task))
+    (println "running task" (:id (meta task)))
     (cond
       (fn? task) (task)
       true       (throw (RuntimeException. (str "Bad task type " (type task) ": " task))))
