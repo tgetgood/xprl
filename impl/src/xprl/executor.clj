@@ -13,6 +13,14 @@
 
 (defonce tasks (atom {root-task {:id root-task :parent ::none :children #{}}}))
 
+;; TODO: If none of the ancestors of `task` have completion handlers, then
+;; there's no point indexing a task
+(defn index-task! [{:keys [parent id] :as task}]
+  (println "indexing" id "<-" parent)
+  (swap! tasks #(-> %
+                    (update-in [parent :children] (fnil conj #{}) id)
+                    (assoc id (assoc task :children #{})))))
+
 (defn task
   ([f] (task f nil))
   ;; FIXME: I'm only allowing completion handlers to be created when a task is
@@ -21,39 +29,40 @@
   ;; that makes a language clunky.
   ;; So: Is this necessary?
   ([f on-complete]
-   (with-meta f
-     (merge {:parent *current-task* :id (gensym "task-")}
-            (when on-complete {:on-complete (task on-complete)})))))
-
-;; TODO: If none of the ancestors of `task` have completion handlers, then
-;; there's no point indexing a task
-(defn index-task! [task]
-  (let [{:keys [parent id]} (meta task)]
-    (println "indexing" id "<-" parent)
-    (swap! tasks #(-> %
-                      (update-in [parent :children] (fnil conj #{}) id)
-                      (assoc id (assoc (meta task) :children #{}))))
-    task))
+   (let [m (merge
+            {:parent *current-task*
+             :id     (gensym "task-")}
+            (when on-complete
+              ;; N.B.: This indexes the completion handler before the the task it
+              ;; waits on is even created, but that's fine because it won't be
+              ;; ~enqueued~ until after the waited-upon task is finished (which
+              ;; had better be *after* it has been created).
+              {:on-complete (task on-complete)}))]
+     (index-task! m)
+     (with-meta f (merge (meta f) m)))))
 
 (defn enqueue!
   ([task]
    (enqueue! *the-executor* task))
   ([exec task]
-   (swap! exec update :work conj (index-task! task))
+   (swap! exec update :work conj task)
    nil))
 
 (defn enqueue-all!
   ([tasks] (enqueue-all! *the-executor* tasks))
-  ([exec tasks] (swap! exec update :work #(into % (map index-task!) tasks))))
+  ([exec tasks] (swap! exec update :work #(into % tasks))))
 
 (defn clear-finished [index id]
   (let [{:keys [parent children on-complete]} (get index id)]
+    (assert (not (nil? parent)) (get index id))
     (cond
       (= id root-task)  index
-      (empty? children) (do
+      (empty? children) (let [i' (-> index
+                                     (dissoc id)
+                                     (update-in [parent :children] disj id)
+                                     (clear-finished parent))]
                           (println "deindexing" id)
-                          (let [i' (clear-finished (dissoc index id) parent)]
-                            (with-meta i' (update (meta i') :cbs conj on-complete))))
+                          (with-meta i' (update (meta i') :cbs conj on-complete)))
       true              index)))
 
 (defn deindex-task! [task]
