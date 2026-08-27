@@ -16,7 +16,6 @@
 ;; TODO: If none of the ancestors of `task` have completion handlers, then
 ;; there's no point indexing a task
 (defn index-task! [{:keys [parent id] :as task}]
-  (println "indexing" id "<-" parent)
   (swap! tasks #(-> %
                     (update-in [parent :children] (fnil conj #{}) id)
                     (assoc id (assoc task :children #{})))))
@@ -61,13 +60,10 @@
                                      (dissoc id)
                                      (update-in [parent :children] disj id)
                                      (clear-finished parent))]
-                          (println "deindexing" id)
                           (with-meta i' (update (meta i') :cbs conj on-complete)))
       true              index)))
 
 (defn deindex-task! [task]
-  (println "completing" (:id (meta task)) "children:"
-           (get-in @tasks [(:id (meta task)) :children]))
   (let [index  @tasks
         index' (clear-finished index (:id (meta task)))]
     (if (compare-and-set! tasks index (with-meta index' {}))
@@ -75,15 +71,13 @@
         (when (seq completions)
           ;;This has to be here since we DO NOT want to enqueue completion
           ;;callbacks more than once.
-          (println "enqueue completions" (map meta completions))
           (enqueue-all! completions)))
       ;; spin!
-      (do (println "spin") (recur task)))))
+      (recur task))))
 
 (defn run-task [task]
   ;; (when (meta task) (println "run" (meta task)))
   (binding [*current-task* (:id (meta task))]
-    (println "running task" (:id (meta task)))
     (cond
       (fn? task) (task)
       true       (throw (RuntimeException. (str "Bad task type " (type task) ": " task))))
