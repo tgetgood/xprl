@@ -175,11 +175,6 @@
   (reduce (fn [acc [k f]]
             (assoc acc (ast/symbol k) (ast/extern k f))) {} m))
 
-;; noops always walk their tail because the effect of a noop is network based,
-;; not semantic.
-(defn noop [env self args]
-  (ast/application self (i/walk env args)))
-
 (def special
   "things that would traditionally be special forms."
   (macros
