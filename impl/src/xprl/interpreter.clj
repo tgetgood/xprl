@@ -65,8 +65,19 @@
                            #(return env (assoc f :body %)))
     (ast/emission? f)    (ret-> env
                            #(walk % (:msgs f))
-                           #(emit/do-emission! (merge env (:env f)) %))
+                           ;; Is merging the envs necessary? Is it even desirable?
+                           ;; I suspect no on both counts, but a conclusive
+                           ;; experiment/argument eludes me.
+                           ;; If channel reroutes become part of the ast, then
+                           ;; I'm almost certain it's just a source of bugs.
+                           #(emit/do-emission! env #_(merge env (:env f)) %))
     (ast/net? f)         (exec/enqueue-all!
                           (map (fn [f] (exec/task (fn [] (walk env f)))) (:forms f) ))
+    (ast/route? f)       (ret-> env
+                           #(walk % (:chmap f))
+                           #(do (println (-> % first val :form type))
+                                (if (ast/incomplete? %)
+                                  (assoc f :chmap %)
+                                  (walk (merge env %) (:body f)))))
     true                 (return env f))
   nil) ; make sure we can't accidentally rely on a return value

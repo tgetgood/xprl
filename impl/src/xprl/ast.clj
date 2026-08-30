@@ -140,8 +140,11 @@
    :pprint (do (pp/write-out (symbol "#E"))
                (pp/simple-dispatch msgs))})
 
-(defxprl Net [env forms]
+(defxprl Net [forms]
   {:str (str "#N::" forms)})
+
+(defxprl Route [chmap body]
+  {:str (str "#CC <-"  chmap "->" body)})
 
 (defn elements [l]
   l)

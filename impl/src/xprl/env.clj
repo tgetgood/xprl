@@ -14,6 +14,7 @@
      (ast/coll? ~form)        (into (ast/empty ~form) (map ~walk) ~form)
      (ast/emission? ~form)    (update ~form :msgs ~walk)
      (ast/net? ~form)         (update ~form :forms ~walk)
+     (ast/route? ~form)       (-> ~form (update :chmap ~walk) (update :body ~walk))
      ~@cases
      true                     ~form ))
 
