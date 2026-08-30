@@ -15,6 +15,8 @@
 (defn walk-coll [env xs acc]
   (if (empty? xs)
     (return env acc)
+    ;; Using transients here just feels sloppy. It does error out in
+    ;; use-after-free type scenarios which is pretty valuable.
     (let [acc (transient acc)]
       (exec/enqueue!
        (exec/task
@@ -64,10 +66,7 @@
     (ast/emission? f)    (ret-> env
                            #(walk % (:msgs f))
                            #(emit/do-emission! (merge env (:env f)) %))
-    (ast/net? f)         (let [w    (emit/wire)
-                               env' (with-return (:env f) w)]
-                           (exec/enqueue-all!
-                            (map (fn [f] (exec/task (fn [] (walk env f)))) (:forms f) ))
-                           (return env w))
+    (ast/net? f)         (exec/enqueue-all!
+                          (map (fn [f] (exec/task (fn [] (walk env f)))) (:forms f) ))
     true                 (return env f))
   nil) ; make sure we can't accidentally rely on a return value

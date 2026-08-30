@@ -167,9 +167,15 @@
   :ensure (ast/list? inits)
   :return (apply emit/wire inits))
 
+(defonce bogo (atom nil))
+
+;; TODO: I need to add an AST node to represent channel rerouting so that the
+;; lexical capture/binding tools can manipulate it.
 (defextern with-channels [env [chmap body]]
   :ensure (ast/map? chmap)
-  :return (cont/ret-> env #(i/walk % chmap) #(i/walk (cont/merge env %) body)))
+  :return (cont/ret-> env
+            #(do (println "channel check" chmap) (i/walk % chmap))
+            #(do (reset! bogo %) (i/walk (cont/merge env %) body))))
 
 (defn macros [m]
   (reduce (fn [acc [k f]]
