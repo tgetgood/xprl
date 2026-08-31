@@ -140,7 +140,9 @@
    :pprint (do (pp/write-out (symbol "#E"))
                (pp/simple-dispatch msgs))})
 
-(defxprl Net [forms]
+;; REVIEW: storing a link to the interpreter in the net. That seems like such a
+;; hack. But it does get around circular dependencies...
+(defxprl Net [walkfn forms]
   {:str (str "#N::" forms)})
 
 (defxprl Route [chmap body]
