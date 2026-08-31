@@ -36,7 +36,6 @@
 (defn try-read! [env w]
   (let [state  @(:state w)
         offset (- (:offset w) (:offset state))]
-    (println state)
     (assert (not (neg? offset)) "Trying to read freed stream segment!")
     (if (< offset (count (:stream state)))
       ;; if we have a value, return it
@@ -55,14 +54,14 @@
   (let [envs (get (:listeners @(:state wire)) offset)]
     (when (seq envs)
       (swap! (:state wire) update :listeners dissoc offset)
-      (run! #(exec/enqueue! (exec/task (fn [] (cont/return % value)))) envs))))
+      (exec/enqueue-all! (map (fn [env] (exec/task env #(cont/return % value))) envs)))))
+
 
 (defn deliver! [wire v]
-  (println "delivering " v)
   (let [state @(:state wire)
         next  (update state :stream conj v)]
     (if (compare-and-set! (:state wire) state next)
-      (drain-listeners! wire (+ (:offset next) (count (:stream next))) v)
+      (drain-listeners! wire (dec (+ (:offset next) (count (:stream next)))) v)
       (recur wire v))))
 
 ;;;;; Splicing
@@ -100,7 +99,6 @@
         true       (throw (RuntimeException.
                            (str "Bad channel type: " (type ch) " " ch)))))
     (do
-      ;; (println env)
       ;; TODO: :unbound channel
       ;; TODO: Keep errors in xprl.
       (throw (RuntimeException. (str "Cannot send " v " to " k ". No such channel."))))))

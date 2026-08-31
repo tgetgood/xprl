@@ -20,23 +20,24 @@
                     (update-in [parent :children] (fnil conj #{}) id)
                     (assoc id (assoc task :children #{})))))
 
-(defn task
-  ([f] (task f nil))
+(defn task {:style/indent [1]}
+  ([env f] (task env f nil))
   ;; FIXME: I'm only allowing completion handlers to be created when a task is
   ;; created. It's trivial to just wrap tasks to add completion handlers, so I'm
   ;; not losing generality, but this is the kind of language design shortcut
   ;; that makes a language clunky.
   ;; So: Is this necessary?
-  ([f on-complete]
+  ([env f on-complete]
    (let [m (merge
             {:parent *current-task*
-             :id     (gensym "task-")}
+             :id     (gensym "task-")
+             :env    env}
             (when on-complete
               ;; N.B.: This indexes the completion handler before the the task it
               ;; waits on is even created, but that's fine because it won't be
               ;; ~enqueued~ until after the waited-upon task is finished (which
               ;; had better be *after* it has been created).
-              {:on-complete (task on-complete)}))]
+              {:on-complete (task env on-complete)}))]
      (index-task! m)
      (with-meta f (merge (meta f) m)))))
 
@@ -53,7 +54,7 @@
 
 (defn clear-finished [index id]
   (let [{:keys [parent children on-complete]} (get index id)]
-    (assert (not (nil? parent)) (get index id))
+    (assert (not (nil? parent)) (str id "has no parent:" (get index id)))
     (cond
       (= id root-task)  index
       (empty? children) (let [i' (-> index
@@ -75,14 +76,21 @@
       ;; spin!
       (recur task))))
 
-(defn run-task [task]
-  ;; (when (meta task) (println "run" (meta task)))
-  (binding [*current-task* (:id (meta task))]
+(defn run-task [t]
+  (binding [*current-task* (:id (meta t))]
     (cond
-      (fn? task) (task)
-      true       (throw (RuntimeException. (str "Bad task type " (type task) ": " task))))
-    ;; (println "cleaning up" (meta task))
-    (deindex-task! task)))
+      (fn? t) (let [{:keys [env]} (meta t)]
+                   (t (cont/with-return env
+                           (fn [x]
+                             ;; REVIEW: Special baked-in behaviour of nets.
+                             (if (ast/net? x)
+                               (enqueue-all!
+                                (map (fn [f]
+                                       (task env #((:walkfn x) % (ast/immediate f))))
+                                     (:forms x)))
+                               (cont/return env x))))))
+      true       (throw (RuntimeException. (str "Bad task type " (type t) ": " t))))
+    (deindex-task! t)))
 
 (defn run [exec]
   (binding [*the-executor* exec]

@@ -19,9 +19,9 @@
     ;; use-after-free type scenarios which is pretty valuable.
     (let [acc (transient acc)]
       (exec/enqueue!
-       (exec/task
-        (fn [] (cont/ret-> env #(walk % (first xs)) #(do (conj! acc %) nil)))
-        (fn [] (walk-coll env (rest xs) (persistent! acc))))))))
+       (exec/task env
+         (fn [env] (cont/ret-> env #(walk % (first xs)) #(do (conj! acc %) nil)))
+         (fn [env] (walk-coll env (rest xs) (persistent! acc))))))))
 
 (deftracefn apply [env head tail]
   (cond
@@ -71,13 +71,10 @@
                            ;; If channel reroutes become part of the ast, then
                            ;; I'm almost certain it's just a source of bugs.
                            #(emit/do-emission! env #_(merge env (:env f)) %))
-    (ast/net? f)         (exec/enqueue-all!
-                          (map (fn [f] (exec/task (fn [] (walk env f)))) (:forms f) ))
     (ast/route? f)       (ret-> env
                            #(walk % (:chmap f))
-                           #(do (println (-> % first val :form type))
-                                (if (ast/incomplete? %)
-                                  (assoc f :chmap %)
-                                  (walk (merge env %) (:body f)))))
+                           #(if (ast/incomplete? %)
+                              (return env (assoc f :chmap %))
+                              (walk (merge env %) (:body f))))
     true                 (return env f))
   nil) ; make sure we can't accidentally rely on a return value
