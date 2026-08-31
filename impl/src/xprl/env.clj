@@ -15,6 +15,7 @@
      (ast/emission? ~form)    (update ~form :msgs ~walk)
      (ast/net? ~form)         (update ~form :forms ~walk)
      (ast/route? ~form)       (-> ~form (update :chmap ~walk) (update :body ~walk))
+     (ast/bound? ~form)       (update ~form :binding ~walk)
      ~@cases
      true                     ~form ))
 
@@ -27,7 +28,6 @@
   (let [walk (partial walk-capture captures)
         sym  (when (ast/symbolic? form) (ast/symbol form))]
     (walk-cond form walk
-      (ast/bound? form)    (update form :binding walk)
       (ast/symbolic? form) (if (contains? captures sym)
                                 (get captures sym)
                                 form)
@@ -39,7 +39,6 @@
 (defn walk-bind [bindings form]
   (let [walk (partial walk-bind bindings)]
     (walk-cond form walk
-      (ast/bound? form)    (update form :binding walk)
       (ast/captured? form) (if (contains? bindings (:id form))
                              (ast/bind form (get bindings (:id form)))
                              form)
@@ -48,7 +47,6 @@
 (defn walk-rename [smap form]
   (let [walk (partial walk-rename smap)]
     (walk-cond form walk
-      (ast/bound? form)    (update form :binding walk)
       (ast/captured? form) (if (contains? smap (:id form))
                              (ast/capture (:sym form) (get smap (:id form)))
                              form)
