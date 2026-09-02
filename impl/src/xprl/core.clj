@@ -3,7 +3,6 @@
   (:require
    [xprl.ast :as ast]
    [xprl.builtins :as builtins]
-   [xprl.continuation :as cont]
    [xprl.debug :as debug]
    [xprl.emission :as emit]
    [xprl.env :as env]
@@ -69,20 +68,20 @@
 
 (defn ev
   ([s] (go! @the-env (:form (r/read (r/string-reader s)))
-            (cont/with-return base-conts
-              #(do (alter-var-root #'*x (constantly %)) (cont/return base-conts %)))))
+            (emit/with-return base-conts
+              #(do (alter-var-root #'*x (constantly %)) (emit/return base-conts %)))))
   ([s cb] (go! @the-env (:form (r/read (r/string-reader s)))
-               (cont/with-return base-conts #(cont/return base-conts (cb %))))))
+               (emit/with-return base-conts #(emit/return base-conts (cb %))))))
 
 (defn iev [s]
-  (cont/ret-> base-conts
+  (emit/ret-> base-conts
     #(go! @the-env (:form (r/read (r/string-reader s))) %) debug/inspect))
 
 (defn load-seq [envatom forms cb]
   (if (seq forms)
-    (go! @envatom (first forms) (cont/with-return base-conts
+    (go! @envatom (first forms) (emit/with-return base-conts
                                   (fn [res]
-                                    (cont/return base-conts res)
+                                    (emit/return base-conts res)
                                     (load-seq envatom (rest forms) cb))))
     (cb)))
 
@@ -111,7 +110,7 @@
 (defn run-tests! [tests]
   (when (seq tests)
     (let [[test expect] (first tests)]
-      (cont/ret-> base-conts
+      (emit/ret-> base-conts
         (fn [ccs]
           (println "Evaluating: " test)
           (go! @the-env test ccs))

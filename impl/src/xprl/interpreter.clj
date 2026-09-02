@@ -1,9 +1,8 @@
 (ns xprl.interpreter
   (:refer-clojure :exclude [resolve eval apply])
   (:require [xprl.ast :as ast]
-            [xprl.continuation :as cont :refer [return ret-> with-return]]
             [xprl.debug :refer [deftracefn]]
-            [xprl.emission :as emit]
+            [xprl.emission :as emit :refer [return ret-> with-return]]
             [xprl.env :as env]
             [xprl.executor :as exec]))
 
@@ -20,7 +19,7 @@
     (let [acc (transient acc)]
       (exec/enqueue!
        (exec/task env
-         (fn [env] (cont/ret-> env #(walk % (first xs)) #(do (conj! acc %) nil)))
+         (fn [env] (ret-> env #(walk % (first xs)) #(do (conj! acc %) nil)))
          (fn [env] (walk-coll env (rest xs) (persistent! acc))))))))
 
 (deftracefn apply [env head tail]
@@ -65,12 +64,14 @@
                            #(return env (assoc f :body %)))
     (ast/emission? f)    (ret-> env
                            #(walk % (:msgs f))
-                           ;; Is merging the envs necessary? Is it even desirable?
-                           ;; I suspect no on both counts, but a conclusive
-                           ;; experiment/argument eludes me.
-                           ;; If channel reroutes become part of the ast, then
-                           ;; I'm almost certain it's just a source of bugs.
-                           #(emit/do-emission! env #_(merge env (:env f)) %))
+                           ;; Do emission might return a vector containing any
+                           ;; parked listeners as [env val] pairs.
+                           #(let [ts (emit/do-emission! env %)]
+                              (when (seq ts)
+                                (exec/enqueue-all!
+                                 (map (fn [[e v]] (exec/task e (fn [e] (return e v)))) ts)))))
+    ;; REVIEW: This is an antiquated pattern. Why is it coming back here?
+    ;; I don't like it.
     (ast/route? f)       (ret-> env
                            #(walk % (:chmap f))
                            #(if (ast/incomplete? %)

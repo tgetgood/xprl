@@ -1,7 +1,6 @@
 (ns xprl.builtins
   (:require
    [xprl.ast :as ast]
-   [xprl.continuation :as cont]
    [xprl.debug :as debug]
    [xprl.emission :as emit]
    [xprl.env :as env]
@@ -13,14 +12,14 @@
 (defn build-extern [testfn returnfn errorfn]
   (fn [env self args]
     (try
-      (cont/ret-> env
-        #(if (testfn env args) (cont/return % args) (i/walk % args))
+      (emit/ret-> env
+        #(if (testfn env args) (emit/return % args) (i/walk % args))
         (fn [args]
           (cond
             (testfn env args)      (let [v (returnfn env args)]
                                      (when-not (nil? v)
-                                       (cont/return env v)))
-            (ast/incomplete? args) (cont/return env (ast/application self args))
+                                       (emit/return env v)))
+            (ast/incomplete? args) (emit/return env (ast/application self args))
             true                   (errorfn self args))))
       (catch Throwable e
         (debug/trace!
@@ -113,18 +112,18 @@
   :return (nth x (dec i)))
 
 (defextern first* [env [x]]
-  :ensure (or (emit/wire? x) (ast/coll? x))
+  :ensure (or (ast/wire? x) (ast/coll? x))
   ;; the empty list has no first element, so there's nothing to return.
-  :return (if (emit/wire? x)
+  :return (if (ast/wire? x)
             (emit/try-read! env x)
             (first x)))
 
 (defextern rest* [_ [x]]
-  :ensure (or (emit/wire? x) (ast/coll? x))
+  :ensure (or (ast/wire? x) (ast/coll? x))
   ;; But the ~rest~ of the empty list, i.e. everything but the first element of
   ;; the empty list is still the empty list because there's nothing to remove.
   ;; So I think this is correct as is.
-  :return (if (emit/wire? x)
+  :return (if (ast/wire? x)
             (emit/next-wire x)
             (vec (rest x))))
 
@@ -143,16 +142,16 @@
             ;; HACK: I don't like languages that make the programmer solve a
             ;; problem the implementor can't, but I am stuck...
             (when (ast/ref? param)
-              (cont/error! env (str "μ parameter " param " clobbers ns binding!! "
+              (emit/error! env (str "μ parameter " param " clobbers ns binding!! "
                                     "This will cause obscure and horrid behaviour.")))
             (let [id    (gensym "μ-param-")
                   recid (gensym "μ-recur-")
                   param (ast/symbol param)
                   pcap  (ast/capture param id)
                   caps  (merge {param pcap} (when name {name (ast/capture name recid)}))]
-              (cont/ret-> (emit/cut env pcap)
+              (emit/ret-> (emit/cut env pcap)
                 #(i/walk % (env/walk-capture caps body))
-                #(cont/return env (ast/μ id recid name param %))))))
+                #(emit/return env (ast/μ id recid name param %))))))
 
 (defextern emit [env kvs]
   :ensure (and (even? (count kvs))

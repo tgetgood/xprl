@@ -1,13 +1,13 @@
 ;; REVIEW: Should this even be its own ns at this point?
 (ns xprl.executor
   (:require [xprl.ast :as ast]
-            [xprl.continuation :as cont]))
+            [xprl.emission :as emit]))
 
 (defn create! []
   (atom {:work  []
          :index {}}))
 
-(defonce ^:dynamic *the-executor* nil)
+(defonce ^:dynamic *the-executor*Think IThink I nil)
 (defonce root-task (gensym "root-task-"))
 (defonce ^:dynamic *current-task* root-task)
 
@@ -80,7 +80,7 @@
   (binding [*current-task* (:id (meta t))]
     (cond
       (fn? t) (let [{:keys [env]} (meta t)]
-                   (t (cont/with-return env
+                   (t (emit/with-return env
                            (fn [x]
                              ;; REVIEW: Special baked-in behaviour of nets.
                              (if (ast/net? x)
@@ -88,7 +88,7 @@
                                 (map (fn [f]
                                        (task env #((:walkfn x) % (ast/immediate f))))
                                      (:forms x)))
-                               (cont/return env x))))))
+                               (emit/return env x))))))
       true       (throw (RuntimeException. (str "Bad task type " (type t) ": " t))))
     (deindex-task! t)))
 

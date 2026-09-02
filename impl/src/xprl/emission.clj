@@ -30,7 +30,7 @@
     (assert (not (neg? offset)) "Trying to read freed stream segment!")
     (if (< offset (count (:stream state)))
       ;; if we have a value, return it
-      (cont/return env (nth (:stream state) offset))
+      (return env (nth (:stream state) offset))
       ;; otherwise park and wait
       (let [w' (update state :listeners update (:offset w) (fnil conj []) env)]
         (if (compare-and-set! (:state w) state w')
@@ -45,8 +45,9 @@
   (let [envs (get (:listeners @(:state wire)) offset)]
     (when (seq envs)
       (swap! (:state wire) update :listeners dissoc offset)
-      (exec/enqueue-all! (map (fn [env] (exec/task env #(cont/return % value))) envs)))))
-
+      (let [out (mapv (fn [e] [e value]) envs)]
+        (println "listeners" out)
+        out))))
 
 (defn deliver! [wire v]
   (let [state @(:state wire)
@@ -70,7 +71,7 @@
   (::cut? cable))
 
 (defn clear [cable]
-  (dissoc cable ::cut? ::previous ::id cont/ret))
+  (dissoc cable ::cut? ::previous ::id ret))
 
 (defn captured? [cable]
   (::captured? cable))
@@ -84,18 +85,25 @@
 (defn send-1! [env [k v]]
   (if (contains? env k)
     (let [ch (get env k)]
+      ;; (println "send" v "to" ch)
       (cond
-        (wire? ch) (deliver! ch v)
-        (fn? ch)   (ch v)
-        true       (throw (RuntimeException.
+        (ast/wire? ch) (deliver! ch v)
+        ;; fns always reach out of the program into the surrounding
+        ;; implementation, so they can't return anything to the xprl runtime.
+        (fn? ch)       (do (ch v) nil)
+        true           (throw (RuntimeException.
                            (str "Bad channel type: " (type ch) " " ch)))))
     (do
       ;; TODO: :unbound channel
       ;; TODO: Keep errors in xprl.
       (throw (RuntimeException. (str "Cannot send " v " to " k ". No such channel."))))))
 
+(defn return [env x]
+  (send-1! env [ret x])
+  nil)
+
 (defn send! [env msgs]
-  (run! (partial send-1! env) msgs))
+  (into [] (comp (map (partial send-1! env)) cat) msgs))
 
 (defn do-emission! [env msgs]
   (cond
@@ -103,6 +111,20 @@
     ;; the cable in any future context of evaluation.
     ;; But the cable always gets to decide whether the context is cut,
     ;; captured, etc., so sandboxing should still work as expected.
-    (cut? env)      (cont/return env (ast/emission (clear env) msgs))
+    (cut? env)      (return env (ast/emission (clear env) msgs))
     (captured? env) (send-captured! env msgs)
     true            (send! env msgs)))
+
+;; general continuation manipulation
+
+(defn with-return [env retfn]
+  (assoc env ret retfn))
+
+(defn merge [env extras]
+  (clojure.core/merge env extras))
+
+(defn ret-> {:style/indent [1]} [env inner outer]
+  (inner (with-return env outer)))
+
+(defn error! [env msg]
+  ((get env (ast/xkey :error)) msg))

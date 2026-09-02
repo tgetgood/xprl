@@ -1,5 +1,6 @@
 (ns xprl.debug
   (:require [xprl.ast :as ast]
+            [xprl.emission :as emit]
             [xprl.env :as env])
   (:import [java.io Writer]))
 
@@ -77,18 +78,16 @@
   (let [env   (first args)
         input (if (= 2 (count args)) (second args) (into [] (rest args)))]
     `(defn ~name ~args
-       (let [~env (assoc ~env (ast/xkey :return)
-                         (fn [v#]
-                           (when *execution-trace*
-                             (record! ~input v# {:op ~(keyword name)}))
-                           (trace! "---" ~(str name)
-                                   ;; "in"  (env ~input)
-                                   "\n---\n" ~input "\n-->\n"
-                                   ;; (env v#) "\n--\n"
-                                   v# "\n---")
-                           (let [ret# (get ~env (ast/xkey :return))]
-                             (assert (fn? ret#) (str "no :return in:\n" ~env ))
-                             (ret# v#))))]
+       (let [~env (emit/with-return ~env
+                    (fn [v#]
+                      (when *execution-trace*
+                        (record! ~input v# {:op ~(keyword name)}))
+                      (trace! "---" ~(str name)
+                              ;; "in"  (env ~input)
+                              "\n---\n" ~input "\n-->\n"
+                              ;; (env v#) "\n--\n"
+                              v# "\n---")
+                      (emit/return ~env v#)))]
          ~@body))))
 
 ;;;;; Inspection
