@@ -207,6 +207,19 @@
   [env f t]
   ((:fn f) env f t))
 
+(defrecord Wire [id offset state])
+
+(defn wire? [x]
+  (instance? Wire x))
+
+(defn wire []
+  (->Wire (gensym "wire-") 0 (atom {:listeners {}
+                                    :stream    []
+                                    :offset    0})))
+
+(defn channel? [x]
+  (or (fn? x) (wire? x)))
+
 ;;;;; Pretty Printing
 ;;
 ;; This comprises so much messy logic that I'm going to dump it all here to keep

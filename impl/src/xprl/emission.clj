@@ -1,24 +1,15 @@
 (ns xprl.emission
   (:refer-clojure :exclude [bound?])
-  (:require [xprl.ast :as ast]
-            [xprl.continuation :as cont]
-            [xprl.executor :as exec])
+  (:require [xprl.ast :as ast])
     (:import [java.util WeakHashMap]))
+
+(declare return)
+(def ret (ast/xkey :return))
 
 ;;;;; Wires
 
-(defrecord Wire [id offset state])
-
-(defn wire? [x]
-  (instance? Wire x))
-
-(defn new-wire []
-  (->Wire (gensym "wire-") 0 (atom {:listeners {}
-                                    :stream    []
-                                    :offset    0})))
-
 (defn wire [& init]
-  (let [w (new-wire)]
+  (let [w (ast/wire)]
     (when (seq init)
       (swap! (:state w) assoc :stream (vec init)))
     ;; REVIEW: We're just going to say the record itself is a write ref for now.
