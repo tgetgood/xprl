@@ -5,7 +5,6 @@
 (defmacro walk-cond
   "Separate tree traversal from the important logic."
   [form walk & cases]
-  ;; FIXME: I don't think this can work...
   {:syle/indent [[:form :form] :cond]}
   `(cond
      (ast/immediate? ~form)   (update ~form :form ~walk)
