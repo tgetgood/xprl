@@ -74,6 +74,11 @@
 (inc 6)                              7
 ((fn xs (nth xs 2)) 1 2 3)           2
 
+;; wires
+
+(let1 w ~(wire) ~(net (first w) (with-channels {:x ~w} ~(emit :x 42))))     42
+(let1 w ~(wire) ~(net (first w) (with-channels {:return ~w} 42)))           42
+
 ;; (!1 . 5)  120
 ;; (!2 . 5)  120
 ;; (!3 . 5)  120
