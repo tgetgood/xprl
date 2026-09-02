@@ -79,6 +79,10 @@
 (let1 w ~(wire) ~(net (first w) (with-channels {:x ~w} ~(emit :x 42))))     42
 (let1 w ~(wire) ~(net (first w) (with-channels {:return ~w} 42)))           42
 
+;; Make sure emissions in the body don't fire until the μ is called.
+(def test-fn (μ x ~(emit :return 3))) test-fn
+(test-fn 7733)                        3
+
 ;; (!1 . 5)  120
 ;; (!2 . 5)  120
 ;; (!3 . 5)  120
