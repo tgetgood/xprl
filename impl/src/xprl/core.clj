@@ -4,17 +4,15 @@
    [xprl.ast :as ast]
    [xprl.builtins :as builtins]
    [xprl.debug :as debug]
-   [xprl.emission :as emit]
    [xprl.env :as env]
-   [xprl.executor :as exec]
    [xprl.interpreter :as i]
    [xprl.ns :as ns]
    [xprl.reader :as r]
-   [xprl.system :as sys]))
+   [xprl.rt :as rt]))
 
 (def the-env (atom builtins/base-env))
 
-(sys/start!)
+(rt/init!)
 
 ;;;;; UI
 
@@ -57,7 +55,7 @@
   ([ns f] (go! ns f base-conts))
   ([ns f conts]
    (try
-     (sys/seed! (exec/task conts (fn [conts] (i/walk conts (ast/immediate (ns/bind f ns))))))
+     (rt/seed! conts (fn [conts] (i/walk conts (ast/immediate (ns/bind f ns)))))
      (catch Throwable e
        (binding [*out* *err*]
          (println e)
@@ -68,20 +66,20 @@
 
 (defn ev
   ([s] (go! @the-env (:form (r/read (r/string-reader s)))
-            (emit/with-return base-conts
-              #(do (alter-var-root #'*x (constantly %)) (emit/return base-conts %)))))
+            (rt/with-return base-conts
+              #(do (alter-var-root #'*x (constantly %)) (rt/return base-conts %)))))
   ([s cb] (go! @the-env (:form (r/read (r/string-reader s)))
-               (emit/with-return base-conts #(emit/return base-conts (cb %))))))
+               (rt/with-return base-conts #(rt/return base-conts (cb %))))))
 
 (defn iev [s]
-  (emit/ret-> base-conts
+  (rt/ret-> base-conts
     #(go! @the-env (:form (r/read (r/string-reader s))) %) debug/inspect))
 
 (defn load-seq [envatom forms cb]
   (if (seq forms)
-    (go! @envatom (first forms) (emit/with-return base-conts
+    (go! @envatom (first forms) (rt/with-return base-conts
                                   (fn [res]
-                                    (emit/return base-conts res)
+                                    (rt/return base-conts res)
                                     (load-seq envatom (rest forms) cb))))
     (cb)))
 
@@ -110,7 +108,7 @@
 (defn run-tests! [tests]
   (when (seq tests)
     (let [[test expect] (first tests)]
-      (emit/ret-> base-conts
+      (rt/ret-> base-conts
         (fn [ccs]
           (println "Evaluating: " test)
           (go! @the-env test ccs))

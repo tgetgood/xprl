@@ -1,6 +1,6 @@
 (ns xprl.debug
   (:require [xprl.ast :as ast]
-            [xprl.emission :as emit]
+            [xprl.rt :as rt]
             [xprl.env :as env])
   (:import [java.io Writer]))
 
@@ -78,7 +78,7 @@
   (let [env   (first args)
         input (if (= 2 (count args)) (second args) (into [] (rest args)))]
     `(defn ~name ~args
-       (let [~env (emit/with-return ~env
+       (let [~env (rt/with-return ~env
                     (fn [v#]
                       (when *execution-trace*
                         (record! ~input v# {:op ~(keyword name)}))
@@ -87,7 +87,7 @@
                               "\n---\n" ~input "\n-->\n"
                               ;; (env v#) "\n--\n"
                               v# "\n---")
-                      (emit/return ~env v#)))]
+                      (rt/return ~env v#)))]
          ~@body))))
 
 ;;;;; Inspection

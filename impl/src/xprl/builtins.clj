@@ -2,24 +2,22 @@
   (:require
    [xprl.ast :as ast]
    [xprl.debug :as debug]
-   [xprl.emission :as emit]
    [xprl.env :as env]
-   [xprl.executor :as exec]
    [xprl.interpreter :as i]
    [xprl.ns :as ns]
-   [xprl.system :as sys]))
+   [xprl.rt :as rt]))
 
 (defn build-extern [testfn returnfn errorfn]
   (fn [env self args]
     (try
-      (emit/ret-> env
-        #(if (testfn env args) (emit/return % args) (i/walk % args))
+      (rt/ret-> env
+        #(if (testfn env args) (rt/return % args) (i/walk % args))
         (fn [args]
           (cond
             (testfn env args)      (let [v (returnfn env args)]
                                      (when-not (nil? v)
-                                       (emit/return env v)))
-            (ast/incomplete? args) (emit/return env (ast/application self args))
+                                       (rt/return env v)))
+            (ast/incomplete? args) (rt/return env (ast/application self args))
             true                   (errorfn self args))))
       (catch Throwable e
         (debug/trace!
@@ -115,7 +113,7 @@
   :ensure (or (ast/wire? x) (ast/coll? x))
   ;; the empty list has no first element, so there's nothing to return.
   :return (if (ast/wire? x)
-            (emit/try-read! env x)
+            (rt/try-read! env x)
             (first x)))
 
 (defextern rest* [_ [x]]
@@ -124,7 +122,7 @@
   ;; the empty list is still the empty list because there's nothing to remove.
   ;; So I think this is correct as is.
   :return (if (ast/wire? x)
-            (emit/next-wire x)
+            (rt/next-wire x)
             (vec (rest x))))
 
 (defextern count* [_ [x]]
@@ -142,16 +140,16 @@
             ;; HACK: I don't like languages that make the programmer solve a
             ;; problem the implementor can't, but I am stuck...
             (when (ast/ref? param)
-              (emit/error! env (str "μ parameter " param " clobbers ns binding!! "
+              (rt/error! env (str "μ parameter " param " clobbers ns binding!! "
                                     "This will cause obscure and horrid behaviour.")))
             (let [id    (gensym "μ-param-")
                   recid (gensym "μ-recur-")
                   param (ast/symbol param)
                   pcap  (ast/capture param id)
                   caps  (merge {param pcap} (when name {name (ast/capture name recid)}))]
-              (emit/ret-> (emit/cut env pcap)
+              (rt/ret-> (rt/cut env pcap)
                 #(i/walk % (env/walk-capture caps body))
-                #(emit/return env (ast/μ id recid name param %))))))
+                #(rt/return env (ast/μ id recid name param %))))))
 
 (defextern emit [env kvs]
   :ensure (and (even? (count kvs))
@@ -164,7 +162,7 @@
 
 (defextern wire [env inits]
   :ensure (ast/list? inits)
-  :return (apply emit/wire inits))
+  :return (apply rt/wire inits))
 
 (defonce bogo (atom nil))
 

@@ -1,6 +1,5 @@
 (ns xprl.env
-  (:require [clojure.set :as set]
-            [xprl.ast :as ast]))
+  (:require [xprl.ast :as ast]))
 
 (defmacro walk-cond
   "Separate tree traversal from the important logic."
