@@ -86,7 +86,6 @@
 (defn send-1! [env [k v]]
   (if (contains? env k)
     (let [ch (get env k)]
-      ;; (println "send" v "to" ch)
       (cond
         (ast/wire? ch) (deliver! ch v)
         ;; fns always reach out of the program into the surrounding
