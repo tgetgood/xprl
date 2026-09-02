@@ -46,7 +46,8 @@
     (when (seq envs)
       (swap! (:state wire) update :listeners dissoc offset)
       (let [out (mapv (fn [e] [e value]) envs)]
-        (println "listeners" out)
+        ;; FIXME: This doesn't really work because `return` is used in many
+        ;; places other than `do-emission`.
         out))))
 
 (defn deliver! [wire v]
