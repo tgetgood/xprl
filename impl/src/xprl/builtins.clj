@@ -29,7 +29,7 @@
               ;; (.printStackTrace e)
               (debug/inspect (ast/application self args)))))
         (let [msg (str e ":\n" (.getMessage e) "\n" self " " args)]
-          (ast/emission env [[(ast/xkey :error) msg]]))))))
+          (ast/emission [[(ast/xkey :error) msg]]))))))
 
 (defmacro extern [args & kws]
   (let [kws (apply hash-map kws)]
@@ -156,7 +156,7 @@
 (defextern emit [env kvs]
   :ensure (and (even? (count kvs))
                (every? ast/keyword? (map first (partition 2 kvs))))
-  :return (i/walk env (ast/emission env (into [] (map vec) (partition 2 kvs)))))
+  :return (i/walk env (ast/emission (into [] (map vec) (partition 2 kvs)))))
 
 (defextern net [env forms]
   :ensure (ast/list? forms)

@@ -59,15 +59,14 @@
     (ast/immediate? f)   (ret-> env #(walk % (:form f)) #(eval env %))
     (ast/application? f) (ret-> env #(walk % (:head f)) #(apply env % (:tail f)))
     (ast/coll? f)        (walk-coll env f (ast/empty f))
-    (ast/μ? f)           (ret-> (emit/cut env ::???)
+    (ast/μ? f)           (ret-> (emit/cut env ::walk-μ)
                            #(walk % (:body f))
                            #(return env (assoc f :body %)))
     (ast/emission? f)    (ret-> env
                            #(walk % (:msgs f))
                            ;; Do emission might return a vector containing any
                            ;; parked listeners as [env val] pairs.
-                           ;; TODO: Figure out if the env saved in the emission matters.
-                           #(let [ts (emit/do-emission! env #_(merge env (:env f)) %)]
+                           #(let [ts (emit/do-emission! env %)]
                               (when (seq ts)
                                 (exec/enqueue-all!
                                  (map (fn [[e v]] (exec/task e (fn [e] (return e v)))) ts)))))

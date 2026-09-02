@@ -71,9 +71,6 @@
 (defn cut? [cable]
   (::cut? cable))
 
-(defn clear [cable]
-  (dissoc cable ::cut? ::previous ::id ret))
-
 (defn captured? [cable]
   (::captured? cable))
 
@@ -111,7 +108,7 @@
     ;; the cable in any future context of evaluation.
     ;; But the cable always gets to decide whether the context is cut,
     ;; captured, etc., so sandboxing should still work as expected.
-    (cut? env)      (return env (ast/emission (clear env) msgs))
+    (cut? env)      (return env (ast/emission msgs))
     (captured? env) (send-captured! env msgs)
     true            (send! env msgs)))
 
@@ -119,9 +116,6 @@
 
 (defn with-return [env retfn]
   (assoc env ret retfn))
-
-(defn merge [env extras]
-  (clojure.core/merge env extras))
 
 (defn ret-> {:style/indent [1]} [env inner outer]
   (inner (with-return env outer)))

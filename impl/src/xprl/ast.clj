@@ -132,7 +132,7 @@
    :pprint (do (.write *out* "~")
                (pp/write-out form))})
 
-(defxprl Emission [env msgs]
+(defxprl Emission [msgs]
   {:str    (str "#E" msgs)
    :print  (fn [^Writer w]
              (.write w "#E")
