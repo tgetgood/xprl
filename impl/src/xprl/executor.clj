@@ -7,7 +7,7 @@
   (atom {:work  []
          :index {}}))
 
-(defonce ^:dynamic *the-executor*Think IThink I nil)
+(defonce ^:dynamic *the-executor* nil)
 (defonce root-task (gensym "root-task-"))
 (defonce ^:dynamic *current-task* root-task)
 
