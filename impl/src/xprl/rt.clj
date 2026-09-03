@@ -208,7 +208,7 @@
   (let [envs (get (:listeners @(:state wire)) offset)]
     (when (seq envs)
       (swap! (:state wire) update :listeners dissoc offset)
-      (enqueue-all! (map (fn [[e v]] (task e (fn [e] (return e v)))) envs))
+      (enqueue-all! (map (fn [e] (task e (fn [e] (return e value)))) envs))
       nil)))
 
 (defn deliver! [wire v]
