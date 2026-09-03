@@ -171,10 +171,10 @@
 
 
 (defxprl Pair [head tail]
-  {:str    (str "(" (str head) " "
+  {:str    (str "(" (str head)
              (if (list? tail)
-               (transduce (comp (map str) (interpose " ")) str "" (elements tail))
-               (str ". " (str tail)))
+               (apply str (interleave (repeat " ") (map str (elements tail))))
+               (str " . " (str tail)))
              ")")
    :print  :none
    :pprint :none})
