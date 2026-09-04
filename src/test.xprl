@@ -76,6 +76,7 @@
 
 ;; wires
 
+;; These should be identical since :return is just a channel. Right?
 (let1 w ~(wire) ~(net (first w) (with-channels {:x ~w} ~(emit :x 42))))     42
 (let1 w ~(wire) ~(net (first w) (with-channels {:return ~w} 42)))           42
 

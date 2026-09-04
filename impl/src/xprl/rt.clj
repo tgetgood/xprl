@@ -289,6 +289,9 @@
 ;; It will eventually be responsible for coordination between machines.
 ;; Notably it is *not* the "system" that wraps syscalls, I need a different name
 ;; for one of these.
+;;
+;; I guess I could just call this "the runtime"... But it's only part of the
+;; runtime, isn't it?
 ;;;;;
 
 ;; The clj repl interacts with the executor threads by injecting work into the

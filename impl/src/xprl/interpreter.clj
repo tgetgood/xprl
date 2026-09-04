@@ -35,7 +35,7 @@
 (deftracefn resolve [env f]
   (if (ast/bound? f)
     (walk env (:binding f))
-    (return env ; We *could* just wrap everything in `return`, technically...
+    (return env ; We don't want to go sending `nil` to `:return`.
       (cond
         (ast/ref? f)      (:binding f)
         (ast/captured? f) (ast/immediate f)
