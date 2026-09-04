@@ -239,6 +239,7 @@
       (throw (RuntimeException. (str "Cannot send " v " to " k ". No such channel."))))))
 
 (defn return [env x]
+  (assert (not (nil? x)) "nil cannot be sent as a message. It is not a value in xprl.")
   (send-1! env [ret x]))
 
 (defn send! [env msgs]
