@@ -105,8 +105,8 @@
 (defn check [s]
   (debug/inspect (:form (r/read (r/string-reader s)))))
 
-(defn run-tests! [tests]
-  (when (seq tests)
+(defn run-tests! [tests acc]
+  (if (seq tests)
     (let [[test expect] (first tests)]
       (rt/ret-> base-conts
         (fn [ccs]
@@ -120,14 +120,16 @@
           (println "result:   " result)
           (println "expected: " expect)
           (println)
-          (run-tests! (rest tests)))))))
+          (run-tests! (rest tests) (update acc (if (= result expect) :pass :fail) inc)))))
+    (println "Finished\n----------\nPassed:" (get acc :pass) "\nFailed:" (get acc :fail))))
 
 (defn test []
   (reload! test-setup
            (fn []
              (binding [debug/*execution-trace* false]
-               (println "\nStarting tests:\n")
-               (run-tests! (partition 2 (r/read-file testxprl)))))))
+               (let [tests (partition 2 (r/read-file testxprl))]
+                 (println "\nRunning" (count tests) "tests:\n==================\n")
+                 (run-tests! tests {:pass 0 :fail 0}))))))
 
 (def p debug/provenance)
 
