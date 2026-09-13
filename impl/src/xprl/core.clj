@@ -121,6 +121,8 @@
           (println "expected: " expect)
           (println)
           (run-tests! (rest tests) (update acc (if (= result expect) :pass :fail) inc)))))
+    ;; TODO: colour "Finished" red or green depending on if anything failed or not.
+    ;; Good UI is about the little things
     (println "Finished\n----------\nPassed:" (get acc :pass) "\nFailed:" (get acc :fail))))
 
 (defn test []
