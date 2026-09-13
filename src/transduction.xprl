@@ -17,9 +17,10 @@
 ;; channel.
 
 (defn map* [f xs]
-  (net
-   (f (first xs))
-   (map* f (rest xs))))
+  (when (not (empty? xs))
+    (net
+     (f (first xs))
+     (map* f (rest xs)))))
 
 (def return-stream
   (μ expr

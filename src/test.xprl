@@ -71,8 +71,37 @@
 ((fn x ((nth x 1) (nth x 1))) (fn _ x 1)) 1
 
 ((fn x (+ 1 x)) . 1)                 2
-(inc 6)                              7
 ((fn xs (nth xs 2)) 1 2 3)           2
+((afn [a] ((afn [b] b) (+ a 1))) 1)    2
+
+;; let
+(let [[a] [(+ 2 3)]] a)     5
+(let [a 2 b (+ a 3)] b)     5
+(let [a 2 [b] [5]] b)       5
+(let [a 2 [b] [(+ a 3)]] b) 5
+
+;; destructuring
+(let [a     1
+      [b]   [2]
+      [c d] [3 4]]
+  [a b c d])
+;;=>
+[1 2 3 4]
+
+(let [[a b c] [2 3 4]
+      d       (* a 2)]
+  (+ d (* b c)))
+;;=>
+16
+
+
+(let [a     1
+      [b c] [(+ a 2) 6]]
+  (+ b c))
+;;=>
+9
+
+(inc 6)                              7
 
 ;; wires
 
@@ -84,6 +113,13 @@
 (def test-fn (μ x ~(emit :return 3))) test-fn
 (test-fn 7733)                        3
 
+(!test1 . 0)  1
+(!test1 . 5)  120
+(!test1 . 10) 3628800
+
+(!test2 0)  1
+(!test2 5)  120
+(!test2 10) 3628800
 ;; (!1 . 5)  120
 ;; (!2 . 5)  120
 ;; (!3 . 5)  120
