@@ -28,6 +28,51 @@
 (def not (wrap . not*))
 (def merge (wrap . merge*))
 
+(def + (wrap . +*))
+(def - (wrap . -*))
+(def * (wrap . **))
+(def / (wrap . /*))
+
+(def > (wrap . >*))
+(def < (wrap . <*))
+(def = (wrap . =*))
+
+(def nth (wrap . nth*))
+
+(def count (wrap . count*))
+
+(def symbol? (wrap . symbol?*))
+(def map? (wrap . map?*))
+(def list? (wrap . list?*))
+
+(def str (wrap . str*))
+
+(def mod (wrap . mod*))
+
+(def even? (wrap . (μ x ~(=* 0 ~(mod* ~(nth* ~x 1) 2)))))
+
+;; REVIEW: Is there any point wrapping this?
+(def odd? (wrap . (μ x ~(not* ~(even? . x)))))
+
+;;;;; recursion
+
+(def self-curry
+  (μ f
+     ~(μ x
+         ~((~f . ~~f) . ~x))))
+
+(def recursive-call
+  (μ g
+     ~(self-curry . ~(μ f
+                        ~(g . ~(self-curry . f))))))
+
+(def defμ*
+  (μ x
+     ~(def ~(nth* ~x 1)
+        (recursive-call . ~(μ ~(nth* ~x 1)
+                              ~(μ ~(nth* ~x 2)
+                                  ~~(nth* ~x 3)))))))
+
 ;;;;; branching
 
 (def if* ; previously `select`.
@@ -57,16 +102,6 @@
 (def let1
   (μ x
      ~((μ ~(nth* ~x 1) ~(nth* ~x 3)) . ~(nth* ~x 2))))
-
-(def defμ*
-  (μ x
-     ~(def ~(nth* ~x 1)
-        (μ ~(nth* ~x 1) ~(nth* ~x 2) ~~(nth* ~x 3)))))
-
-;; (defμ ! x
-;;   (if (<* ~(nth* ~x 1) 2)
-;;      1
-;;      (** ~(nth* ~x 1) ~(! ~(-* ~(nth* ~x 1) 1)))))
 
 (defμ* cond body
   (when (<* 1 ~(count* ~body))
@@ -120,30 +155,45 @@
 ;;;;; definitions
 
 (defμ* fn x
-  (let* [named? ~(=* 3 ~(count* ~x))
-         params ~(if named? (nth* ~x 2) (nth* ~x 1))
-         body   ~(if named? (nth* ~x 3) (nth* ~x 2))]
-    ~(μ ~(when named? (nth* ~x 1)) args
-        ~(let-map ~(destructure ~params ~~args) ~~body))))
+   (let* [named? ~(=* 3 ~(count* ~x))
+          params ~(if named? (nth* ~x 2) (nth* ~x 1))
+          body   ~(if named? (nth* ~x 3) (nth* ~x 2))]
+       ~(μ ~(when named? (nth* ~x 1)) args
+           ~(let-map ~(destructure ~params ~~args) ~~body))))
+
+
+;; simplified to work out on the blackboard. I don't plan to do this "for real".
+(defμ* afn x
+  (μ args
+     ~(let-map ~(destructure ~(nth* ~x 1) ~~args) ~~(nth* ~x 2))))
+
+;; Good old normal destructuring `let`. None of that μ nonsense. Right?
+(defμ* let x
+  (let1 bindings ~(nth* ~x 1)
+        ~(let1 body ~(nth* ~x 2)
+               ~(if (empty?* ~bindings)
+                  ~body
+                  ((afn ~(first* ~bindings) (let ~(rest* ~(rest* ~bindings)) ~body))
+                   .
+                   ~(first* ~(rest* ~bindings)))))))
 
 ;;; This would make life a lot nicer...
 
-;; somehow the inner `def` is emitting first, which makes this very wrong...
+(defμ* defμ x
+  (defμ* ~(nth* ~x 1) args
+    (let-map ~(destructure ~(nth* ~x 2) ~args)
+       ~~(nth* ~x 3))))
 
-#_(defμ* defμ x
-  (def ~(nth* ~x 1)
-     (μ args
-        ~(let-map ~(destructure ~(nth* ~x 2) ~args)
-           ~~(nth* ~x 3)))))
-
-(def defn
-  (μ x
-     ~(def ~(nth* ~x 1) (fn . ~x))))
-
-(def + (wrap . +*))
+(defμ* defn x
+  (defμ* ~(nth* ~x 1) args (let-map ~(destructure ~(nth* ~x 2) ~~args) ~(nth* ~x 3))))
 
 (defn inc [x]
   (+ x 1))
+
+(defn ! [x]
+  (if (< x 2)
+    1
+    (* x (! (- x 1)))))
 
 ;;;;; Squiggol
 ;; FIXME: This is unusable as a concept for the time being.
@@ -156,6 +206,11 @@
   (fn [x]
     (when (p x)
       x)))
+
+(defn reduce [rf init xs]
+  (if (empty?* ~xs)
+    init
+    (reduce rf (rf init (first* ~xs)) (rest* ~xs))))
 
 (defn walk-coll [xs]
   (into (empty xs) (map walk) xs))

@@ -1,29 +1,3 @@
-(def nth (wrap . nth*))
-
-(def count (wrap . count*))
-
-(def - (wrap . -*))
-(def * (wrap . **))
-(def / (wrap . /*))
-
-(def > (wrap . >*))
-(def < (wrap . <*))
-(def = (wrap . =*))
-
-
-(def symbol? (wrap . symbol?*))
-(def map? (wrap . map?*))
-(def list? (wrap . list?*))
-
-(def str (wrap . str*))
-
-(def mod (wrap . mod*))
-
-(def even? (wrap . (μ x ~(=* 0 ~(mod* ~(nth* ~x 1) 2)))))
-
-;; REVIEW: Is there any point wrapping this?
-(def odd? (wrap . (μ x ~(not* ~(even? . x)))))
-
 ;;;;; tests
 
 
