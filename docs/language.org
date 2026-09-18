@@ -396,9 +396,9 @@ This is largely an aid to my own memory so bear with me.
   exactly what it will evaluate to when and if it is.
 
   References to symbols imported into the current namespace work similarly. You
-  can think of a μ defined in a namespace as a being passed a namespace as well
-  as its arguments. The version of the namespace passed is fixed statically, so
-  we always know exactly what we're calling. But having the expected namespace
+  can think of a μ defined in a namespace as being passed a namespace as well as
+  its arguments. The version of the namespace passed is fixed statically, so we
+  always know exactly what we're calling. But having the expected namespace
   version separated like that makes propagating changes much less painful in the
   face of an immutable code base.
 
